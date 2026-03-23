@@ -1,27 +1,71 @@
+@import url('https://fonts.googleapis.com/css2?family=Figtree:ital,wght@0,300..900;1,300..900&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
 body {
-  color: var(--foreground);
-  background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: 'Figtree', sans-serif;
+  background-color: #0F172A;
 }
 
 @layer utilities {
   .text-balance {
     text-wrap: balance;
   }
+  .glass-card {
+    background: rgba(30, 41, 59, 0.6);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(148, 163, 184, 0.1);
+  }
 }
+
+@layer base {
+  *:focus-visible {
+    outline: 2px solid #22D3EE;
+    outline-offset: 2px;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg font-medium transition-all duration-200 px-4 py-2.5 text-sm;
+  }
+  .btn-secondary {
+    @apply bg-slate-700 hover:bg-slate-600 text-slate-200 border border-slate-600 rounded-lg font-medium transition-all duration-200 px-4 py-2.5 text-sm;
+  }
+  .btn-success {
+    @apply bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-medium transition-all duration-200 px-4 py-2.5 text-sm;
+  }
+  .btn-danger {
+    @apply bg-red-600 hover:bg-red-500 text-white rounded-lg font-medium transition-all duration-200 px-4 py-2.5 text-sm;
+  }
+  .sidebar-link {
+    @apply flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-400 hover:text-slate-100 hover:bg-slate-800 transition-all duration-150 cursor-pointer;
+  }
+  .sidebar-link-active {
+    @apply flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-cyan-400 bg-cyan-500/10 border border-cyan-500/20 transition-all duration-150;
+  }
+  .stat-card {
+    @apply bg-slate-800/60 backdrop-blur-sm border border-slate-700/50 rounded-xl p-5;
+  }
+  .data-card {
+    @apply bg-slate-800/60 backdrop-blur-sm border border-slate-700/50 rounded-xl overflow-hidden;
+  }
+}
+
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 12mm 14mm;
+  }
+  .no-print { display: none !important; }
+  .print-only { display: block !important; }
+  body { background: white; margin: 0; padding: 0; }
+  /* Expand main content to full page width when sidebar is hidden */
+  aside { display: none !important; }
+  main { width: 100% !important; padding: 0 !important; }
+  .flex { display: block !important; }
+}
+.print-only { display: none; }
