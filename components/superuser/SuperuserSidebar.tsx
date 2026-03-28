@@ -3,7 +3,15 @@ import { usePathname } from 'next/navigation'
 import Link from 'next/link'
 import FeedbackButton from '@/components/FeedbackButton'
 
-const NAV_ITEMS = [
+interface NavItem {
+  label: string
+  href: string
+  exact: boolean
+  icon: React.ReactNode
+  badge?: number
+}
+
+const NAV_ITEMS: Omit<NavItem, 'badge'>[] = [
   {
     label: 'Businesses',
     href: '/superuser',
@@ -52,10 +60,15 @@ interface Props {
 
 export default function SuperuserSidebar({ unreadFeedback }: Props) {
   const pathname = usePathname()
+  const items: NavItem[] = NAV_ITEMS.map(item =>
+    item.href === '/superuser/feedback'
+      ? { ...item, badge: unreadFeedback > 0 ? unreadFeedback : undefined }
+      : item
+  )
 
   return (
     <nav className="flex-1 px-3 py-4 space-y-1">
-      {NAV_ITEMS.map(item => {
+      {items.map(item => {
         const isActive = item.exact ? pathname === item.href : pathname.startsWith(item.href)
         return (
           <Link
@@ -68,9 +81,9 @@ export default function SuperuserSidebar({ unreadFeedback }: Props) {
           >
             {item.icon}
             <span className="flex-1">{item.label}</span>
-            {item.label === 'Feedback' && unreadFeedback > 0 && (
+            {item.badge !== undefined && (
               <span className="text-xs font-semibold bg-amber-500 text-slate-900 rounded-full min-w-[1.25rem] h-5 flex items-center justify-center px-1.5">
-                {unreadFeedback > 99 ? '99+' : unreadFeedback}
+                {item.badge > 99 ? '99+' : item.badge}
               </span>
             )}
           </Link>
