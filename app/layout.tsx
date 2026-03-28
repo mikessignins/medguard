@@ -13,7 +13,17 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body className="bg-slate-950 min-h-screen text-slate-100">{children}</body>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: `
+          (function(){
+            try {
+              var t = localStorage.getItem('theme');
+              if (t === 'light') document.documentElement.dataset.theme = 'light';
+            } catch(e) {}
+          })();
+        `}} />
+      </head>
+      <body className="min-h-screen">{children}</body>
     </html>
   )
 }

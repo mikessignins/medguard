@@ -5,6 +5,8 @@ import { format } from 'date-fns'
 import { createClient } from '@/lib/supabase/client'
 import type { Site, Submission, SubmissionStatus, MedicationDeclaration } from '@/lib/types'
 import MedDecSection from '@/components/medic/MedDecSection'
+import { computeRiskChips, type RiskChip } from '@/lib/risk-chips'
+import { encodeQueue } from '@/lib/queue-params'
 
 const STATUS_ORDER: SubmissionStatus[] = ['New', 'In Review', 'Approved', 'Requires Follow-up']
 
@@ -16,16 +18,28 @@ const STATUS_COLORS: Record<SubmissionStatus, string> = {
   'Recalled': 'bg-slate-500/10 text-slate-400 border border-slate-500/20',
 }
 
-const FLAGGED_REVIEWS = [
-  'Opioid', 'Benzodiazepine', 'Antipsychotic', 'Anticoagulant',
-  'Insulin / Diabetes', 'Antiepileptic', 'Sedative / Hypnotic', 'Stimulant', 'Review Required',
-]
-
 const AUTO_PURGE_DAYS = 7
 
-function hasFlaggedMeds(sub: Submission): boolean {
-  return (sub.worker_snapshot?.currentMedications || []).some(
-    m => FLAGGED_REVIEWS.includes(m.reviewFlag)
+const MEDDEC_FINAL = ['Normal Duties', 'Restricted Duties', 'Unfit for Work']
+
+function RiskChips({ sub }: { sub: Submission }) {
+  const chips = computeRiskChips(sub)
+  return (
+    <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
+      {chips.map((chip) => {
+        const styles: Record<RiskChip['type'], string> = {
+          'anaphylaxis': 'bg-red-500/10 border-red-500/25 text-red-400',
+          'flagged-meds': 'bg-orange-500/10 border-orange-500/25 text-orange-400',
+          'conditions': 'bg-amber-500/10 border-amber-500/20 text-amber-400',
+          'clear': 'bg-slate-800/50 border-slate-700/50 text-slate-600',
+        }
+        return (
+          <span key={chip.type} className={`text-xs font-medium px-2 py-0.5 rounded-full border ${styles[chip.type]}`}>
+            {chip.label}
+          </span>
+        )
+      })}
+    </div>
   )
 }
 
@@ -65,6 +79,7 @@ interface Props {
 export default function MedicDashboard({ sites, submissions, medDeclarations, medDecEnabled }: Props) {
   const [activeTab, setActiveTab] = useState(sites[0]?.id || '')
   const [filter, setFilter] = useState<FilterType>('All')
+  const [activeSection, setActiveSection] = useState<'declarations' | 'meddec'>('declarations')
   const [showExported, setShowExported] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [purging, setPurging] = useState(false)
@@ -98,7 +113,6 @@ export default function MedicDashboard({ sites, submissions, medDeclarations, me
   // Recalled submissions are hidden from the medic dashboard entirely
   const siteSubmissions = submissions.filter(s => s.site_id === activeTab && s.status !== 'Recalled')
   const newCount = siteSubmissions.filter(s => s.status === 'New' && !s.exported_at).length
-  const MEDDEC_FINAL = ['Normal Duties', 'Restricted Duties', 'Unfit for Work']
   const pendingMedDecCount = medDecEnabled
     ? medDeclarations.filter(m =>
         m.site_id === activeTab &&
@@ -171,8 +185,6 @@ export default function MedicDashboard({ sites, submissions, medDeclarations, me
     )
   }
 
-  const filterButtons: FilterType[] = ['All', ...STATUS_ORDER]
-
   // Stat counts for active site
   const statNew = siteSubmissions.filter(s => s.status === 'New' && !s.exported_at).length
   const statInReview = siteSubmissions.filter(s => s.status === 'In Review' && !s.exported_at).length
@@ -182,24 +194,43 @@ export default function MedicDashboard({ sites, submissions, medDeclarations, me
   return (
     <div>
 
-      {/* Stat cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
-        <div className="bg-slate-800/60 backdrop-blur-sm border border-slate-700/50 rounded-xl p-4">
-          <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">New</p>
-          <p className="text-2xl font-bold text-indigo-400">{statNew}</p>
-        </div>
-        <div className="bg-slate-800/60 backdrop-blur-sm border border-slate-700/50 rounded-xl p-4">
-          <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">In Review</p>
-          <p className="text-2xl font-bold text-amber-400">{statInReview}</p>
-        </div>
-        <div className="bg-slate-800/60 backdrop-blur-sm border border-slate-700/50 rounded-xl p-4">
-          <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Approved</p>
-          <p className="text-2xl font-bold text-emerald-400">{statApproved}</p>
-        </div>
-        <div className="bg-slate-800/60 backdrop-blur-sm border border-slate-700/50 rounded-xl p-4">
-          <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Follow-up</p>
-          <p className="text-2xl font-bold text-red-400">{statFollowUp}</p>
-        </div>
+      {/* Stat cards — clickable filters */}
+      <div className={`grid grid-cols-2 gap-3 mb-4 ${medDecEnabled ? 'lg:grid-cols-5' : 'lg:grid-cols-4'}`}>
+        {([
+          { label: 'New', status: 'New' as FilterType, value: statNew, color: 'text-indigo-400', active: 'bg-indigo-500/15 border-indigo-500/40' },
+          { label: 'In Review', status: 'In Review' as FilterType, value: statInReview, color: 'text-amber-400', active: 'bg-amber-500/15 border-amber-500/40' },
+          { label: 'Approved', status: 'Approved' as FilterType, value: statApproved, color: 'text-emerald-400', active: 'bg-emerald-500/15 border-emerald-500/40' },
+          { label: 'Follow-up', status: 'Requires Follow-up' as FilterType, value: statFollowUp, color: 'text-red-400', active: 'bg-red-500/15 border-red-500/40' },
+        ] as const).map(card => (
+          <button
+            key={card.status}
+            onClick={() => setFilter(f => f === card.status ? 'All' : card.status)}
+            aria-pressed={filter === card.status}
+            className={`text-left p-4 rounded-xl border transition-all duration-150 ${
+              filter === card.status
+                ? card.active
+                : 'bg-slate-800/60 border-slate-700/50 hover:border-slate-600/60'
+            }`}
+          >
+            <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">{card.label}</p>
+            <p className={`text-2xl font-bold ${card.color}`}>{card.value}</p>
+          </button>
+        ))}
+        {medDecEnabled && (
+          <button
+            onClick={() => setActiveSection('meddec')}
+            aria-pressed={activeSection === 'meddec'}
+            className={`text-left p-4 rounded-xl border transition-all duration-150 ${
+              activeSection === 'meddec'
+                ? 'bg-indigo-500/15 border-indigo-500/40'
+                : 'bg-slate-800/60 border-slate-700/50 hover:border-slate-600/60'
+            }`}
+          >
+            <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Med Decs</p>
+            <p className="text-2xl font-bold text-violet-400">{pendingMedDecCount}</p>
+            <p className="text-xs text-slate-600 mt-0.5">pending</p>
+          </button>
+        )}
       </div>
 
       {/* New submissions alert */}
@@ -222,243 +253,254 @@ export default function MedicDashboard({ sites, submissions, medDeclarations, me
         </div>
       )}
 
-      {/* Site Tabs */}
-      <div className="flex gap-1 mb-5 border-b border-slate-800 overflow-x-auto">
+      {/* Site switcher — scrollable pills */}
+      <div className="flex gap-2 mb-5 overflow-x-auto pb-1">
         {sites.map(site => {
           const siteNew = submissions.filter(s => s.site_id === site.id && s.status === 'New' && !s.exported_at).length
           const siteMedDecPending = medDecEnabled
             ? medDeclarations.filter(m =>
-                m.site_id === site.id &&
-                !m.exported_at && !m.phi_purged_at &&
+                m.site_id === site.id && !m.exported_at && !m.phi_purged_at &&
                 !MEDDEC_FINAL.includes(m.medic_review_status)
               ).length
             : 0
+          const isActive = activeTab === site.id
           return (
             <button
               key={site.id}
-              onClick={() => { setActiveTab(site.id); setFilter('All'); setSelectedIds(new Set()); setConfirmPurge(false) }}
-              className={`px-4 py-2.5 text-sm font-medium whitespace-nowrap border-b-2 transition-colors flex items-center gap-1.5 ${
-                activeTab === site.id
-                  ? 'border-cyan-500 text-cyan-400'
-                  : 'border-transparent text-slate-500 hover:text-slate-300'
+              onClick={() => { setActiveTab(site.id); setFilter('All'); setSelectedIds(new Set()); setConfirmPurge(false); setActiveSection('declarations') }}
+              className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap border transition-all duration-150 shrink-0 ${
+                isActive
+                  ? 'bg-cyan-500/10 border-cyan-500/30 text-cyan-400'
+                  : 'bg-slate-800/60 border-slate-700/50 text-slate-400 hover:text-slate-200 hover:border-slate-600'
               }`}
             >
               {site.name}
               {site.is_office && <span className="text-xs text-slate-600">(Office)</span>}
               {siteNew > 0 && (
-                <span className="text-xs bg-cyan-600 text-white px-1.5 py-0.5 rounded-full font-semibold" title="New submissions">
-                  {siteNew}
-                </span>
+                <span className="bg-cyan-600 text-white text-xs rounded-full px-1.5 py-0.5 font-semibold leading-none">{siteNew}</span>
               )}
               {siteMedDecPending > 0 && (
-                <span className="text-xs bg-indigo-600 text-white px-1.5 py-0.5 rounded-full font-semibold" title="Pending medication declarations">
-                  {siteMedDecPending} med
-                </span>
+                <span className="bg-indigo-600 text-white text-xs rounded-full px-1.5 py-0.5 font-semibold leading-none">{siteMedDecPending}</span>
               )}
             </button>
           )
         })}
       </div>
 
-      {/* Section title */}
-      <div className="flex items-center gap-3 mb-4">
-        <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-widest">Emergency Medical Declarations</h2>
-        <div className="flex-1 h-px bg-slate-800" />
-      </div>
-
-      {/* Status Filter */}
-      <div className="flex gap-2 mb-6 flex-wrap">
-        {filterButtons.map(f => (
+      {/* Section tabs — only shown when medDecEnabled */}
+      {medDecEnabled ? (
+        <div role="tablist" className="flex border-b border-slate-800 mb-5">
           <button
-            key={f}
-            onClick={() => setFilter(f)}
-            className={`px-3 py-1.5 text-xs font-medium rounded-full border transition-colors ${
-              filter === f
-                ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30'
-                : 'bg-slate-800 text-slate-400 border-slate-700 hover:border-slate-600 hover:text-slate-300'
+            role="tab"
+            aria-selected={activeSection === 'declarations'}
+            onClick={() => setActiveSection('declarations')}
+            className={`px-5 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
+              activeSection === 'declarations'
+                ? 'border-cyan-500 text-cyan-400'
+                : 'border-transparent text-slate-500 hover:text-slate-300'
             }`}
           >
-            {f}
-            {f !== 'All' && (
-              <span className="ml-1 opacity-70">
-                ({siteSubmissions.filter(x => x.status === f && !x.exported_at).length})
+            Emergency Declarations
+          </button>
+          <button
+            role="tab"
+            aria-selected={activeSection === 'meddec'}
+            onClick={() => setActiveSection('meddec')}
+            className={`px-5 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors flex items-center gap-2 ${
+              activeSection === 'meddec'
+                ? 'border-indigo-500 text-indigo-400'
+                : 'border-transparent text-slate-500 hover:text-slate-300'
+            }`}
+          >
+            Medication Declarations
+            {pendingMedDecCount > 0 && (
+              <span className="bg-indigo-600 text-white text-xs rounded-full px-1.5 py-0.5 font-semibold leading-none">
+                {pendingMedDecCount}
               </span>
             )}
           </button>
-        ))}
-      </div>
-
-      {purgeError && (
-        <p className="text-sm text-red-400 mb-3">{purgeError}</p>
-      )}
-
-      {/* Active submission list */}
-      <div className="space-y-6">
-        {STATUS_ORDER.map(status => {
-          const items = grouped[status]
-          if (!items || items.length === 0) return null
-          return (
-            <div key={status}>
-              <h2 className="text-xs font-semibold text-slate-500 uppercase tracking-widest mb-3">
-                {status} <span className="font-normal">({items.length})</span>
-              </h2>
-              <div className="bg-slate-800/60 backdrop-blur-sm border border-slate-700/50 rounded-xl overflow-hidden">
-                {items.map((sub, i) => (
-                  <button
-                    key={sub.id}
-                    onClick={() => router.push(`/medic/submissions/${sub.id}`)}
-                    className={`w-full text-left px-5 py-4 flex items-center justify-between hover:bg-slate-700/30 transition-colors ${i > 0 ? 'border-t border-slate-700/50' : ''}`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <p className="font-semibold text-slate-100">
-                            {sub.worker_snapshot?.fullName || 'Unknown Worker'}
-                          </p>
-                          {hasFlaggedMeds(sub) && (
-                            <span className="w-2 h-2 rounded-full bg-orange-500 shrink-0" title="Flagged medications" />
-                          )}
-                        </div>
-                        <p className="text-sm text-slate-500 mt-0.5">
-                          {(() => { try { return sub.visit_date ? format(new Date(sub.visit_date), 'dd MMM yyyy') : 'No date' } catch { return 'No date' } })()} &middot; <span className="text-slate-500">{sub.shift_type || 'N/A'}</span>
-                        </p>
-                      </div>
-                    </div>
-                    <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${STATUS_COLORS[status]} shrink-0`}>
-                      {status}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )
-        })}
-        {filtered.length === 0 && (
-          <p className="text-center py-12 text-slate-600">
-            {filter === 'All' ? 'No submissions for this site.' : `No submissions with status "${filter}".`}
-          </p>
-        )}
-      </div>
-
-      {/* Exported section — collapsed by default */}
-      {(exportedSubs.length > 0 || purgedSubs.length > 0) && (
-        <div className="mt-6">
-          <button
-            onClick={() => setShowExported(v => !v)}
-            className="flex items-center gap-2 text-sm font-medium text-slate-500 hover:text-slate-300 transition-colors mb-3"
-          >
-            <svg className={`w-4 h-4 transition-transform ${showExported ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-            </svg>
-            Exported ({exportedSubs.length + purgedSubs.length})
-          </button>
-
-          {showExported && (
-            <>
-              {/* Purge toolbar */}
-              {exportedSubs.length > 0 && (
-                <div className="mb-4 bg-purple-500/10 border border-purple-500/20 rounded-xl px-4 py-3 flex items-center justify-between gap-4 flex-wrap">
-                  <div className="flex items-center gap-3">
-                    <button
-                      onClick={toggleSelectAll}
-                      className="text-sm text-purple-400 font-medium hover:underline"
-                    >
-                      {selectedIds.size === exportedSubs.length ? 'Deselect all' : 'Select all'}
-                    </button>
-                    {selectedIds.size > 0 && (
-                      <span className="text-sm text-slate-400">{selectedIds.size} selected</span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <p className="text-xs text-slate-500">PHI auto-purges {AUTO_PURGE_DAYS} days after export</p>
-                    {selectedIds.size > 0 && !confirmPurge && (
-                      <button
-                        onClick={() => setConfirmPurge(true)}
-                        className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white text-sm font-medium rounded-lg transition-colors"
-                      >
-                        Purge selected ({selectedIds.size})
-                      </button>
-                    )}
-                    {confirmPurge && (
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium text-red-400">Remove all PHI? Cannot be undone.</span>
-                        <button
-                          onClick={handlePurge}
-                          disabled={purging}
-                          className="px-4 py-2 bg-red-700 hover:bg-red-600 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
-                        >
-                          {purging ? 'Purging...' : 'Confirm'}
-                        </button>
-                        <button
-                          onClick={() => setConfirmPurge(false)}
-                          className="px-3 py-2 bg-slate-700 hover:bg-slate-600 text-slate-300 text-sm font-medium rounded-lg transition-colors"
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              <div className="bg-slate-800/60 backdrop-blur-sm border border-slate-700/50 rounded-xl overflow-hidden">
-                {[...exportedSubs, ...purgedSubs].map((sub, i) => {
-                  const isPurged = !!sub.phi_purged_at
-                  const isSelected = selectedIds.has(sub.id)
-                  return (
-                    <div
-                      key={sub.id}
-                      className={`flex items-center gap-3 px-4 py-4 ${i > 0 ? 'border-t border-slate-700/50' : ''} ${isPurged ? 'opacity-40' : ''}`}
-                    >
-                      {!isPurged && (
-                        <input
-                          type="checkbox"
-                          checked={isSelected}
-                          onChange={() => toggleSelect(sub.id)}
-                          className="w-4 h-4 rounded border-slate-600 bg-slate-700 text-red-500 cursor-pointer"
-                        />
-                      )}
-                      <button
-                        onClick={() => router.push(`/medic/submissions/${sub.id}`)}
-                        className="flex-1 text-left flex items-center justify-between hover:bg-slate-700/30 rounded-lg px-2 py-1 -mx-2 -my-1 transition-colors"
-                      >
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <p className="font-semibold text-slate-100">
-                              {isPurged ? 'PHI Purged' : sub.worker_snapshot?.fullName || 'Unknown Worker'}
-                            </p>
-                            {hasFlaggedMeds(sub) && (
-                              <span className="w-2 h-2 rounded-full bg-orange-500 shrink-0" title="Flagged medications" />
-                            )}
-                          </div>
-                          <p className="text-sm text-slate-500 mt-0.5">
-                            {(() => { try { return sub.visit_date ? format(new Date(sub.visit_date), 'dd MMM yyyy') : 'No date' } catch { return 'No date' } })()}
-                            {' '}&middot;{' '}{sub.shift_type || 'N/A'}
-                            {' '}&middot;{' '}
-                            <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${STATUS_COLORS[sub.status as SubmissionStatus] || 'bg-slate-700 text-slate-400 border border-slate-600'}`}>
-                              {sub.status}
-                            </span>
-                          </p>
-                        </div>
-                        <div className="shrink-0 ml-3">
-                          {isPurged ? (
-                            <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-slate-700 text-slate-500">Purged</span>
-                          ) : sub.exported_at ? (
-                            <PurgeCountdown exportedAt={sub.exported_at} />
-                          ) : null}
-                        </div>
-                      </button>
-                    </div>
-                  )
-                })}
-              </div>
-            </>
-          )}
+        </div>
+      ) : (
+        <div className="flex items-center gap-3 mb-4">
+          <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-widest">Emergency Medical Declarations</h2>
+          <div className="flex-1 h-px bg-slate-800" />
         </div>
       )}
 
-      {/* Medication Declarations Section */}
-      {medDecEnabled && (
+      {activeSection === 'declarations' && (
+        <>
+          {purgeError && (
+            <p className="text-sm text-red-400 mb-3">{purgeError}</p>
+          )}
+
+          {/* Active submission list */}
+          <div className="space-y-6">
+            {STATUS_ORDER.map(status => {
+              const items = grouped[status]
+              if (!items || items.length === 0) return null
+              return (
+                <div key={status}>
+                  <h2 className="text-xs font-semibold text-slate-500 uppercase tracking-widest mb-3">
+                    {status} <span className="font-normal">({items.length})</span>
+                  </h2>
+                  <div className="bg-slate-800/60 backdrop-blur-sm border border-slate-700/50 rounded-xl overflow-hidden">
+                    {items.map((sub, i) => (
+                      <button
+                        key={sub.id}
+                        onClick={() => {
+                          const queueIds = STATUS_ORDER.flatMap(s => grouped[s] ?? []).map(s => s.id)
+                          const pos = queueIds.indexOf(sub.id)
+                          router.push(`/medic/submissions/${sub.id}?${encodeQueue(queueIds, pos)}`)
+                        }}
+                        className={`w-full text-left px-5 py-4 flex items-center justify-between hover:bg-slate-700/30 transition-colors ${i > 0 ? 'border-t border-slate-700/50' : ''}`}
+                      >
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="font-semibold text-slate-100">
+                              {sub.worker_snapshot?.fullName || 'Unknown Worker'}
+                            </p>
+                            <span className="text-sm text-slate-500">{sub.role || 'Unknown role'}</span>
+                          </div>
+                          <RiskChips sub={sub} />
+                          <p className="text-sm text-slate-500 mt-1">
+                            {(() => { try { return sub.visit_date ? format(new Date(sub.visit_date), 'dd MMM yyyy') : 'No date' } catch { return 'No date' } })()}
+                            {' · '}{sub.shift_type || 'N/A'}
+                          </p>
+                        </div>
+                        <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${STATUS_COLORS[status]} shrink-0 ml-3`}>
+                          {status}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )
+            })}
+            {filtered.length === 0 && (
+              <p className="text-center py-12 text-slate-600">
+                {filter === 'All' ? 'No submissions for this site.' : `No submissions with status "${filter}".`}
+              </p>
+            )}
+          </div>
+
+          {/* Exported section — collapsed by default */}
+          {(exportedSubs.length > 0 || purgedSubs.length > 0) && (
+            <div className="mt-6">
+              <button
+                onClick={() => setShowExported(v => !v)}
+                className="flex items-center gap-2 text-sm font-medium text-slate-500 hover:text-slate-300 transition-colors mb-3"
+              >
+                <svg className={`w-4 h-4 transition-transform ${showExported ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+                Exported ({exportedSubs.length + purgedSubs.length})
+              </button>
+
+              {showExported && (
+                <>
+                  {/* Purge toolbar */}
+                  {exportedSubs.length > 0 && (
+                    <div className="mb-4 bg-purple-500/10 border border-purple-500/20 rounded-xl px-4 py-3 flex items-center justify-between gap-4 flex-wrap">
+                      <div className="flex items-center gap-3">
+                        <button
+                          onClick={toggleSelectAll}
+                          className="text-sm text-purple-400 font-medium hover:underline"
+                        >
+                          {selectedIds.size === exportedSubs.length ? 'Deselect all' : 'Select all'}
+                        </button>
+                        {selectedIds.size > 0 && (
+                          <span className="text-sm text-slate-400">{selectedIds.size} selected</span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <p className="text-xs text-slate-500">PHI auto-purges {AUTO_PURGE_DAYS} days after export</p>
+                        {selectedIds.size > 0 && !confirmPurge && (
+                          <button
+                            onClick={() => setConfirmPurge(true)}
+                            className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white text-sm font-medium rounded-lg transition-colors"
+                          >
+                            Purge selected ({selectedIds.size})
+                          </button>
+                        )}
+                        {confirmPurge && (
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-medium text-red-400">Remove all PHI? Cannot be undone.</span>
+                            <button
+                              onClick={handlePurge}
+                              disabled={purging}
+                              className="px-4 py-2 bg-red-700 hover:bg-red-600 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
+                            >
+                              {purging ? 'Purging...' : 'Confirm'}
+                            </button>
+                            <button
+                              onClick={() => setConfirmPurge(false)}
+                              className="px-3 py-2 bg-slate-700 hover:bg-slate-600 text-slate-300 text-sm font-medium rounded-lg transition-colors"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="bg-slate-800/60 backdrop-blur-sm border border-slate-700/50 rounded-xl overflow-hidden">
+                    {[...exportedSubs, ...purgedSubs].map((sub, i) => {
+                      const isPurged = !!sub.phi_purged_at
+                      const isSelected = selectedIds.has(sub.id)
+                      return (
+                        <div
+                          key={sub.id}
+                          className={`flex items-center gap-3 px-4 py-4 ${i > 0 ? 'border-t border-slate-700/50' : ''} ${isPurged ? 'opacity-40' : ''}`}
+                        >
+                          {!isPurged && (
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => toggleSelect(sub.id)}
+                              className="w-4 h-4 rounded border-slate-600 bg-slate-700 text-red-500 cursor-pointer"
+                            />
+                          )}
+                          <button
+                            // Queue nav intentionally omitted for exported/purged rows — not part of the pending queue
+                            onClick={() => router.push(`/medic/submissions/${sub.id}`)}
+                            className="flex-1 text-left flex items-center justify-between hover:bg-slate-700/30 rounded-lg px-2 py-1 -mx-2 -my-1 transition-colors"
+                          >
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <p className="font-semibold text-slate-100">
+                                  {isPurged ? 'PHI Purged' : sub.worker_snapshot?.fullName || 'Unknown Worker'}
+                                </p>
+                              </div>
+                              <p className="text-sm text-slate-500 mt-0.5">
+                                {(() => { try { return sub.visit_date ? format(new Date(sub.visit_date), 'dd MMM yyyy') : 'No date' } catch { return 'No date' } })()}
+                                {' '}&middot;{' '}{sub.shift_type || 'N/A'}
+                                {' '}&middot;{' '}
+                                <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${STATUS_COLORS[sub.status as SubmissionStatus] || 'bg-slate-700 text-slate-400 border border-slate-600'}`}>
+                                  {sub.status}
+                                </span>
+                              </p>
+                            </div>
+                            <div className="shrink-0 ml-3">
+                              {isPurged ? (
+                                <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-slate-700 text-slate-500">Purged</span>
+                              ) : sub.exported_at ? (
+                                <PurgeCountdown exportedAt={sub.exported_at} />
+                              ) : null}
+                            </div>
+                          </button>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+        </>
+      )}
+
+      {medDecEnabled && activeSection === 'meddec' && (
         <MedDecSection medDeclarations={medDeclarations} siteId={activeTab} />
       )}
     </div>

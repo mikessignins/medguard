@@ -4,9 +4,59 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ── Theme variables ─────────────────────────────────────── */
+:root {
+  --bg-base:    #0f172a;
+  --bg-card:    rgba(30, 41, 59, 0.6);
+  --bg-surface: rgba(15, 23, 42, 0.6);
+  --bg-input:   rgba(15, 23, 42, 0.6);
+  --border:     rgba(100, 116, 139, 0.12);
+  --border-md:  rgba(100, 116, 139, 0.2);
+  --text-1:     #f1f5f9;
+  --text-2:     #94a3b8;
+  --text-3:     #64748b;
+}
+
+[data-theme="light"] {
+  --bg-base:    #f1f5f9;
+  --bg-card:    #ffffff;
+  --bg-surface: #f8fafc;
+  --bg-input:   #f8fafc;
+  --border:     #e2e8f0;
+  --border-md:  #cbd5e1;
+  --text-1:     #0f172a;
+  --text-2:     #475569;
+  --text-3:     #64748b;
+}
+
+/* Apply to surfaces we can't easily migrate via component props */
 body {
   font-family: 'Figtree', sans-serif;
-  background-color: #0F172A;
+  background-color: var(--bg-base);
+  color: var(--text-1);
+}
+
+/* Light overrides for existing Tailwind classes used in untouched components */
+[data-theme="light"] .bg-slate-950 {
+  background-color: #f1f5f9 !important;
+}
+[data-theme="light"] .border-slate-800 {
+  border-color: #e2e8f0 !important;
+}
+[data-theme="light"] .text-slate-100 {
+  color: #0f172a !important;
+}
+[data-theme="light"] .text-slate-300 {
+  color: #334155 !important;
+}
+[data-theme="light"] .text-slate-400 {
+  color: #475569 !important;
+}
+[data-theme="light"] .text-slate-500 {
+  color: #64748b !important;
+}
+[data-theme="light"] .hover\:bg-slate-800:hover {
+  background-color: #e2e8f0 !important;
 }
 
 @layer utilities {
