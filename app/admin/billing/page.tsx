@@ -15,18 +15,20 @@ export default async function AdminBillingPage() {
 
   if (!account || account.role !== 'admin') redirect('/')
 
+  // Billing counts use review status, not exported_at, so counts are immutable:
+  // purging clears PHI but never changes review status, so counts only ever go up.
   const [{ data: submissions }, { data: medDecs }] = await Promise.all([
     supabase
       .from('submissions')
       .select('submitted_at, status')
       .eq('business_id', account.business_id)
-      .not('exported_at', 'is', null)
+      .in('status', ['In Review', 'Approved', 'Requires Follow-up'])
       .order('submitted_at', { ascending: false }),
     supabase
       .from('medication_declarations')
       .select('submitted_at, medic_review_status')
       .eq('business_id', account.business_id)
-      .not('exported_at', 'is', null)
+      .in('medic_review_status', ['In Review', 'Normal Duties', 'Restricted Duties', 'Unfit for Work'])
       .order('submitted_at', { ascending: false }),
   ])
 

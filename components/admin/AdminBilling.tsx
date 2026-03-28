@@ -29,8 +29,6 @@ function formatMonth(key: string) {
 }
 
 export default function AdminBilling({ submissions, medDeclarations }: Props) {
-  const hasMedDecs = medDeclarations.length > 0
-
   const currentMonthKey = format(new Date(), 'yyyy-MM')
 
   const { subMonths, medMonths, allMonthKeys } = useMemo(() => {
@@ -63,17 +61,15 @@ export default function AdminBilling({ submissions, medDeclarations }: Props) {
     <div>
       <div className="mb-8">
         <h1 className="text-xl font-bold text-slate-100">Billing Summary</h1>
-        <p className="text-sm text-slate-500 mt-0.5">All exported forms are billable — both medical information and medication declarations.</p>
+        <p className="text-sm text-slate-500 mt-0.5">All reviewed forms are billable — counts only ever increase and are unaffected by purging.</p>
       </div>
 
       {/* Hero stat cards */}
-      <div className={`grid gap-4 mb-8 ${hasMedDecs ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-2 sm:grid-cols-3'}`}>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
         <div className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-5">
           <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">This Month</p>
           <p className="text-3xl font-bold text-cyan-400">{thisMonthTotal}</p>
-          {hasMedDecs && (
-            <p className="text-xs text-slate-600 mt-1">{thisMonthSubs} decl · {thisMonthMeds} med dec</p>
-          )}
+          <p className="text-xs text-slate-600 mt-1">{thisMonthSubs} decl · {thisMonthMeds} med dec</p>
         </div>
 
         <div className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-5">
@@ -82,13 +78,11 @@ export default function AdminBilling({ submissions, medDeclarations }: Props) {
           <p className="text-xs text-slate-600 mt-1">All time</p>
         </div>
 
-        {hasMedDecs && (
-          <div className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-5">
-            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Medication Declarations</p>
-            <p className="text-3xl font-bold text-slate-100">{totalMeds}</p>
-            <p className="text-xs text-slate-600 mt-1">All time</p>
-          </div>
-        )}
+        <div className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-5">
+          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Medication Declarations</p>
+          <p className="text-3xl font-bold text-slate-100">{totalMeds}</p>
+          <p className="text-xs text-slate-600 mt-1">All time</p>
+        </div>
 
         <div className="bg-cyan-500/10 border border-cyan-500/20 rounded-xl p-5">
           <p className="text-xs font-semibold text-cyan-600 uppercase tracking-wide mb-2">Total Billable</p>
@@ -110,9 +104,7 @@ export default function AdminBilling({ submissions, medDeclarations }: Props) {
               <tr className="border-b border-slate-700/50">
                 <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Month</th>
                 <th className="text-right px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Medical Info</th>
-                {hasMedDecs && (
-                  <th className="text-right px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Med. Decl.</th>
-                )}
+                <th className="text-right px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Med. Decl.</th>
                 <th className="text-right px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Total</th>
               </tr>
             </thead>
@@ -134,9 +126,7 @@ export default function AdminBilling({ submissions, medDeclarations }: Props) {
                       )}
                     </td>
                     <td className="px-5 py-3 text-right font-mono text-slate-300">{subs}</td>
-                    {hasMedDecs && (
-                      <td className="px-5 py-3 text-right font-mono text-slate-300">{meds}</td>
-                    )}
+                    <td className="px-5 py-3 text-right font-mono text-slate-300">{meds}</td>
                     <td className="px-5 py-3 text-right font-mono font-semibold text-slate-100">{total}</td>
                   </tr>
                 )
@@ -146,9 +136,7 @@ export default function AdminBilling({ submissions, medDeclarations }: Props) {
               <tr className="border-t border-slate-600 bg-slate-800/40">
                 <td className="px-5 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wide">Total</td>
                 <td className="px-5 py-3 text-right font-mono font-bold text-slate-200">{totalSubs}</td>
-                {hasMedDecs && (
-                  <td className="px-5 py-3 text-right font-mono font-bold text-slate-200">{totalMeds}</td>
-                )}
+                <td className="px-5 py-3 text-right font-mono font-bold text-slate-200">{totalMeds}</td>
                 <td className="px-5 py-3 text-right font-mono font-bold text-cyan-400">{totalBillable}</td>
               </tr>
             </tfoot>

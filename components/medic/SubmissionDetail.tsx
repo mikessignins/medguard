@@ -394,26 +394,20 @@ export default function SubmissionDetail({ submission, siteName, businessName, c
               {/* Worker Information */}
               <div>
                 <SectionHeader title="Worker Information" />
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8">
-                  <div>
-                    <InfoRow label="Full Name" value={ws.fullName} />
-                    <InfoRow label="Date of Birth" value={fmt(ws.dateOfBirth)} />
-                    <InfoRow label="Email" value={ws.emailAddress} />
-                    <InfoRow label="Mobile" value={ws.mobileNumber} />
-                    <InfoRow label="Company" value={ws.company} />
-                    <InfoRow label="Department" value={ws.department} />
-                    {ws.supervisor && <InfoRow label="Supervisor" value={ws.supervisor} />}
-                    {ws.siteLocation && <InfoRow label="Site Location" value={ws.siteLocation} />}
-                  </div>
-                  <div>
-                    <InfoRow label="Employee ID" value={ws.employeeId} />
-                    <InfoRow label="Contractor" value={ws.isContractor} />
-                    <InfoRow label="Height" value={ws.heightCm ? `${ws.heightCm} cm` : null} />
-                    <InfoRow label="Weight" value={ws.weightKg ? `${ws.weightKg} kg` : null} />
-                    <InfoRow label="Role / Position" value={submission.role} />
-                    <InfoRow label="Shift Type" value={submission.shift_type} />
-                  </div>
-                </div>
+                <InfoRow label="Full Name" value={ws.fullName} />
+                <InfoRow label="Date of Birth" value={fmt(ws.dateOfBirth)} />
+                <InfoRow label="Employee ID" value={ws.employeeId} />
+                <InfoRow label="Contractor" value={ws.isContractor} />
+                <InfoRow label="Email" value={ws.emailAddress} />
+                <InfoRow label="Mobile" value={ws.mobileNumber} />
+                <InfoRow label="Company" value={ws.company} />
+                <InfoRow label="Department" value={ws.department} />
+                <InfoRow label="Role / Position" value={submission.role} />
+                <InfoRow label="Shift Type" value={submission.shift_type} />
+                <InfoRow label="Height" value={ws.heightCm ? `${ws.heightCm} cm` : null} />
+                <InfoRow label="Weight" value={ws.weightKg ? `${ws.weightKg} kg` : null} />
+                {ws.supervisor && <InfoRow label="Supervisor" value={ws.supervisor} />}
+                {ws.siteLocation && <InfoRow label="Site Location" value={ws.siteLocation} />}
               </div>
 
               {/* Emergency Contact */}
