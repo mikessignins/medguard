@@ -1,7 +1,7 @@
 'use client'
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import type { MedicationDeclaration, MedDecReviewStatus, ScriptUpload } from '@/lib/types'
 import { encodeQueue } from '@/lib/queue-params'
 
@@ -43,14 +43,6 @@ interface Props {
 
 export default function MedDecDetail({ medDec, siteName, businessName, queueContext }: Props) {
   const router = useRouter()
-
-  function queueLink(targetId: string, targetPos: number): string {
-    if (!queueContext) return `/medic/med-declarations/${targetId}`
-    return `/medic/med-declarations/${targetId}?${encodeQueue(queueContext.ids, targetPos)}`
-  }
-
-  const prevId = queueContext && queueContext.pos > 0 ? queueContext.ids[queueContext.pos - 1] : null
-  const nextId = queueContext && queueContext.pos < queueContext.ids.length - 1 ? queueContext.ids[queueContext.pos + 1] : null
   const [reviewStatus, setReviewStatus] = useState<MedDecReviewStatus>(medDec.medic_review_status || 'Pending')
   const [comments, setComments] = useState(medDec.medic_comments || '')
   const [reviewRequired, setReviewRequired] = useState(medDec.review_required || false)
@@ -61,6 +53,14 @@ export default function MedDecDetail({ medDec, siteName, businessName, queueCont
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
 
   const isPurged = !!medDec.phi_purged_at
+
+  function queueLink(targetId: string, targetPos: number): string {
+    if (!queueContext) return `/medic/med-declarations/${targetId}`
+    return `/medic/med-declarations/${targetId}?${encodeQueue(queueContext.ids, targetPos)}`
+  }
+
+  const prevId = queueContext && queueContext.pos > 0 ? queueContext.ids[queueContext.pos - 1] : null
+  const nextId = queueContext && queueContext.pos < queueContext.ids.length - 1 ? queueContext.ids[queueContext.pos + 1] : null
 
   async function handleSaveReview() {
     setSaving(true)
@@ -168,231 +168,240 @@ export default function MedDecDetail({ medDec, siteName, businessName, queueCont
       </div>
 
       {/* Identity bar */}
-      {!isPurged && (
-        <div className="bg-slate-800/60 border border-slate-700/50 rounded-xl px-5 py-4 mb-4 flex items-start justify-between gap-4 flex-wrap">
-          <div>
-            <h1 className="text-xl font-bold text-slate-100">{medDec.worker_name || 'Medication Declaration'}</h1>
-            <p className="text-sm text-slate-500 mt-0.5">
-              {medDec.job_title || 'Unknown role'} &middot; {medDec.employer || siteName} &middot; Submitted {fmtDateTime(medDec.submitted_at)}
-            </p>
-          </div>
-          <span className={`text-xs font-medium px-2.5 py-1 rounded-full shrink-0 ${STATUS_COLORS[reviewStatus]}`}>
-            {reviewStatus}
-          </span>
+      <div className="bg-slate-800/60 border border-slate-700/50 rounded-xl px-5 py-4 mb-4 flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="text-xl font-bold text-slate-100">
+            {isPurged ? 'PHI Purged' : medDec.worker_name || 'Medication Declaration'}
+          </h1>
+          <p className="text-sm text-slate-500 mt-0.5">
+            {!isPurged && medDec.job_title ? `${medDec.job_title} · ` : ''}
+            {!isPurged && medDec.employer ? `${medDec.employer} · ` : ''}
+            Submitted {fmtDateTime(medDec.submitted_at)}
+          </p>
         </div>
-      )}
+        <span className={`text-xs font-medium px-2.5 py-1 rounded-full shrink-0 ${STATUS_COLORS[reviewStatus]}`}>
+          {reviewStatus}
+        </span>
+      </div>
 
-      {isPurged && (
-        <div className="flex items-center gap-3 mb-6">
-          <div className="flex-1">
-            <h1 className="text-xl font-bold text-slate-100">PHI Purged</h1>
-            <p className="text-sm text-slate-500">Submitted {fmtDateTime(medDec.submitted_at)}</p>
-          </div>
-          <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${STATUS_COLORS[reviewStatus]}`}>
-            {reviewStatus}
-          </span>
-        </div>
-      )}
+      {/* Two-column layout */}
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-4 items-start">
 
-      {/* Purged warning */}
-      {isPurged && (
-        <div className="mb-6 bg-slate-800/60 border border-slate-700 rounded-xl px-5 py-4 text-center">
-          <p className="text-slate-400 font-medium">PHI has been purged from this record.</p>
-          <p className="text-xs text-slate-600 mt-1">Purged: {fmtDateTime(medDec.phi_purged_at)}</p>
-        </div>
-      )}
+        {/* LEFT: content */}
+        <div className="space-y-4">
 
-      {/* Health flags — shown prominently at top */}
-      {!isPurged && (medDec.has_recent_injury_or_illness || medDec.has_side_effects) && (
-        <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl px-5 py-4 mb-4">
-          <p className="text-sm font-semibold text-amber-300 mb-1">⚠ Health Flags</p>
-          <ul className="text-sm text-amber-200 space-y-1 list-disc list-inside">
-            {medDec.has_recent_injury_or_illness && <li>Worker has a recent injury or illness</li>}
-            {medDec.has_side_effects && <li>Medication may produce side effects that effect safety</li>}
-          </ul>
-        </div>
-      )}
+          {/* Purged warning */}
+          {isPurged && (
+            <div className="bg-slate-800/60 border border-slate-700 rounded-xl px-5 py-4 text-center">
+              <p className="text-slate-400 font-medium">PHI has been purged from this record.</p>
+              <p className="text-xs text-slate-600 mt-1">Purged: {fmtDateTime(medDec.phi_purged_at)}</p>
+            </div>
+          )}
 
-      {/* Worker details */}
-      {!isPurged && (
-        <div className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-5 mb-4">
-          <h2 className="text-xs font-semibold text-slate-500 uppercase tracking-widest mb-3">Worker Details</h2>
-          <TwoColRow label="Full Name" value={medDec.worker_name} />
-          <TwoColRow label="Date of Birth" value={fmt(medDec.worker_dob)} />
-          <TwoColRow label="Employer" value={medDec.employer} />
-          <TwoColRow label="Department" value={medDec.department} />
-          <TwoColRow label="Job Title" value={medDec.job_title} />
-          <TwoColRow label="Site" value={siteName} />
-          <TwoColRow label="Business" value={businessName} />
-        </div>
-      )}
+          {/* Health flags — prominent at top */}
+          {!isPurged && (medDec.has_recent_injury_or_illness || medDec.has_side_effects) && (
+            <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl px-5 py-4">
+              <p className="text-sm font-semibold text-amber-300 mb-1">⚠ Health Flags</p>
+              <ul className="text-sm text-amber-200 space-y-1 list-disc list-inside">
+                {medDec.has_recent_injury_or_illness && <li>Worker has a recent injury or illness</li>}
+                {medDec.has_side_effects && <li>Medication may produce side effects that affect safety</li>}
+              </ul>
+            </div>
+          )}
 
-      {/* Medications */}
-      {!isPurged && (
-        <div className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-5 mb-4">
-          <h2 className="text-xs font-semibold text-slate-500 uppercase tracking-widest mb-3">
-            Medications ({medDec.medications?.length ?? 0})
-          </h2>
-          {!medDec.medications || medDec.medications.length === 0 ? (
-            <p className="text-sm text-slate-500 italic">No medications declared.</p>
-          ) : (
-            <div className="space-y-3">
-              {medDec.medications.map((med, i) => (
-                <div
-                  key={med.id || i}
-                  className={`rounded-lg border px-4 py-3 ${med.flaggedForSideEffects ? 'bg-orange-500/10 border-orange-500/20' : 'bg-slate-900/40 border-slate-700/50'}`}
-                >
-                  <div className="flex items-start justify-between gap-2 mb-1">
-                    <p className="font-semibold text-slate-100 text-sm">{med.name}</p>
-                    {med.flaggedForSideEffects && (
-                      <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-orange-500/20 text-orange-400 border border-orange-500/20 shrink-0">
-                        Side Effect Risk
-                      </span>
-                    )}
-                  </div>
-                  <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-slate-400">
-                    <span><span className="text-slate-600">Type:</span> {med.prescriptionType || '—'}</span>
-                    <span><span className="text-slate-600">Dosage/Day:</span> {med.dosagePerDay || '—'}</span>
-                    <span><span className="text-slate-600">Duration:</span> {med.duration || '—'}</span>
-                    <span><span className="text-slate-600">Class:</span> {med.medicationClass || '—'}</span>
-                    {med.isLongTerm && <span className="col-span-2 text-slate-500">Long-term medication</span>}
-                  </div>
+          {/* Worker details */}
+          {!isPurged && (
+            <div className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-5">
+              <h2 className="text-xs font-semibold text-slate-500 uppercase tracking-widest mb-3">Worker Details</h2>
+              <TwoColRow label="Full Name" value={medDec.worker_name} />
+              <TwoColRow label="Date of Birth" value={fmt(medDec.worker_dob)} />
+              <TwoColRow label="Employer" value={medDec.employer} />
+              <TwoColRow label="Department" value={medDec.department} />
+              <TwoColRow label="Job Title" value={medDec.job_title} />
+              <TwoColRow label="Site" value={siteName} />
+              <TwoColRow label="Business" value={businessName} />
+            </div>
+          )}
+
+          {/* Medications */}
+          {!isPurged && (
+            <div className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-5">
+              <h2 className="text-xs font-semibold text-slate-500 uppercase tracking-widest mb-3">
+                Medications ({medDec.medications?.length ?? 0})
+              </h2>
+              {!medDec.medications || medDec.medications.length === 0 ? (
+                <p className="text-sm text-slate-500 italic">No medications declared.</p>
+              ) : (
+                <div className="space-y-3">
+                  {medDec.medications.map((med, i) => (
+                    <div
+                      key={med.id || i}
+                      className={`rounded-lg border px-4 py-3 ${med.flaggedForSideEffects ? 'bg-orange-500/10 border-orange-500/20' : 'bg-slate-900/40 border-slate-700/50'}`}
+                    >
+                      <div className="flex items-start justify-between gap-2 mb-1">
+                        <p className="font-semibold text-slate-100 text-sm">{med.name}</p>
+                        {med.flaggedForSideEffects && (
+                          <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-orange-500/20 text-orange-400 border border-orange-500/20 shrink-0">
+                            Side Effect Risk
+                          </span>
+                        )}
+                      </div>
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-slate-400">
+                        <span><span className="text-slate-600">Type:</span> {med.prescriptionType || '—'}</span>
+                        <span><span className="text-slate-600">Dosage/Day:</span> {med.dosagePerDay || '—'}</span>
+                        <span><span className="text-slate-600">Duration:</span> {med.duration || '—'}</span>
+                        <span><span className="text-slate-600">Class:</span> {med.medicationClass || '—'}</span>
+                        {med.isLongTerm && <span className="col-span-2 text-slate-500">Long-term medication</span>}
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              ))}
+              )}
+            </div>
+          )}
+
+          {/* Script uploads */}
+          {!isPurged && medDec.scriptUploads && medDec.scriptUploads.length > 0 && (
+            <div className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-5">
+              <h2 className="text-xs font-semibold text-slate-500 uppercase tracking-widest mb-3">
+                Prescription Scripts ({medDec.scriptUploads.length})
+              </h2>
+              <div className="grid grid-cols-2 gap-3">
+                {medDec.scriptUploads.map((upload, i) => (
+                  <button
+                    key={i}
+                    onClick={() => setLightboxUrl(upload.signedUrl || upload.downloadURL || null)}
+                    className="aspect-[3/4] rounded-lg overflow-hidden border border-slate-700 hover:border-slate-500 transition-colors bg-slate-900/50 flex items-center justify-center"
+                  >
+                    {upload.signedUrl || upload.downloadURL ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={upload.signedUrl || upload.downloadURL!}
+                        alt={upload.medicationName}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <div className="text-center p-3">
+                        <svg className="w-6 h-6 text-slate-600 mx-auto mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                        <p className="text-xs text-slate-500">{upload.medicationName}</p>
+                      </div>
+                    )}
+                  </button>
+                ))}
+              </div>
             </div>
           )}
         </div>
-      )}
 
-      {/* Script uploads */}
-      {!isPurged && medDec.scriptUploads && medDec.scriptUploads.length > 0 && (
-        <div className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-5 mb-4">
-          <h2 className="text-xs font-semibold text-slate-500 uppercase tracking-widest mb-3">
-            Prescription Scripts ({medDec.scriptUploads.length})
-          </h2>
-          <div className="grid grid-cols-2 gap-3">
-            {medDec.scriptUploads.map((upload, i) => (
+        {/* RIGHT: sticky action panel */}
+        <div className="space-y-4 lg:sticky lg:top-6">
+
+          {/* Review panel */}
+          <div className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-5">
+            <h2 className="text-xs font-semibold text-slate-500 uppercase tracking-widest mb-4">Outcome</h2>
+
+            {/* Status selector */}
+            <div className="flex flex-wrap gap-2 mb-4">
+              {REVIEW_STATUSES.map(s => (
+                <button
+                  key={s}
+                  onClick={() => setReviewStatus(s)}
+                  className={`px-3 py-2 rounded-lg text-sm font-medium border transition-colors ${
+                    reviewStatus === s
+                      ? STATUS_COLORS[s]
+                      : 'bg-slate-900/40 border-slate-700 text-slate-400 hover:border-slate-600'
+                  }`}
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
+
+            {/* Further review toggle */}
+            <div className="flex items-center justify-between py-3 border-t border-slate-800 mb-4">
+              <div>
+                <p className="text-sm font-medium text-slate-300">Further Review</p>
+                <p className="text-xs text-slate-500 mt-0.5">Flag for follow-up</p>
+              </div>
               <button
-                key={i}
-                onClick={() => setLightboxUrl(upload.signedUrl || upload.downloadURL || null)}
-                className="aspect-[3/4] rounded-lg overflow-hidden border border-slate-700 hover:border-slate-500 transition-colors bg-slate-900/50 flex items-center justify-center"
+                onClick={() => setReviewRequired(v => !v)}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 ${reviewRequired ? 'bg-cyan-500' : 'bg-slate-600'}`}
+                aria-pressed={reviewRequired}
               >
-                {upload.signedUrl || upload.downloadURL ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={upload.signedUrl || upload.downloadURL!}
-                    alt={upload.medicationName}
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  <div className="text-center p-3">
-                    <svg className="w-6 h-6 text-slate-600 mx-auto mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                    </svg>
-                    <p className="text-xs text-slate-500">{upload.medicationName}</p>
-                  </div>
-                )}
+                <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform duration-200 ${reviewRequired ? 'translate-x-6' : 'translate-x-1'}`} />
               </button>
-            ))}
-          </div>
-        </div>
-      )}
+            </div>
 
-      {/* Medic Review */}
-      <div className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-5 mb-4">
-        <h2 className="text-xs font-semibold text-slate-500 uppercase tracking-widest mb-4">Medic Review</h2>
+            {/* Comments */}
+            <div className="mb-4 border-t border-slate-800 pt-4">
+              <label className="block text-xs font-medium text-slate-400 mb-2">Comments</label>
+              <textarea
+                value={comments}
+                onChange={e => setComments(e.target.value)}
+                placeholder="Add medic comments…"
+                rows={4}
+                className="w-full px-3 py-2.5 bg-slate-900/60 border border-slate-700 rounded-lg text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-cyan-500 transition-colors resize-none"
+              />
+            </div>
 
-        {/* Status selector */}
-        <div className="mb-4">
-          <label className="block text-xs font-medium text-slate-400 mb-2">Outcome</label>
-          <div className="flex flex-wrap gap-2">
-            {REVIEW_STATUSES.map(s => (
+            {saveError && <p className="text-sm text-red-400 mb-3">{saveError}</p>}
+
+            <div className="flex items-center justify-between gap-3">
+              {saveSuccess && (
+                <span className="text-sm text-emerald-400 font-medium">Saved</span>
+              )}
               <button
-                key={s}
-                onClick={() => setReviewStatus(s)}
-                className={`px-3 py-2 rounded-lg text-sm font-medium border transition-colors ${
-                  reviewStatus === s
-                    ? STATUS_COLORS[s]
-                    : 'bg-slate-900/40 border-slate-700 text-slate-400 hover:border-slate-600'
-                }`}
+                onClick={handleSaveReview}
+                disabled={saving}
+                className="ml-auto px-5 py-2.5 bg-cyan-600 hover:bg-cyan-500 text-white text-sm font-semibold rounded-lg transition-colors disabled:opacity-50"
               >
-                {s}
+                {saving ? 'Saving…' : 'Save Review'}
               </button>
-            ))}
+            </div>
           </div>
-        </div>
 
-        {/* Further review toggle */}
-        <div className="mb-4 flex items-center justify-between py-3 border-t border-slate-800">
-          <div>
-            <p className="text-sm font-medium text-slate-300">Requires Further Review</p>
-            <p className="text-xs text-slate-500 mt-0.5">Flag this declaration for follow-up</p>
-          </div>
-          <button
-            onClick={() => setReviewRequired(v => !v)}
-            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 ${reviewRequired ? 'bg-cyan-500' : 'bg-slate-600'}`}
-            aria-pressed={reviewRequired}
-          >
-            <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform duration-200 ${reviewRequired ? 'translate-x-6' : 'translate-x-1'}`} />
-          </button>
-        </div>
-
-        {/* Comments */}
-        <div className="mb-4 border-t border-slate-800 pt-4">
-          <label className="block text-xs font-medium text-slate-400 mb-2">Comments</label>
-          <textarea
-            value={comments}
-            onChange={e => setComments(e.target.value)}
-            placeholder="Add medic comments…"
-            rows={4}
-            className="w-full px-3 py-2.5 bg-slate-900/60 border border-slate-700 rounded-lg text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-cyan-500 transition-colors resize-none"
-          />
-        </div>
-
-        {saveError && (
-          <p className="text-sm text-red-400 mb-3">{saveError}</p>
-        )}
-
-        <div className="flex items-center justify-between gap-3">
-          {saveSuccess && (
-            <span className="text-sm text-emerald-400 font-medium">Review saved</span>
-          )}
-          <button
-            onClick={handleSaveReview}
-            disabled={saving}
-            className="ml-auto px-5 py-2.5 bg-cyan-600 hover:bg-cyan-500 text-white text-sm font-semibold rounded-lg transition-colors disabled:opacity-50"
-          >
-            {saving ? 'Saving…' : 'Save Review'}
-          </button>
-        </div>
-      </div>
-
-      {/* Export / audit */}
-      <div className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-5 mb-4">
-        <h2 className="text-xs font-semibold text-slate-500 uppercase tracking-widest mb-4">Export &amp; Audit</h2>
-        <div className="flex items-center justify-between gap-4 flex-wrap">
-          <div className="text-sm text-slate-400 space-y-1">
-            {medDec.exported_at && (
-              <p>Exported: <span className="text-slate-300">{fmtDateTime(medDec.exported_at)}</span></p>
-            )}
-            {medDec.phi_purged_at && (
-              <p>PHI purged: <span className="text-slate-300">{fmtDateTime(medDec.phi_purged_at)}</span></p>
-            )}
-            {!medDec.exported_at && !medDec.phi_purged_at && (
-              <p className="text-slate-500 italic">Not yet exported</p>
-            )}
-          </div>
+          {/* Export / audit */}
           {!isPurged && (
-            <button
-              onClick={handleExportPdf}
-              disabled={exporting}
-              className="flex items-center gap-2 px-4 py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-200 text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
+            <div className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-5">
+              <h2 className="text-xs font-semibold text-slate-500 uppercase tracking-widest mb-3">Export &amp; Audit</h2>
+              <div className="text-sm text-slate-400 space-y-1 mb-4">
+                {medDec.exported_at ? (
+                  <p>Exported: <span className="text-slate-300">{fmtDateTime(medDec.exported_at)}</span></p>
+                ) : (
+                  <p className="text-slate-500 italic">Not yet exported</p>
+                )}
+              </div>
+              <button
+                onClick={handleExportPdf}
+                disabled={exporting}
+                className="flex items-center gap-2 w-full justify-center px-4 py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-200 text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+                {exporting ? 'Generating…' : 'Export PDF'}
+              </button>
+            </div>
+          )}
+
+          {/* Queue navigation — next submission button */}
+          {queueContext && nextId && (
+            <Link
+              href={queueLink(nextId, queueContext.pos + 1)}
+              className="flex items-center justify-center gap-2 w-full px-4 py-2.5 bg-cyan-500/10 border border-cyan-500/25 text-cyan-400 hover:bg-cyan-500/15 rounded-lg text-sm font-semibold transition-colors"
             >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-              </svg>
-              {exporting ? 'Generating…' : 'Export PDF'}
-            </button>
+              Next Declaration →
+            </Link>
+          )}
+          {queueContext && !nextId && (
+            <Link
+              href={`/medic?site=${medDec.site_id}`}
+              className="flex items-center justify-center gap-2 w-full px-4 py-2.5 bg-slate-700/50 border border-slate-700 text-slate-300 hover:bg-slate-700 rounded-lg text-sm font-medium transition-colors"
+            >
+              ← Back to list
+            </Link>
           )}
         </div>
       </div>

@@ -63,7 +63,7 @@ export default function AdminBilling({ submissions, medDeclarations }: Props) {
     <div>
       <div className="mb-8">
         <h1 className="text-xl font-bold text-slate-100">Billing Summary</h1>
-        <p className="text-sm text-slate-500 mt-0.5">All reviewed forms count as billable — counts update in real time.</p>
+        <p className="text-sm text-slate-500 mt-0.5">All exported forms are billable — both medical information and medication declarations.</p>
       </div>
 
       {/* Hero stat cards */}
@@ -77,7 +77,7 @@ export default function AdminBilling({ submissions, medDeclarations }: Props) {
         </div>
 
         <div className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-5">
-          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Emergency Declarations</p>
+          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Medical Information</p>
           <p className="text-3xl font-bold text-slate-100">{totalSubs}</p>
           <p className="text-xs text-slate-600 mt-1">All time</p>
         </div>
@@ -109,7 +109,7 @@ export default function AdminBilling({ submissions, medDeclarations }: Props) {
             <thead>
               <tr className="border-b border-slate-700/50">
                 <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Month</th>
-                <th className="text-right px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Emergency Decl.</th>
+                <th className="text-right px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Medical Info</th>
                 {hasMedDecs && (
                   <th className="text-right px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Med. Decl.</th>
                 )}

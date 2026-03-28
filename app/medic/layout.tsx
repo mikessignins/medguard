@@ -30,7 +30,7 @@ export default async function MedicLayout({ children }: { children: React.ReactN
       {/* Sidebar */}
       <aside className="no-print hidden md:flex flex-col w-64 min-h-screen bg-slate-950 border-r border-slate-800 shrink-0">
         {/* Logo */}
-        <div className="px-5 py-5 border-b border-slate-800">
+        <div className="px-5 py-4 border-b border-slate-800">
           <div className="flex items-center gap-3">
             {business?.logo_url ? (
               // eslint-disable-next-line @next/next/no-img-element
@@ -38,10 +38,11 @@ export default async function MedicLayout({ children }: { children: React.ReactN
             ) : (
               <Image src="/medm8-icon.png" alt="MedPass" width={32} height={32} className="rounded-lg" />
             )}
-            <div>
+            <div className="flex-1 min-w-0">
               <p className="text-slate-100 font-bold text-base leading-tight">MedPass</p>
               <p className="text-cyan-400 text-xs font-medium">Medic Portal</p>
             </div>
+            <ThemeToggle compact />
           </div>
         </div>
 
