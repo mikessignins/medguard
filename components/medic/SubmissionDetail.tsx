@@ -1,6 +1,8 @@
 'use client'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
+import { encodeQueue } from '@/lib/queue-params'
 import { createClient } from '@/lib/supabase/client'
 import type { WorkerSnapshot, Decision, SubmissionStatus, ScriptUpload, MedicComment } from '@/lib/types'
 
@@ -200,6 +202,14 @@ export default function SubmissionDetail({ submission, siteName, businessName, c
   const medications = hasSnapshot ? (ws.currentMedications || []) : []
   const hasFlaggedMeds = medications.some(m => FLAGGED_REVIEWS.includes(m?.reviewFlag ?? ''))
 
+  const prevId = queueContext && queueContext.pos > 0 ? queueContext.ids[queueContext.pos - 1] : null
+  const nextId = queueContext && queueContext.pos < queueContext.ids.length - 1 ? queueContext.ids[queueContext.pos + 1] : null
+
+  function queueLink(targetId: string, targetPos: number) {
+    if (!queueContext) return `/medic/submissions/${targetId}`
+    return `/medic/submissions/${targetId}?${encodeQueue(queueContext.ids, targetPos)}`
+  }
+
   async function updateStatus(newStatus: SubmissionStatus, note?: string) {
     setLoading(true)
     setActionError('')
@@ -266,17 +276,72 @@ export default function SubmissionDetail({ submission, siteName, businessName, c
   return (
     <>
     <div className="max-w-4xl no-print">
-      {/* Back */}
-      <div className="mb-6 no-print">
-        <button
-          onClick={() => router.back()}
-          className="text-slate-500 hover:text-cyan-400 transition-colors duration-200 text-sm flex items-center gap-1"
+      {/* Queue nav bar */}
+      <div className="no-print flex items-center justify-between mb-4 pb-4 border-b border-slate-700/50 gap-4 flex-wrap">
+        <Link
+          href="/medic"
+          className="flex items-center gap-1.5 text-sm text-slate-400 hover:text-slate-200 transition-colors"
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
           </svg>
-          Back to submissions
-        </button>
+          Back to Submissions
+        </Link>
+        {queueContext && (
+          <div className="flex items-center gap-3">
+            <span className="text-sm text-slate-500">
+              {queueContext.pos + 1} of {queueContext.ids.length}
+            </span>
+            <div className="flex gap-1">
+              {prevId ? (
+                <Link
+                  href={queueLink(prevId, queueContext.pos - 1)}
+                  className="px-3 py-1.5 text-xs font-medium bg-slate-800 border border-slate-700 text-slate-300 hover:border-slate-600 rounded-lg transition-colors"
+                >
+                  ← Prev
+                </Link>
+              ) : (
+                <span className="px-3 py-1.5 text-xs font-medium bg-slate-800/40 border border-slate-700/40 text-slate-600 rounded-lg cursor-not-allowed">← Prev</span>
+              )}
+              {nextId ? (
+                <Link
+                  href={queueLink(nextId, queueContext.pos + 1)}
+                  className="px-3 py-1.5 text-xs font-medium bg-cyan-500/10 border border-cyan-500/25 text-cyan-400 hover:bg-cyan-500/15 rounded-lg transition-colors"
+                >
+                  Next →
+                </Link>
+              ) : (
+                <span className="px-3 py-1.5 text-xs font-medium bg-slate-800/40 border border-slate-700/40 text-slate-600 rounded-lg cursor-not-allowed">Next →</span>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Worker identity bar */}
+      <div className="no-print bg-slate-800/60 border border-slate-700/50 rounded-xl px-5 py-4 mb-4 flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="text-lg font-bold text-slate-100">
+            {isPurged ? 'PHI Purged' : (ws?.fullName || 'Unknown Worker')}
+          </h1>
+          <p className="text-sm text-slate-400 mt-0.5">
+            {submission.role}
+            {siteName && <> · {siteName}</>}
+            {submission.visit_date && <> · {fmt(submission.visit_date)}</>}
+            {submission.shift_type && <> · {submission.shift_type}</>}
+          </p>
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          {hasFlaggedMeds && (
+            <span className="flex items-center gap-1.5 px-2.5 py-1 bg-orange-500/10 border border-orange-500/25 text-orange-400 text-xs font-semibold rounded-full">
+              <span className="w-1.5 h-1.5 rounded-full bg-orange-400 shrink-0" />
+              {(ws?.currentMedications ?? []).filter(m => FLAGGED_REVIEWS.includes(m?.reviewFlag ?? '')).length} flagged med(s)
+            </span>
+          )}
+          <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${STATUS_COLORS[status]}`}>
+            {status}
+          </span>
+        </div>
       </div>
 
       <div className="bg-slate-800/60 backdrop-blur-sm border border-slate-700/50 rounded-2xl overflow-hidden">
