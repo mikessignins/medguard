@@ -16,11 +16,16 @@ export default function ThemeToggle({ compact = false }: Props) {
         document.documentElement.dataset.theme = 'light'
       }
     } catch {}
+
+    function onThemeChange(e: Event) {
+      setTheme((e as CustomEvent<{ theme: 'dark' | 'light' }>).detail.theme)
+    }
+    window.addEventListener('medpass:themechange', onThemeChange)
+    return () => window.removeEventListener('medpass:themechange', onThemeChange)
   }, [])
 
   function toggle() {
     const next = theme === 'dark' ? 'light' : 'dark'
-    setTheme(next)
     try {
       if (next === 'light') {
         document.documentElement.dataset.theme = 'light'
@@ -30,6 +35,8 @@ export default function ThemeToggle({ compact = false }: Props) {
         localStorage.setItem('theme', 'dark')
       }
     } catch {}
+    // Broadcast to all other ThemeToggle instances on the page
+    window.dispatchEvent(new CustomEvent('medpass:themechange', { detail: { theme: next } }))
   }
 
   if (compact) {
