@@ -65,6 +65,7 @@ interface Props {
 export default function MedicDashboard({ sites, submissions, medDeclarations, medDecEnabled }: Props) {
   const [activeTab, setActiveTab] = useState(sites[0]?.id || '')
   const [filter, setFilter] = useState<FilterType>('All')
+  const [activeSection, setActiveSection] = useState<'declarations' | 'meddec'>('declarations')
   const [showExported, setShowExported] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [purging, setPurging] = useState(false)
@@ -171,8 +172,6 @@ export default function MedicDashboard({ sites, submissions, medDeclarations, me
     )
   }
 
-  const filterButtons: FilterType[] = ['All', ...STATUS_ORDER]
-
   // Stat counts for active site
   const statNew = siteSubmissions.filter(s => s.status === 'New' && !s.exported_at).length
   const statInReview = siteSubmissions.filter(s => s.status === 'In Review' && !s.exported_at).length
@@ -182,24 +181,41 @@ export default function MedicDashboard({ sites, submissions, medDeclarations, me
   return (
     <div>
 
-      {/* Stat cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
-        <div className="bg-slate-800/60 backdrop-blur-sm border border-slate-700/50 rounded-xl p-4">
-          <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">New</p>
-          <p className="text-2xl font-bold text-indigo-400">{statNew}</p>
-        </div>
-        <div className="bg-slate-800/60 backdrop-blur-sm border border-slate-700/50 rounded-xl p-4">
-          <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">In Review</p>
-          <p className="text-2xl font-bold text-amber-400">{statInReview}</p>
-        </div>
-        <div className="bg-slate-800/60 backdrop-blur-sm border border-slate-700/50 rounded-xl p-4">
-          <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Approved</p>
-          <p className="text-2xl font-bold text-emerald-400">{statApproved}</p>
-        </div>
-        <div className="bg-slate-800/60 backdrop-blur-sm border border-slate-700/50 rounded-xl p-4">
-          <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Follow-up</p>
-          <p className="text-2xl font-bold text-red-400">{statFollowUp}</p>
-        </div>
+      {/* Stat cards — clickable filters */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+        {([
+          { label: 'New', status: 'New' as FilterType, value: statNew, color: 'text-indigo-400', active: 'bg-indigo-500/15 border-indigo-500/40' },
+          { label: 'In Review', status: 'In Review' as FilterType, value: statInReview, color: 'text-amber-400', active: 'bg-amber-500/15 border-amber-500/40' },
+          { label: 'Approved', status: 'Approved' as FilterType, value: statApproved, color: 'text-emerald-400', active: 'bg-emerald-500/15 border-emerald-500/40' },
+          { label: 'Follow-up', status: 'Requires Follow-up' as FilterType, value: statFollowUp, color: 'text-red-400', active: 'bg-red-500/15 border-red-500/40' },
+        ] as const).map(card => (
+          <button
+            key={card.status}
+            onClick={() => setFilter(f => f === card.status ? 'All' : card.status)}
+            className={`text-left p-4 rounded-xl border transition-all duration-150 ${
+              filter === card.status
+                ? card.active
+                : 'bg-slate-800/60 border-slate-700/50 hover:border-slate-600/60'
+            }`}
+          >
+            <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">{card.label}</p>
+            <p className={`text-2xl font-bold ${card.color}`}>{card.value}</p>
+          </button>
+        ))}
+        {medDecEnabled && (
+          <button
+            onClick={() => setActiveSection('meddec')}
+            className={`text-left p-4 rounded-xl border transition-all duration-150 ${
+              activeSection === 'meddec'
+                ? 'bg-indigo-500/15 border-indigo-500/40'
+                : 'bg-slate-800/60 border-slate-700/50 hover:border-slate-600/60'
+            }`}
+          >
+            <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Med Decs</p>
+            <p className="text-2xl font-bold text-violet-400">{pendingMedDecCount}</p>
+            <p className="text-xs text-slate-600 mt-0.5">pending</p>
+          </button>
+        )}
       </div>
 
       {/* New submissions alert */}
@@ -222,38 +238,34 @@ export default function MedicDashboard({ sites, submissions, medDeclarations, me
         </div>
       )}
 
-      {/* Site Tabs */}
-      <div className="flex gap-1 mb-5 border-b border-slate-800 overflow-x-auto">
+      {/* Site switcher — scrollable pills */}
+      <div className="flex gap-2 mb-5 overflow-x-auto pb-1">
         {sites.map(site => {
           const siteNew = submissions.filter(s => s.site_id === site.id && s.status === 'New' && !s.exported_at).length
           const siteMedDecPending = medDecEnabled
             ? medDeclarations.filter(m =>
-                m.site_id === site.id &&
-                !m.exported_at && !m.phi_purged_at &&
+                m.site_id === site.id && !m.exported_at && !m.phi_purged_at &&
                 !MEDDEC_FINAL.includes(m.medic_review_status)
               ).length
             : 0
+          const isActive = activeTab === site.id
           return (
             <button
               key={site.id}
-              onClick={() => { setActiveTab(site.id); setFilter('All'); setSelectedIds(new Set()); setConfirmPurge(false) }}
-              className={`px-4 py-2.5 text-sm font-medium whitespace-nowrap border-b-2 transition-colors flex items-center gap-1.5 ${
-                activeTab === site.id
-                  ? 'border-cyan-500 text-cyan-400'
-                  : 'border-transparent text-slate-500 hover:text-slate-300'
+              onClick={() => { setActiveTab(site.id); setFilter('All'); setSelectedIds(new Set()); setConfirmPurge(false); setActiveSection('declarations') }}
+              className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap border transition-all duration-150 shrink-0 ${
+                isActive
+                  ? 'bg-cyan-500/10 border-cyan-500/30 text-cyan-400'
+                  : 'bg-slate-800/60 border-slate-700/50 text-slate-400 hover:text-slate-200 hover:border-slate-600'
               }`}
             >
               {site.name}
               {site.is_office && <span className="text-xs text-slate-600">(Office)</span>}
               {siteNew > 0 && (
-                <span className="text-xs bg-cyan-600 text-white px-1.5 py-0.5 rounded-full font-semibold" title="New submissions">
-                  {siteNew}
-                </span>
+                <span className="bg-cyan-600 text-white text-xs rounded-full px-1.5 py-0.5 font-semibold leading-none">{siteNew}</span>
               )}
               {siteMedDecPending > 0 && (
-                <span className="text-xs bg-indigo-600 text-white px-1.5 py-0.5 rounded-full font-semibold" title="Pending medication declarations">
-                  {siteMedDecPending} med
-                </span>
+                <span className="bg-indigo-600 text-white text-xs rounded-full px-1.5 py-0.5 font-semibold leading-none">{siteMedDecPending}</span>
               )}
             </button>
           )
@@ -266,27 +278,6 @@ export default function MedicDashboard({ sites, submissions, medDeclarations, me
         <div className="flex-1 h-px bg-slate-800" />
       </div>
 
-      {/* Status Filter */}
-      <div className="flex gap-2 mb-6 flex-wrap">
-        {filterButtons.map(f => (
-          <button
-            key={f}
-            onClick={() => setFilter(f)}
-            className={`px-3 py-1.5 text-xs font-medium rounded-full border transition-colors ${
-              filter === f
-                ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30'
-                : 'bg-slate-800 text-slate-400 border-slate-700 hover:border-slate-600 hover:text-slate-300'
-            }`}
-          >
-            {f}
-            {f !== 'All' && (
-              <span className="ml-1 opacity-70">
-                ({siteSubmissions.filter(x => x.status === f && !x.exported_at).length})
-              </span>
-            )}
-          </button>
-        ))}
-      </div>
 
       {purgeError && (
         <p className="text-sm text-red-400 mb-3">{purgeError}</p>
