@@ -287,184 +287,217 @@ export default function MedicDashboard({ sites, submissions, medDeclarations, me
         })}
       </div>
 
-      {/* Section title */}
-      <div className="flex items-center gap-3 mb-4">
-        <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-widest">Emergency Medical Declarations</h2>
-        <div className="flex-1 h-px bg-slate-800" />
-      </div>
-
-
-      {purgeError && (
-        <p className="text-sm text-red-400 mb-3">{purgeError}</p>
-      )}
-
-      {/* Active submission list */}
-      <div className="space-y-6">
-        {STATUS_ORDER.map(status => {
-          const items = grouped[status]
-          if (!items || items.length === 0) return null
-          return (
-            <div key={status}>
-              <h2 className="text-xs font-semibold text-slate-500 uppercase tracking-widest mb-3">
-                {status} <span className="font-normal">({items.length})</span>
-              </h2>
-              <div className="bg-slate-800/60 backdrop-blur-sm border border-slate-700/50 rounded-xl overflow-hidden">
-                {items.map((sub, i) => (
-                  <button
-                    key={sub.id}
-                    onClick={() => {
-                      const queueIds = STATUS_ORDER.flatMap(s => grouped[s] ?? []).map(s => s.id)
-                      const pos = queueIds.indexOf(sub.id)
-                      router.push(`/medic/submissions/${sub.id}?${encodeQueue(queueIds, pos)}`)
-                    }}
-                    className={`w-full text-left px-5 py-4 flex items-center justify-between hover:bg-slate-700/30 transition-colors ${i > 0 ? 'border-t border-slate-700/50' : ''}`}
-                  >
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <p className="font-semibold text-slate-100">
-                          {sub.worker_snapshot?.fullName || 'Unknown Worker'}
-                        </p>
-                        <span className="text-sm text-slate-500">{sub.role || 'Unknown role'}</span>
-                      </div>
-                      <RiskChips sub={sub} />
-                      <p className="text-sm text-slate-500 mt-1">
-                        {(() => { try { return sub.visit_date ? format(new Date(sub.visit_date), 'dd MMM yyyy') : 'No date' } catch { return 'No date' } })()}
-                        {' · '}{sub.shift_type || 'N/A'}
-                      </p>
-                    </div>
-                    <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${STATUS_COLORS[status]} shrink-0 ml-3`}>
-                      {status}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )
-        })}
-        {filtered.length === 0 && (
-          <p className="text-center py-12 text-slate-600">
-            {filter === 'All' ? 'No submissions for this site.' : `No submissions with status "${filter}".`}
-          </p>
-        )}
-      </div>
-
-      {/* Exported section — collapsed by default */}
-      {(exportedSubs.length > 0 || purgedSubs.length > 0) && (
-        <div className="mt-6">
+      {/* Section tabs — only shown when medDecEnabled */}
+      {medDecEnabled ? (
+        <div className="flex gap-0 border-b border-slate-800 mb-5">
           <button
-            onClick={() => setShowExported(v => !v)}
-            className="flex items-center gap-2 text-sm font-medium text-slate-500 hover:text-slate-300 transition-colors mb-3"
+            onClick={() => setActiveSection('declarations')}
+            className={`px-5 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
+              activeSection === 'declarations'
+                ? 'border-cyan-500 text-cyan-400'
+                : 'border-transparent text-slate-500 hover:text-slate-300'
+            }`}
           >
-            <svg className={`w-4 h-4 transition-transform ${showExported ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-            </svg>
-            Exported ({exportedSubs.length + purgedSubs.length})
+            Emergency Declarations
           </button>
-
-          {showExported && (
-            <>
-              {/* Purge toolbar */}
-              {exportedSubs.length > 0 && (
-                <div className="mb-4 bg-purple-500/10 border border-purple-500/20 rounded-xl px-4 py-3 flex items-center justify-between gap-4 flex-wrap">
-                  <div className="flex items-center gap-3">
-                    <button
-                      onClick={toggleSelectAll}
-                      className="text-sm text-purple-400 font-medium hover:underline"
-                    >
-                      {selectedIds.size === exportedSubs.length ? 'Deselect all' : 'Select all'}
-                    </button>
-                    {selectedIds.size > 0 && (
-                      <span className="text-sm text-slate-400">{selectedIds.size} selected</span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <p className="text-xs text-slate-500">PHI auto-purges {AUTO_PURGE_DAYS} days after export</p>
-                    {selectedIds.size > 0 && !confirmPurge && (
-                      <button
-                        onClick={() => setConfirmPurge(true)}
-                        className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white text-sm font-medium rounded-lg transition-colors"
-                      >
-                        Purge selected ({selectedIds.size})
-                      </button>
-                    )}
-                    {confirmPurge && (
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium text-red-400">Remove all PHI? Cannot be undone.</span>
-                        <button
-                          onClick={handlePurge}
-                          disabled={purging}
-                          className="px-4 py-2 bg-red-700 hover:bg-red-600 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
-                        >
-                          {purging ? 'Purging...' : 'Confirm'}
-                        </button>
-                        <button
-                          onClick={() => setConfirmPurge(false)}
-                          className="px-3 py-2 bg-slate-700 hover:bg-slate-600 text-slate-300 text-sm font-medium rounded-lg transition-colors"
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              <div className="bg-slate-800/60 backdrop-blur-sm border border-slate-700/50 rounded-xl overflow-hidden">
-                {[...exportedSubs, ...purgedSubs].map((sub, i) => {
-                  const isPurged = !!sub.phi_purged_at
-                  const isSelected = selectedIds.has(sub.id)
-                  return (
-                    <div
-                      key={sub.id}
-                      className={`flex items-center gap-3 px-4 py-4 ${i > 0 ? 'border-t border-slate-700/50' : ''} ${isPurged ? 'opacity-40' : ''}`}
-                    >
-                      {!isPurged && (
-                        <input
-                          type="checkbox"
-                          checked={isSelected}
-                          onChange={() => toggleSelect(sub.id)}
-                          className="w-4 h-4 rounded border-slate-600 bg-slate-700 text-red-500 cursor-pointer"
-                        />
-                      )}
-                      <button
-                        // Queue nav intentionally omitted for exported/purged rows — not part of the pending queue
-                        onClick={() => router.push(`/medic/submissions/${sub.id}`)}
-                        className="flex-1 text-left flex items-center justify-between hover:bg-slate-700/30 rounded-lg px-2 py-1 -mx-2 -my-1 transition-colors"
-                      >
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <p className="font-semibold text-slate-100">
-                              {isPurged ? 'PHI Purged' : sub.worker_snapshot?.fullName || 'Unknown Worker'}
-                            </p>
-                          </div>
-                          <p className="text-sm text-slate-500 mt-0.5">
-                            {(() => { try { return sub.visit_date ? format(new Date(sub.visit_date), 'dd MMM yyyy') : 'No date' } catch { return 'No date' } })()}
-                            {' '}&middot;{' '}{sub.shift_type || 'N/A'}
-                            {' '}&middot;{' '}
-                            <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${STATUS_COLORS[sub.status as SubmissionStatus] || 'bg-slate-700 text-slate-400 border border-slate-600'}`}>
-                              {sub.status}
-                            </span>
-                          </p>
-                        </div>
-                        <div className="shrink-0 ml-3">
-                          {isPurged ? (
-                            <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-slate-700 text-slate-500">Purged</span>
-                          ) : sub.exported_at ? (
-                            <PurgeCountdown exportedAt={sub.exported_at} />
-                          ) : null}
-                        </div>
-                      </button>
-                    </div>
-                  )
-                })}
-              </div>
-            </>
-          )}
+          <button
+            onClick={() => setActiveSection('meddec')}
+            className={`px-5 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors flex items-center gap-2 ${
+              activeSection === 'meddec'
+                ? 'border-indigo-500 text-indigo-400'
+                : 'border-transparent text-slate-500 hover:text-slate-300'
+            }`}
+          >
+            Medication Declarations
+            {pendingMedDecCount > 0 && (
+              <span className="bg-indigo-600 text-white text-xs rounded-full px-1.5 py-0.5 font-semibold leading-none">
+                {pendingMedDecCount}
+              </span>
+            )}
+          </button>
+        </div>
+      ) : (
+        <div className="flex items-center gap-3 mb-4">
+          <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-widest">Emergency Medical Declarations</h2>
+          <div className="flex-1 h-px bg-slate-800" />
         </div>
       )}
 
-      {/* Medication Declarations Section */}
-      {medDecEnabled && (
+
+      {activeSection === 'declarations' && (
+        <>
+          {purgeError && (
+            <p className="text-sm text-red-400 mb-3">{purgeError}</p>
+          )}
+
+          {/* Active submission list */}
+          <div className="space-y-6">
+            {STATUS_ORDER.map(status => {
+              const items = grouped[status]
+              if (!items || items.length === 0) return null
+              return (
+                <div key={status}>
+                  <h2 className="text-xs font-semibold text-slate-500 uppercase tracking-widest mb-3">
+                    {status} <span className="font-normal">({items.length})</span>
+                  </h2>
+                  <div className="bg-slate-800/60 backdrop-blur-sm border border-slate-700/50 rounded-xl overflow-hidden">
+                    {items.map((sub, i) => (
+                      <button
+                        key={sub.id}
+                        onClick={() => {
+                          const queueIds = STATUS_ORDER.flatMap(s => grouped[s] ?? []).map(s => s.id)
+                          const pos = queueIds.indexOf(sub.id)
+                          router.push(`/medic/submissions/${sub.id}?${encodeQueue(queueIds, pos)}`)
+                        }}
+                        className={`w-full text-left px-5 py-4 flex items-center justify-between hover:bg-slate-700/30 transition-colors ${i > 0 ? 'border-t border-slate-700/50' : ''}`}
+                      >
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="font-semibold text-slate-100">
+                              {sub.worker_snapshot?.fullName || 'Unknown Worker'}
+                            </p>
+                            <span className="text-sm text-slate-500">{sub.role || 'Unknown role'}</span>
+                          </div>
+                          <RiskChips sub={sub} />
+                          <p className="text-sm text-slate-500 mt-1">
+                            {(() => { try { return sub.visit_date ? format(new Date(sub.visit_date), 'dd MMM yyyy') : 'No date' } catch { return 'No date' } })()}
+                            {' · '}{sub.shift_type || 'N/A'}
+                          </p>
+                        </div>
+                        <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${STATUS_COLORS[status]} shrink-0 ml-3`}>
+                          {status}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )
+            })}
+            {filtered.length === 0 && (
+              <p className="text-center py-12 text-slate-600">
+                {filter === 'All' ? 'No submissions for this site.' : `No submissions with status "${filter}".`}
+              </p>
+            )}
+          </div>
+
+          {/* Exported section — collapsed by default */}
+          {(exportedSubs.length > 0 || purgedSubs.length > 0) && (
+            <div className="mt-6">
+              <button
+                onClick={() => setShowExported(v => !v)}
+                className="flex items-center gap-2 text-sm font-medium text-slate-500 hover:text-slate-300 transition-colors mb-3"
+              >
+                <svg className={`w-4 h-4 transition-transform ${showExported ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+                Exported ({exportedSubs.length + purgedSubs.length})
+              </button>
+
+              {showExported && (
+                <>
+                  {/* Purge toolbar */}
+                  {exportedSubs.length > 0 && (
+                    <div className="mb-4 bg-purple-500/10 border border-purple-500/20 rounded-xl px-4 py-3 flex items-center justify-between gap-4 flex-wrap">
+                      <div className="flex items-center gap-3">
+                        <button
+                          onClick={toggleSelectAll}
+                          className="text-sm text-purple-400 font-medium hover:underline"
+                        >
+                          {selectedIds.size === exportedSubs.length ? 'Deselect all' : 'Select all'}
+                        </button>
+                        {selectedIds.size > 0 && (
+                          <span className="text-sm text-slate-400">{selectedIds.size} selected</span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <p className="text-xs text-slate-500">PHI auto-purges {AUTO_PURGE_DAYS} days after export</p>
+                        {selectedIds.size > 0 && !confirmPurge && (
+                          <button
+                            onClick={() => setConfirmPurge(true)}
+                            className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white text-sm font-medium rounded-lg transition-colors"
+                          >
+                            Purge selected ({selectedIds.size})
+                          </button>
+                        )}
+                        {confirmPurge && (
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-medium text-red-400">Remove all PHI? Cannot be undone.</span>
+                            <button
+                              onClick={handlePurge}
+                              disabled={purging}
+                              className="px-4 py-2 bg-red-700 hover:bg-red-600 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
+                            >
+                              {purging ? 'Purging...' : 'Confirm'}
+                            </button>
+                            <button
+                              onClick={() => setConfirmPurge(false)}
+                              className="px-3 py-2 bg-slate-700 hover:bg-slate-600 text-slate-300 text-sm font-medium rounded-lg transition-colors"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="bg-slate-800/60 backdrop-blur-sm border border-slate-700/50 rounded-xl overflow-hidden">
+                    {[...exportedSubs, ...purgedSubs].map((sub, i) => {
+                      const isPurged = !!sub.phi_purged_at
+                      const isSelected = selectedIds.has(sub.id)
+                      return (
+                        <div
+                          key={sub.id}
+                          className={`flex items-center gap-3 px-4 py-4 ${i > 0 ? 'border-t border-slate-700/50' : ''} ${isPurged ? 'opacity-40' : ''}`}
+                        >
+                          {!isPurged && (
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => toggleSelect(sub.id)}
+                              className="w-4 h-4 rounded border-slate-600 bg-slate-700 text-red-500 cursor-pointer"
+                            />
+                          )}
+                          <button
+                            // Queue nav intentionally omitted for exported/purged rows — not part of the pending queue
+                            onClick={() => router.push(`/medic/submissions/${sub.id}`)}
+                            className="flex-1 text-left flex items-center justify-between hover:bg-slate-700/30 rounded-lg px-2 py-1 -mx-2 -my-1 transition-colors"
+                          >
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <p className="font-semibold text-slate-100">
+                                  {isPurged ? 'PHI Purged' : sub.worker_snapshot?.fullName || 'Unknown Worker'}
+                                </p>
+                              </div>
+                              <p className="text-sm text-slate-500 mt-0.5">
+                                {(() => { try { return sub.visit_date ? format(new Date(sub.visit_date), 'dd MMM yyyy') : 'No date' } catch { return 'No date' } })()}
+                                {' '}&middot;{' '}{sub.shift_type || 'N/A'}
+                                {' '}&middot;{' '}
+                                <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${STATUS_COLORS[sub.status as SubmissionStatus] || 'bg-slate-700 text-slate-400 border border-slate-600'}`}>
+                                  {sub.status}
+                                </span>
+                              </p>
+                            </div>
+                            <div className="shrink-0 ml-3">
+                              {isPurged ? (
+                                <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-slate-700 text-slate-500">Purged</span>
+                              ) : sub.exported_at ? (
+                                <PurgeCountdown exportedAt={sub.exported_at} />
+                              ) : null}
+                            </div>
+                          </button>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+        </>
+      )}
+
+      {medDecEnabled && activeSection === 'meddec' && (
         <MedDecSection medDeclarations={medDeclarations} siteId={activeTab} />
       )}
     </div>
