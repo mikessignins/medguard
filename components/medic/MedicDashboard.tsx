@@ -5,6 +5,8 @@ import { format } from 'date-fns'
 import { createClient } from '@/lib/supabase/client'
 import type { Site, Submission, SubmissionStatus, MedicationDeclaration } from '@/lib/types'
 import MedDecSection from '@/components/medic/MedDecSection'
+import { computeRiskChips } from '@/lib/risk-chips'
+import { encodeQueue } from '@/lib/queue-params'
 
 const STATUS_ORDER: SubmissionStatus[] = ['New', 'In Review', 'Approved', 'Requires Follow-up']
 
@@ -16,18 +18,28 @@ const STATUS_COLORS: Record<SubmissionStatus, string> = {
   'Recalled': 'bg-slate-500/10 text-slate-400 border border-slate-500/20',
 }
 
-const FLAGGED_REVIEWS = [
-  'Opioid', 'Benzodiazepine', 'Antipsychotic', 'Anticoagulant',
-  'Insulin / Diabetes', 'Antiepileptic', 'Sedative / Hypnotic', 'Stimulant', 'Review Required',
-]
-
 const AUTO_PURGE_DAYS = 7
 
 const MEDDEC_FINAL = ['Normal Duties', 'Restricted Duties', 'Unfit for Work']
 
-function hasFlaggedMeds(sub: Submission): boolean {
-  return (sub.worker_snapshot?.currentMedications || []).some(
-    m => FLAGGED_REVIEWS.includes(m.reviewFlag)
+function RiskChips({ sub }: { sub: Submission }) {
+  const chips = computeRiskChips(sub)
+  return (
+    <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
+      {chips.map((chip, i) => {
+        const styles = {
+          'anaphylaxis': 'bg-red-500/10 border-red-500/25 text-red-400',
+          'flagged-meds': 'bg-orange-500/10 border-orange-500/25 text-orange-400',
+          'conditions': 'bg-amber-500/10 border-amber-500/20 text-amber-400',
+          'clear': 'bg-slate-800/50 border-slate-700/50 text-slate-600',
+        }
+        return (
+          <span key={i} className={`text-xs font-medium px-2 py-0.5 rounded-full border ${styles[chip.type]}`}>
+            {chip.label}
+          </span>
+        )
+      })}
+    </div>
   )
 }
 
@@ -300,25 +312,27 @@ export default function MedicDashboard({ sites, submissions, medDeclarations, me
                 {items.map((sub, i) => (
                   <button
                     key={sub.id}
-                    onClick={() => router.push(`/medic/submissions/${sub.id}`)}
+                    onClick={() => {
+                      const queueIds = STATUS_ORDER.flatMap(s => grouped[s] ?? []).map(s => s.id)
+                      const pos = queueIds.indexOf(sub.id)
+                      router.push(`/medic/submissions/${sub.id}?${encodeQueue(queueIds, pos)}`)
+                    }}
                     className={`w-full text-left px-5 py-4 flex items-center justify-between hover:bg-slate-700/30 transition-colors ${i > 0 ? 'border-t border-slate-700/50' : ''}`}
                   >
-                    <div className="flex items-center gap-3">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <p className="font-semibold text-slate-100">
-                            {sub.worker_snapshot?.fullName || 'Unknown Worker'}
-                          </p>
-                          {hasFlaggedMeds(sub) && (
-                            <span className="w-2 h-2 rounded-full bg-orange-500 shrink-0" title="Flagged medications" />
-                          )}
-                        </div>
-                        <p className="text-sm text-slate-500 mt-0.5">
-                          {(() => { try { return sub.visit_date ? format(new Date(sub.visit_date), 'dd MMM yyyy') : 'No date' } catch { return 'No date' } })()} &middot; <span className="text-slate-500">{sub.shift_type || 'N/A'}</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="font-semibold text-slate-100">
+                          {sub.worker_snapshot?.fullName || 'Unknown Worker'}
                         </p>
+                        <span className="text-sm text-slate-500">{sub.role}</span>
                       </div>
+                      <RiskChips sub={sub} />
+                      <p className="text-sm text-slate-500 mt-1">
+                        {(() => { try { return sub.visit_date ? format(new Date(sub.visit_date), 'dd MMM yyyy') : 'No date' } catch { return 'No date' } })()}
+                        {' · '}{sub.shift_type || 'N/A'}
+                      </p>
                     </div>
-                    <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${STATUS_COLORS[status]} shrink-0`}>
+                    <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${STATUS_COLORS[status]} shrink-0 ml-3`}>
                       {status}
                     </span>
                   </button>
@@ -421,9 +435,6 @@ export default function MedicDashboard({ sites, submissions, medDeclarations, me
                             <p className="font-semibold text-slate-100">
                               {isPurged ? 'PHI Purged' : sub.worker_snapshot?.fullName || 'Unknown Worker'}
                             </p>
-                            {hasFlaggedMeds(sub) && (
-                              <span className="w-2 h-2 rounded-full bg-orange-500 shrink-0" title="Flagged medications" />
-                            )}
                           </div>
                           <p className="text-sm text-slate-500 mt-0.5">
                             {(() => { try { return sub.visit_date ? format(new Date(sub.visit_date), 'dd MMM yyyy') : 'No date' } catch { return 'No date' } })()}
