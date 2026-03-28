@@ -74,10 +74,11 @@ interface Props {
   submissions: Submission[]
   medDeclarations: MedicationDeclaration[]
   medDecEnabled: boolean
+  initialSite?: string
 }
 
-export default function MedicDashboard({ sites, submissions, medDeclarations, medDecEnabled }: Props) {
-  const [activeTab, setActiveTab] = useState(sites[0]?.id || '')
+export default function MedicDashboard({ sites, submissions, medDeclarations, medDecEnabled, initialSite }: Props) {
+  const [activeTab, setActiveTab] = useState(initialSite || sites[0]?.id || '')
   const [filter, setFilter] = useState<FilterType>('All')
   const [activeSection, setActiveSection] = useState<'declarations' | 'meddec'>('declarations')
   const [showExported, setShowExported] = useState(false)
@@ -239,7 +240,7 @@ export default function MedicDashboard({ sites, submissions, medDeclarations, me
           <svg className="w-4 h-4 shrink-0 text-cyan-400" fill="currentColor" viewBox="0 0 20 20">
             <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
           </svg>
-          <span><strong>{newCount} emergency medical declaration{newCount !== 1 ? 's' : ''}</strong> awaiting review on this site.</span>
+          <span><strong>{newCount} medical declaration{newCount !== 1 ? 's' : ''}</strong> awaiting review on this site.</span>
         </div>
       )}
 
@@ -300,7 +301,7 @@ export default function MedicDashboard({ sites, submissions, medDeclarations, me
                 : 'border-transparent text-slate-500 hover:text-slate-300'
             }`}
           >
-            Emergency Declarations
+            Medical Information
           </button>
           <button
             role="tab"
@@ -322,7 +323,7 @@ export default function MedicDashboard({ sites, submissions, medDeclarations, me
         </div>
       ) : (
         <div className="flex items-center gap-3 mb-4">
-          <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-widest">Emergency Medical Declarations</h2>
+          <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-widest">Medical Information</h2>
           <div className="flex-1 h-px bg-slate-800" />
         </div>
       )}

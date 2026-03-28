@@ -58,6 +58,51 @@ body {
 [data-theme="light"] .hover\:bg-slate-800:hover {
   background-color: #e2e8f0 !important;
 }
+/* Opacity-variant classes used in detail forms and cards */
+[data-theme="light"] .bg-slate-800\/60,
+[data-theme="light"] .bg-slate-800\/50,
+[data-theme="light"] .bg-slate-800\/40,
+[data-theme="light"] .bg-slate-800\/30 {
+  background-color: #ffffff !important;
+}
+[data-theme="light"] .bg-slate-900\/60,
+[data-theme="light"] .bg-slate-900\/50,
+[data-theme="light"] .bg-slate-900\/40 {
+  background-color: #f8fafc !important;
+}
+[data-theme="light"] .border-slate-700\/50,
+[data-theme="light"] .border-slate-700\/30,
+[data-theme="light"] .border-slate-700 {
+  border-color: #e2e8f0 !important;
+}
+[data-theme="light"] .bg-slate-700\/30,
+[data-theme="light"] .bg-slate-700\/50 {
+  background-color: #f1f5f9 !important;
+}
+[data-theme="light"] .hover\:bg-slate-700\/30:hover,
+[data-theme="light"] .hover\:bg-slate-700:hover {
+  background-color: #e2e8f0 !important;
+}
+[data-theme="light"] .text-slate-200 {
+  color: #1e293b !important;
+}
+[data-theme="light"] .text-slate-600 {
+  color: #475569 !important;
+}
+[data-theme="light"] .border-slate-800\/60,
+[data-theme="light"] .border-slate-800\/40 {
+  border-color: #e2e8f0 !important;
+}
+[data-theme="light"] .placeholder-slate-500::placeholder {
+  color: #94a3b8 !important;
+}
+[data-theme="light"] textarea,
+[data-theme="light"] input[type="text"],
+[data-theme="light"] input[type="email"],
+[data-theme="light"] input[type="password"],
+[data-theme="light"] input[type="date"] {
+  color: #0f172a !important;
+}
 
 @layer utilities {
   .text-balance {

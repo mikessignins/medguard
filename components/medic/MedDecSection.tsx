@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { format } from 'date-fns'
 import type { MedicationDeclaration, MedDecReviewStatus } from '@/lib/types'
+import { encodeQueue } from '@/lib/queue-params'
 
 const STATUS_COLORS: Record<MedDecReviewStatus, string> = {
   'Pending':          'bg-slate-500/10 text-slate-400 border border-slate-500/20',
@@ -124,12 +125,12 @@ export default function MedDecSection({ medDeclarations, siteId }: Props) {
       {/* Active (not yet exported) */}
       {active.length > 0 && (
         <div className="space-y-2 mb-6">
-          {active.map((m) => {
+          {active.map((m, idx) => {
             const hasSideEffects = m.has_side_effects || m.has_recent_injury_or_illness
             return (
               <button
                 key={m.id}
-                onClick={() => router.push(`/medic/med-declarations/${m.id}`)}
+                onClick={() => router.push(`/medic/med-declarations/${m.id}?${encodeQueue(active.map(x => x.id), idx)}`)}
                 className="w-full text-left bg-slate-800/60 backdrop-blur-sm border border-slate-700/50 rounded-xl px-5 py-4 hover:border-slate-600 transition-colors flex items-center justify-between"
               >
                 <div>
@@ -166,7 +167,7 @@ export default function MedDecSection({ medDeclarations, siteId }: Props) {
               return (
                 <button
                   key={m.id}
-                  onClick={() => router.push(`/medic/med-declarations/${m.id}`)}
+                  onClick={() => router.push(`/medic/med-declarations/${m.id}?${encodeQueue(reviewed.map(x => x.id), i)}`)}
                   className={`w-full text-left px-5 py-4 flex items-center justify-between hover:bg-slate-700/30 transition-colors ${i > 0 ? 'border-t border-slate-700/50' : ''}`}
                 >
                   <div>
@@ -256,7 +257,7 @@ export default function MedDecSection({ medDeclarations, siteId }: Props) {
               {purgeError && <p className="text-sm text-red-400 mb-3">{purgeError}</p>}
 
               <div className="bg-slate-800/60 backdrop-blur-sm border border-slate-700/50 rounded-xl overflow-hidden">
-                {[...exported, ...purged].map((m, i) => {
+                {(() => { const exportedAll = [...exported, ...purged]; return exportedAll.map((m, i) => {
                   const isPurged = !!m.phi_purged_at
                   const isSelected = selectedIds.has(m.id)
                   return (
@@ -273,7 +274,7 @@ export default function MedDecSection({ medDeclarations, siteId }: Props) {
                         />
                       )}
                       <button
-                        onClick={() => router.push(`/medic/med-declarations/${m.id}`)}
+                        onClick={() => router.push(`/medic/med-declarations/${m.id}?${encodeQueue(exportedAll.map(x => x.id), i)}`)}
                         className="flex-1 text-left flex items-center justify-between hover:bg-slate-700/30 rounded-lg px-2 py-1 -mx-2 -my-1 transition-colors"
                       >
                         <div>
@@ -298,7 +299,7 @@ export default function MedDecSection({ medDeclarations, siteId }: Props) {
                       </button>
                     </div>
                   )
-                })}
+                })})()}
               </div>
             </>
           )}
