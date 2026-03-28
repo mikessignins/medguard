@@ -91,10 +91,9 @@ export default function LoginPage() {
         {/* Logo */}
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl mb-4 overflow-hidden shadow-lg shadow-cyan-500/20">
-            <Image src="/medm8-icon.png" alt="MedM8" width={64} height={64} />
+            <Image src="/medm8-icon.png" alt="MedPass" width={64} height={64} />
           </div>
-          <h1 className="text-white text-2xl font-bold tracking-tight">MedM8</h1>
-          <p className="text-slate-400 mt-1 text-sm">Fitness-for-Work Management Portal</p>
+          <h1 className="text-white text-2xl font-bold tracking-tight">MedPass</h1>
         </div>
 
         {/* Card */}

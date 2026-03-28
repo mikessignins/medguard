@@ -2,6 +2,9 @@ import { createClient } from '@/lib/supabase/server'
 import { redirect, notFound } from 'next/navigation'
 import Link from 'next/link'
 import { format } from 'date-fns'
+import ReminderIntervalPicker from '@/components/superuser/ReminderIntervalPicker'
+import ModulesToggle from '@/components/superuser/ModulesToggle'
+import LogoUpload from '@/components/superuser/LogoUpload'
 
 export default async function BusinessDetailPage({ params }: { params: { id: string } }) {
   const supabase = await createClient()
@@ -44,7 +47,7 @@ export default async function BusinessDetailPage({ params }: { params: { id: str
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
           </svg>
         </Link>
-        <span className="text-xl font-bold">MedM8</span>
+        <span className="text-xl font-bold">MedPass</span>
         <span className="text-slate-400 text-sm">|</span>
         <span className="text-slate-300 text-sm">Superuser</span>
         <span className="text-slate-500 text-sm">/</span>
@@ -84,6 +87,24 @@ export default async function BusinessDetailPage({ params }: { params: { id: str
             ))}
           </div>
         </div>
+
+        {/* Declaration Reminders */}
+        <ReminderIntervalPicker
+          businessId={business.id}
+          initialMonths={business.reminder_interval_months ?? 3}
+        />
+
+        {/* Modules */}
+        <ModulesToggle
+          businessId={business.id}
+          initialEnabled={business.confidential_med_dec_enabled ?? false}
+        />
+
+        {/* Business Logo */}
+        <LogoUpload
+          businessId={business.id}
+          currentLogoUrl={business.logo_url}
+        />
 
         {/* Admins */}
         <div>

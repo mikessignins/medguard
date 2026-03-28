@@ -15,6 +15,7 @@ const STATUS_COLORS: Record<SubmissionStatus, string> = {
   'In Review': 'bg-amber-500/10 text-amber-400 border border-amber-500/20',
   'Approved': 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20',
   'Requires Follow-up': 'bg-red-500/10 text-red-400 border border-red-500/20',
+  'Recalled': 'bg-slate-500/10 text-slate-400 border border-slate-500/20',
 }
 
 // All date formatting done here — never inline — to avoid hydration mismatches
@@ -229,6 +230,7 @@ export default function SubmissionDetail({ submission, siteName, businessName, c
     setLoading(false)
     setShowFollowUpModal(false)
     setFollowUpNote('')
+    router.refresh()
   }
 
   async function handleExportPdf() {

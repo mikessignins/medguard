@@ -67,6 +67,12 @@ export default async function SubmissionPage({ params }: { params: { id: string 
 
   if (!raw) notFound()
 
+  // Auto-tag as In Review when a medic opens a New submission
+  if (raw.status === 'New') {
+    await supabase.from('submissions').update({ status: 'In Review' }).eq('id', raw.id)
+    raw.status = 'In Review'
+  }
+
   const [{ data: site }, { data: business }] = await Promise.all([
     supabase.from('sites').select('name').eq('id', raw.site_id).single(),
     supabase.from('businesses').select('name').eq('id', raw.business_id).single(),

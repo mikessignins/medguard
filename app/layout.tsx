@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'MedM8 Web',
+  title: 'MedPass Web',
   description: 'Clinical Fitness-for-Work Declaration Management Portal',
   icons: {
     icon: '/medm8-icon.png',

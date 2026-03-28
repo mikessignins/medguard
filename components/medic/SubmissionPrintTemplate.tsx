@@ -416,7 +416,7 @@ export default function SubmissionPrintTemplate({
 
         {/* MEDIC DECISION — web app addition */}
         <div style={{ marginBottom: '7px' }}>
-          <SectionHdr title="MEDIC REVIEW — MedM8 Web" />
+          <SectionHdr title="MEDIC REVIEW — MedPass Web" />
           <div style={{ border: '1px solid #bbb' }}>
             <table style={S.table}>
               <tbody>

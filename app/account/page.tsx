@@ -109,8 +109,8 @@ export default function AccountSettingsPage() {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
           </svg>
         </button>
-        <Image src="/medm8-icon.png" alt="MedM8" width={32} height={32} className="rounded-lg" />
-        <span className="text-slate-100 font-bold text-xl">MedM8</span>
+        <Image src="/medm8-icon.png" alt="MedPass" width={32} height={32} className="rounded-lg" />
+        <span className="text-slate-100 font-bold text-xl">MedPass</span>
         <span className="text-cyan-400 text-sm font-medium">Account Settings</span>
       </header>
 

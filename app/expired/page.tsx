@@ -13,7 +13,7 @@ export default async function ExpiredPage() {
         <div className="text-5xl mb-4">&#128274;</div>
         <h1 className="text-2xl font-bold text-slate-800 mb-2">Contract Expired</h1>
         <p className="text-slate-600 mb-6">
-          Your contract has expired and your access to MedM8 has been revoked. Please contact your administrator to renew your contract.
+          Your contract has expired and your access to MedPass has been revoked. Please contact your administrator to renew your contract.
         </p>
         <SignOutButton />
       </div>

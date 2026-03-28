@@ -54,11 +54,13 @@ export async function POST(request: NextRequest) {
     .in('id', ids)
 
   // 4. Fetch site names
-  const siteIds = [...new Set((submissions ?? []).map(s => s.site_id).filter(Boolean))]
-  const { data: sites } = siteIds.length > 0
-    ? await supabase.from('sites').select('id, name').in('id', siteIds)
-    : { data: [] }
-  const siteMap = Object.fromEntries((sites ?? []).map(s => [s.id, s.name]))
+  const allSiteIds = (submissions ?? []).map(s => s.site_id).filter((id): id is string => !!id)
+  const siteIds = allSiteIds.filter((id, i) => allSiteIds.indexOf(id) === i)
+  let siteMap: Record<string, string> = {}
+  if (siteIds.length > 0) {
+    const { data: sites } = await supabase.from('sites').select('id, name').in('id', siteIds)
+    siteMap = Object.fromEntries((sites ?? []).map(s => [s.id, s.name]))
+  }
 
   // 5. Build audit log entries
   const purgedAt = new Date().toISOString()
@@ -74,6 +76,7 @@ export async function POST(request: NextRequest) {
       medic_user_id: user.id,
       medic_name: account.display_name as string,
       purged_at: purgedAt,
+      form_type: 'emergency_declaration',
     }
   })
 

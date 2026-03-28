@@ -1,203 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerClient } from '@supabase/ssr'
 import { createClient } from '@supabase/supabase-js'
-import { cookies } from 'next/headers'
-import path from 'path'
 import PDFDocument from 'pdfkit'
 import type { WorkerSnapshot, Decision, ScriptUpload } from '@/lib/types'
+import {
+  streamToBuffer, sanitize, fmtDate, fmtDateTime, parseJson, parseArray,
+  pageHeader, pageFooter, sectionHeader, twoColTable, questionBlock,
+  F_REGULAR, F_BOLD, F_ITALIC,
+  MARGIN, CONTENT_W, BORDER, MUTED, ACCENT,
+  getAuthenticatedMedic,
+} from '@/lib/pdf-helpers'
 
 // PDFKit requires Node.js runtime — not compatible with Vercel Edge
 export const runtime = 'nodejs'
-
-// ─── Font paths ───────────────────────────────────────────────────────────────
-// Use woff2 font files from public/fonts/ instead of pdfkit's built-in AFM
-// fonts. This avoids the ENOENT error that occurs when pdfkit is bundled by
-// webpack and __dirname resolves to the route directory rather than the
-// pdfkit package directory.
-const FONTS_DIR  = path.join(process.cwd(), 'public', 'fonts')
-const F_REGULAR  = path.join(FONTS_DIR, 'inter-latin-400-normal.woff')
-const F_BOLD     = path.join(FONTS_DIR, 'inter-latin-700-normal.woff')
-const F_ITALIC   = path.join(FONTS_DIR, 'inter-latin-400-italic.woff')
-
-// ─── Constants ───────────────────────────────────────────────────────────────
-const PAGE_W = 595.28   // A4 width in points
-const PAGE_H = 841.89   // A4 height in points
-const MARGIN = 48
-const CONTENT_W = PAGE_W - MARGIN * 2
-
-const CHARCOAL = '#2D2D3E'
-const ACCENT   = '#CC3300'
-const LABEL_BG = '#f4f4f4'
-const BORDER   = '#bbbbbb'
-const MUTED    = '#555555'
-
-// ─── Utilities ───────────────────────────────────────────────────────────────
-function streamToBuffer(doc: PDFKit.PDFDocument): Promise<Buffer> {
-  return new Promise((resolve, reject) => {
-    const chunks: Buffer[] = []
-    doc.on('data', (chunk: Buffer) => chunks.push(Buffer.from(chunk)))
-    doc.on('end', () => resolve(Buffer.concat(chunks)))
-    doc.on('error', reject)
-  })
-}
-
-function sanitize(s: string): string {
-  return s.replace(/[^\w\s\-_.]/g, '-').replace(/\s+/g, '-').slice(0, 80)
-}
-
-function fmtDate(v: string | null | undefined): string {
-  if (!v) return '—'
-  try {
-    const d = new Date(v)
-    if (isNaN(d.getTime())) return '—'
-    return d.toLocaleDateString('en-AU', { day: '2-digit', month: 'short', year: 'numeric' })
-  } catch { return '—' }
-}
-
-function fmtDateTime(v: string | null | undefined): string {
-  if (!v) return '—'
-  try {
-    const d = new Date(v)
-    if (isNaN(d.getTime())) return '—'
-    return (
-      d.toLocaleDateString('en-AU', { day: '2-digit', month: 'short', year: 'numeric' }) +
-      ' ' + d.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })
-    )
-  } catch { return '—' }
-}
-
-function parseJson<T>(raw: unknown): T | null {
-  if (!raw) return null
-  try {
-    const v = typeof raw === 'string' ? JSON.parse(raw) : raw
-    return (typeof v === 'object' && v !== null) ? v as T : null
-  } catch { return null }
-}
-
-function parseArray<T>(raw: unknown): T[] {
-  if (!raw) return []
-  try {
-    const v = typeof raw === 'string' ? JSON.parse(raw) : raw
-    return Array.isArray(v) ? v as T[] : []
-  } catch { return [] }
-}
-
-// ─── PDF Drawing Helpers ─────────────────────────────────────────────────────
-
-function pageHeader(doc: PDFKit.PDFDocument) {
-  const y = doc.y
-  doc.font(F_BOLD).fontSize(8).fillColor('#000')
-    .text('EMERGENCY MEDICAL INFORMATION FORM', MARGIN, y, { width: CONTENT_W - 60, lineBreak: false })
-  doc.font(F_BOLD).fontSize(8).fillColor('#0891B2')
-    .text('MedM8', MARGIN + CONTENT_W - 50, y, { width: 50, align: 'right', lineBreak: false })
-  doc.fillColor('#000')
-  const lineY = y + 14
-  doc.moveTo(MARGIN, lineY).lineTo(MARGIN + CONTENT_W, lineY).lineWidth(1.5).strokeColor('#000').stroke()
-  doc.strokeColor('#000').lineWidth(1)
-  doc.y = lineY + 6
-}
-
-function pageFooter(doc: PDFKit.PDFDocument, page: number, total: number) {
-  const fy = PAGE_H - MARGIN - 22
-  doc.moveTo(MARGIN, fy).lineTo(MARGIN + CONTENT_W, fy).strokeColor('#cccccc').lineWidth(0.5).stroke()
-  doc.lineWidth(1).strokeColor('#000')
-  doc.font(F_REGULAR).fontSize(7).fillColor(MUTED)
-    .text('ISSUE DATE: 14/11/2023', MARGIN, fy + 4, { lineBreak: false })
-  doc.text('MRL-SAF-FRM-0097_01', MARGIN + CONTENT_W / 2 - 40, fy + 4, { lineBreak: false })
-  doc.text(`PAGE ${page} OF ${total}`, MARGIN + CONTENT_W - 55, fy + 4, { width: 55, align: 'right', lineBreak: false })
-  doc.font(F_REGULAR).fontSize(6.5).fillColor(ACCENT)
-    .text(
-      'Printed copies of this document are not controlled. Please ensure that this is the latest available version before use.',
-      MARGIN, fy + 13, { width: CONTENT_W, align: 'center', lineBreak: false }
-    )
-  doc.fillColor('#000')
-}
-
-function sectionHeader(doc: PDFKit.PDFDocument, title: string) {
-  const y = doc.y
-  doc.rect(MARGIN, y, CONTENT_W, 15).fill(CHARCOAL)
-  doc.fillColor('#ffffff').font(F_BOLD).fontSize(7.5)
-    .text(title, MARGIN + 6, y + 4, { width: CONTENT_W - 12, lineBreak: false })
-  doc.fillColor('#000')
-  doc.y = y + 15
-}
-
-/** Two-column key/value table. Each row = [label, value, optLabel?, optValue?] */
-function twoColTable(doc: PDFKit.PDFDocument, rows: [string, string, string?, string?][]) {
-  const c1 = CONTENT_W * 0.19  // label
-  const c2 = CONTENT_W * 0.31  // value
-  const x1 = MARGIN, x2 = x1 + c1, x3 = x2 + c2, x4 = x3 + c1
-
-  for (const [l1, v1, l2, v2] of rows) {
-    const y = doc.y
-    const rh = 17
-
-    // Left label
-    doc.rect(x1, y, c1, rh).fillAndStroke(LABEL_BG, BORDER)
-    doc.fillColor('#444').font(F_BOLD).fontSize(7)
-      .text(l1, x1 + 3, y + 5, { width: c1 - 6, lineBreak: false })
-
-    // Left value
-    doc.rect(x2, y, c2, rh).stroke(BORDER)
-    doc.fillColor('#000').font(F_REGULAR).fontSize(8.5)
-      .text(v1 || '—', x2 + 4, y + 4.5, { width: c2 - 8, lineBreak: false })
-
-    if (l2 !== undefined) {
-      // Right label
-      doc.rect(x3, y, c1, rh).fillAndStroke(LABEL_BG, BORDER)
-      doc.fillColor('#444').font(F_BOLD).fontSize(7)
-        .text(l2, x3 + 3, y + 5, { width: c1 - 6, lineBreak: false })
-      // Right value
-      doc.rect(x4, y, c2, rh).stroke(BORDER)
-      doc.fillColor('#000').font(F_REGULAR).fontSize(8.5)
-        .text(v2 || '—', x4 + 4, y + 4.5, { width: c2 - 8, lineBreak: false })
-    } else {
-      // Span right columns
-      doc.rect(x3, y, c1 + c2, rh).stroke(BORDER)
-    }
-
-    doc.fillColor('#000')
-    doc.y = y + rh
-  }
-  doc.y += 5
-}
-
-function questionBlock(doc: PDFKit.PDFDocument, question: string, content: () => void) {
-  const startY = doc.y
-  // Question label
-  doc.font(F_BOLD).fontSize(7).fillColor('#333')
-    .text(question, MARGIN + 5, startY + 4, { width: CONTENT_W - 10 })
-  doc.y += 2
-  doc.fillColor('#000')
-  content()
-  const endY = doc.y + 4
-  doc.rect(MARGIN, startY, CONTENT_W, endY - startY).stroke(BORDER)
-  doc.y = endY
-}
-
-// ─── Auth helpers ─────────────────────────────────────────────────────────────
-
-async function getAuthenticatedMedic() {
-  const cookieStore = await cookies()
-  const authClient = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll: () => cookieStore.getAll(),
-        setAll: (toSet) => {
-          try { toSet.forEach(({ name, value, options }) => cookieStore.set(name, value, options)) } catch {}
-        },
-      },
-    }
-  )
-  const { data: { user } } = await authClient.auth.getUser()
-  if (!user) return null
-  const { data: account } = await authClient
-    .from('user_accounts').select('role').eq('id', user.id).single()
-  if (!account || account.role !== 'medic') return null
-  return user
-}
 
 // ─── Route Handler ────────────────────────────────────────────────────────────
 
@@ -218,8 +32,8 @@ export async function GET(
 
 async function generatePdf(id: string) {
   // 1. Auth — must be a signed-in medic
-  const user = await getAuthenticatedMedic()
-  if (!user) {
+  const auth = await getAuthenticatedMedic()
+  if (!auth) {
     return new NextResponse('Unauthorized', { status: 401 })
   }
 
@@ -242,11 +56,20 @@ async function generatePdf(id: string) {
   // 3. Parallel lookups
   const [{ data: site }, { data: business }] = await Promise.all([
     supabase.from('sites').select('name').eq('id', raw.site_id).single(),
-    supabase.from('businesses').select('name').eq('id', raw.business_id).single(),
+    supabase.from('businesses').select('name, logo_url').eq('id', raw.business_id).single(),
   ])
 
   const siteName     = site?.name     || raw.site_id     || ''
   const businessName = business?.name || raw.business_id || ''
+
+  // Fetch business logo for PDF header
+  let logoBuffer: Buffer | null = null
+  if (business?.logo_url) {
+    try {
+      const logoRes = await fetch(business.logo_url)
+      if (logoRes.ok) logoBuffer = Buffer.from(await logoRes.arrayBuffer())
+    } catch { /* continue without logo */ }
+  }
 
   // 4. Parse snapshot / decision / scripts
   const ws         = parseJson<WorkerSnapshot>(raw.worker_snapshot)
@@ -304,7 +127,7 @@ async function generatePdf(id: string) {
 
   // ── PAGE 1 ──────────────────────────────────────────────────────────────────
   doc.addPage()
-  pageHeader(doc)
+  pageHeader(doc, logoBuffer)
 
   // Title
   doc.font(F_BOLD).fontSize(18).fillColor('#000')
@@ -405,7 +228,7 @@ async function generatePdf(id: string) {
 
   // ── PAGE 2 ──────────────────────────────────────────────────────────────────
   doc.addPage()
-  pageHeader(doc)
+  pageHeader(doc, logoBuffer)
 
   sectionHeader(doc, 'MEDICAL HISTORY (CONTINUED)')
 
@@ -501,7 +324,7 @@ async function generatePdf(id: string) {
   ])
 
   // MEDIC REVIEW
-  sectionHeader(doc, 'MEDIC REVIEW — MedM8 Web')
+  sectionHeader(doc, 'MEDIC REVIEW — MedPass Web')
   twoColTable(doc, [
     ['SITE',       siteName,                     'BUSINESS',  businessName],
     ['VISIT DATE', fmtDate(raw.visit_date),      'SHIFT',     raw.shift_type || '—'],
@@ -523,7 +346,7 @@ async function generatePdf(id: string) {
   // ── PAGE 3 — PRESCRIPTION SCRIPTS (optional) ─────────────────────────────
   if (scriptImages.length > 0) {
     doc.addPage()
-    pageHeader(doc)
+    pageHeader(doc, logoBuffer)
     sectionHeader(doc, 'PRESCRIPTION SCRIPTS')
 
     doc.font(F_REGULAR).fontSize(8).fillColor(MUTED)

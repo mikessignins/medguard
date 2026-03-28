@@ -1,6 +1,24 @@
 export type UserRole = 'worker' | 'medic' | 'admin' | 'pending_medic' | 'superuser'
 
-export type SubmissionStatus = 'New' | 'In Review' | 'Approved' | 'Requires Follow-up'
+export type SubmissionStatus = 'New' | 'In Review' | 'Approved' | 'Requires Follow-up' | 'Recalled'
+
+export type FeedbackCategory = 'Bug' | 'Error' | 'Idea' | 'Other'
+export type FeedbackStatus = 'Unread' | 'Read' | 'Planned' | 'Implemented' | 'Archived'
+
+export interface FeedbackItem {
+  id: string
+  submitted_at: string
+  submitted_by_user_id: string | null
+  submitted_by_name: string | null
+  submitted_by_role: string
+  business_id: string | null
+  business_name: string | null
+  category: FeedbackCategory
+  message: string
+  status: FeedbackStatus
+  superuser_note: string | null
+  status_updated_at: string | null
+}
 
 export interface UserAccount {
   id: string
@@ -17,6 +35,46 @@ export interface Business {
   name: string
   contact_email: string
   is_suspended?: boolean
+  reminder_interval_months?: number
+  confidential_med_dec_enabled?: boolean
+  logo_url?: string | null
+}
+
+export type MedDecReviewStatus = 'Pending' | 'In Review' | 'Normal Duties' | 'Restricted Duties' | 'Unfit for Work'
+
+export interface MedDecMedication {
+  id: string
+  name: string
+  prescriptionType: string
+  dosagePerDay: string
+  duration: string
+  medicationClass: string
+  flaggedForSideEffects: boolean
+  isLongTerm: boolean
+}
+
+export interface MedicationDeclaration {
+  id: string
+  business_id: string
+  site_id: string
+  worker_id: string
+  worker_name: string
+  worker_dob: string
+  employer: string
+  department: string
+  job_title: string
+  has_recent_injury_or_illness: boolean
+  has_side_effects: boolean
+  medications: MedDecMedication[]
+  submitted_at: string
+  medic_review_status: MedDecReviewStatus
+  medic_name: string
+  medic_comments: string
+  review_required: boolean
+  medic_reviewed_at: string | null
+  script_uploads: ScriptUpload[]
+  exported_at: string | null
+  phi_purged_at: string | null
 }
 
 export interface Site {

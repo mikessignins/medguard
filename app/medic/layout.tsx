@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
 import SignOutButton from '@/components/SignOutButton'
+import FeedbackButton from '@/components/FeedbackButton'
 
 export default async function MedicLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient()
@@ -17,6 +18,12 @@ export default async function MedicLayout({ children }: { children: React.ReactN
 
   if (!account || account.role !== 'medic') redirect('/')
 
+  const { data: business } = await supabase
+    .from('businesses')
+    .select('logo_url')
+    .eq('id', account.business_id)
+    .single()
+
   return (
     <div className="flex min-h-screen bg-slate-950">
       {/* Sidebar */}
@@ -24,9 +31,14 @@ export default async function MedicLayout({ children }: { children: React.ReactN
         {/* Logo */}
         <div className="px-5 py-5 border-b border-slate-800">
           <div className="flex items-center gap-3">
-            <Image src="/medm8-icon.png" alt="MedM8" width={32} height={32} className="rounded-lg" />
+            {business?.logo_url ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={business.logo_url} alt="Business logo" className="h-8 w-auto max-w-[80px] rounded object-contain" />
+            ) : (
+              <Image src="/medm8-icon.png" alt="MedPass" width={32} height={32} className="rounded-lg" />
+            )}
             <div>
-              <p className="text-slate-100 font-bold text-base leading-tight">MedM8</p>
+              <p className="text-slate-100 font-bold text-base leading-tight">MedPass</p>
               <p className="text-cyan-400 text-xs font-medium">Medic Portal</p>
             </div>
           </div>
@@ -43,6 +55,9 @@ export default async function MedicLayout({ children }: { children: React.ReactN
             </svg>
             Submissions
           </Link>
+          <div className="pt-1">
+            <FeedbackButton />
+          </div>
         </nav>
 
         {/* User section */}
