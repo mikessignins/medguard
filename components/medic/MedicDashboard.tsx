@@ -5,7 +5,7 @@ import { format } from 'date-fns'
 import { createClient } from '@/lib/supabase/client'
 import type { Site, Submission, SubmissionStatus, MedicationDeclaration } from '@/lib/types'
 import MedDecSection from '@/components/medic/MedDecSection'
-import { computeRiskChips } from '@/lib/risk-chips'
+import { computeRiskChips, type RiskChip } from '@/lib/risk-chips'
 import { encodeQueue } from '@/lib/queue-params'
 
 const STATUS_ORDER: SubmissionStatus[] = ['New', 'In Review', 'Approved', 'Requires Follow-up']
@@ -26,15 +26,15 @@ function RiskChips({ sub }: { sub: Submission }) {
   const chips = computeRiskChips(sub)
   return (
     <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
-      {chips.map((chip, i) => {
-        const styles = {
+      {chips.map((chip) => {
+        const styles: Record<RiskChip['type'], string> = {
           'anaphylaxis': 'bg-red-500/10 border-red-500/25 text-red-400',
           'flagged-meds': 'bg-orange-500/10 border-orange-500/25 text-orange-400',
           'conditions': 'bg-amber-500/10 border-amber-500/20 text-amber-400',
           'clear': 'bg-slate-800/50 border-slate-700/50 text-slate-600',
         }
         return (
-          <span key={i} className={`text-xs font-medium px-2 py-0.5 rounded-full border ${styles[chip.type]}`}>
+          <span key={chip.type} className={`text-xs font-medium px-2 py-0.5 rounded-full border ${styles[chip.type]}`}>
             {chip.label}
           </span>
         )
@@ -324,7 +324,7 @@ export default function MedicDashboard({ sites, submissions, medDeclarations, me
                         <p className="font-semibold text-slate-100">
                           {sub.worker_snapshot?.fullName || 'Unknown Worker'}
                         </p>
-                        <span className="text-sm text-slate-500">{sub.role}</span>
+                        <span className="text-sm text-slate-500">{sub.role || 'Unknown role'}</span>
                       </div>
                       <RiskChips sub={sub} />
                       <p className="text-sm text-slate-500 mt-1">
@@ -427,6 +427,7 @@ export default function MedicDashboard({ sites, submissions, medDeclarations, me
                         />
                       )}
                       <button
+                        // Queue nav intentionally omitted for exported/purged rows — not part of the pending queue
                         onClick={() => router.push(`/medic/submissions/${sub.id}`)}
                         className="flex-1 text-left flex items-center justify-between hover:bg-slate-700/30 rounded-lg px-2 py-1 -mx-2 -my-1 transition-colors"
                       >
