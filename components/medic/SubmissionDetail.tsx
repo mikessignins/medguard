@@ -66,6 +66,7 @@ interface Props {
   siteName: string
   businessName: string
   currentUserId: string
+  queueContext: { ids: string[]; pos: number } | null
 }
 
 function buildPdfFilename(
@@ -105,7 +106,7 @@ function InfoRow({ label, value }: { label: string; value?: string | number | bo
   )
 }
 
-export default function SubmissionDetail({ submission, siteName, businessName, currentUserId }: Props) {
+export default function SubmissionDetail({ submission, siteName, businessName, currentUserId, queueContext }: Props) {
   const router = useRouter()
   const supabase = createClient()
 

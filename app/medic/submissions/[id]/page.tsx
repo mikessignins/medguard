@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect, notFound } from 'next/navigation'
 import SubmissionDetail from '@/components/medic/SubmissionDetail'
+import { parseQueue } from '@/lib/queue-params'
 import type { WorkerSnapshot, Decision, SubmissionStatus, ScriptUpload, MedicComment } from '@/lib/types'
 
 function parseSnapshot(raw: unknown): WorkerSnapshot | null {
@@ -58,7 +59,13 @@ function parseComments(raw: unknown): MedicComment[] {
   }
 }
 
-export default async function SubmissionPage({ params }: { params: { id: string } }) {
+export default async function SubmissionPage({
+  params,
+  searchParams,
+}: {
+  params: { id: string }
+  searchParams: { queue?: string; pos?: string }
+}) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
@@ -109,12 +116,15 @@ export default async function SubmissionPage({ params }: { params: { id: string 
     comments: parseComments(raw.comments),
   }
 
+  const queueContext = parseQueue(searchParams)
+
   return (
     <SubmissionDetail
       submission={submission}
       siteName={site?.name || raw.site_id}
       businessName={business?.name || raw.business_id}
       currentUserId={user.id}
+      queueContext={queueContext}
     />
   )
 }
