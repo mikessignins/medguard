@@ -1,5 +1,12 @@
 import type { Metadata } from 'next'
+import { Figtree } from 'next/font/google'
 import './globals.css'
+
+const figtree = Figtree({
+  subsets: ['latin'],
+  variable: '--font-figtree',
+  display: 'swap',
+})
 
 export const metadata: Metadata = {
   title: 'MedPass Web',
@@ -12,7 +19,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" className={figtree.variable}>
       <head>
         <script dangerouslySetInnerHTML={{ __html: `
           (function(){

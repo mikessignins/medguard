@@ -20,13 +20,13 @@ export default async function AdminBillingPage() {
       .from('submissions')
       .select('submitted_at, status')
       .eq('business_id', account.business_id)
-      .in('status', ['In Review', 'Approved', 'Requires Follow-up'])
+      .not('exported_at', 'is', null)
       .order('submitted_at', { ascending: false }),
     supabase
       .from('medication_declarations')
       .select('submitted_at, medic_review_status')
       .eq('business_id', account.business_id)
-      .in('medic_review_status', ['Normal Duties', 'Restricted Duties', 'Unfit for Work'])
+      .not('exported_at', 'is', null)
       .order('submitted_at', { ascending: false }),
   ])
 
