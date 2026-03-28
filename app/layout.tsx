@@ -23,7 +23,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           })();
         `}} />
       </head>
-      <body className="bg-slate-950 min-h-screen text-slate-100">{children}</body>
+      <body className="min-h-screen">{children}</body>
     </html>
   )
 }

@@ -58,9 +58,6 @@ body {
 [data-theme="light"] .hover\:bg-slate-800:hover {
   background-color: #e2e8f0 !important;
 }
-[data-theme="light"] .border-r.border-slate-800 {
-  border-color: #e2e8f0 !important;
-}
 
 @layer utilities {
   .text-balance {
