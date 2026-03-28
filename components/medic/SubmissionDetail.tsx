@@ -290,7 +290,7 @@ export default function SubmissionDetail({ submission, siteName, businessName, c
         {queueContext && (
           <div className="flex items-center gap-3">
             <span className="text-sm text-slate-500">
-              {queueContext.pos + 1} of {queueContext.ids.length}
+              {queueContext.pos + 1} of {queueContext.ids.length} pending
             </span>
             <div className="flex gap-1">
               {prevId ? (
@@ -301,7 +301,7 @@ export default function SubmissionDetail({ submission, siteName, businessName, c
                   ← Prev
                 </Link>
               ) : (
-                <span className="px-3 py-1.5 text-xs font-medium bg-slate-800/40 border border-slate-700/40 text-slate-600 rounded-lg cursor-not-allowed">← Prev</span>
+                <span aria-disabled="true" className="px-3 py-1.5 text-xs font-medium bg-slate-800/40 border border-slate-700/40 text-slate-600 rounded-lg cursor-not-allowed">← Prev</span>
               )}
               {nextId ? (
                 <Link
@@ -311,7 +311,7 @@ export default function SubmissionDetail({ submission, siteName, businessName, c
                   Next →
                 </Link>
               ) : (
-                <span className="px-3 py-1.5 text-xs font-medium bg-slate-800/40 border border-slate-700/40 text-slate-600 rounded-lg cursor-not-allowed">Next →</span>
+                <span aria-disabled="true" className="px-3 py-1.5 text-xs font-medium bg-slate-800/40 border border-slate-700/40 text-slate-600 rounded-lg cursor-not-allowed">Next →</span>
               )}
             </div>
           </div>
@@ -325,7 +325,7 @@ export default function SubmissionDetail({ submission, siteName, businessName, c
             {isPurged ? 'PHI Purged' : (ws?.fullName || 'Unknown Worker')}
           </h1>
           <p className="text-sm text-slate-400 mt-0.5">
-            {submission.role}
+            {submission.role || 'Unknown role'}
             {siteName && <> · {siteName}</>}
             {submission.visit_date && <> · {fmt(submission.visit_date)}</>}
             {submission.shift_type && <> · {submission.shift_type}</>}
