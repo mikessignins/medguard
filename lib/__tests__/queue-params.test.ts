@@ -18,6 +18,15 @@ describe('encodeQueue', () => {
     const result = encodeQueue([], 0)
     expect(result).toBe('queue=&pos=0')
   })
+
+  it('round-trips through encodeQueue (Next.js searchParams decode)', () => {
+    // Next.js decodes searchParams values before passing to server components,
+    // so the encoded %2C becomes , by the time parseQueue sees it.
+    const encoded = encodeQueue(['x', 'y', 'z'], 2)
+    const sp = new URLSearchParams(encoded)
+    const result = parseQueue({ queue: sp.get('queue')!, pos: sp.get('pos')! })
+    expect(result).toEqual({ ids: ['x', 'y', 'z'], pos: 2 })
+  })
 })
 
 describe('parseQueue', () => {
