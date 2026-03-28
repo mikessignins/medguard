@@ -168,6 +168,32 @@ The existing codebase uses hardcoded Tailwind dark classes throughout. Rather th
 
 ---
 
+## 6. Superuser Portal (`/superuser`)
+
+### Active link highlighting
+
+The superuser layout hardcodes all sidebar nav links with the inactive style — there is no `usePathname()` active detection. Extract sidebar nav into a `SuperuserSidebar` client component, mirroring the existing `AdminSidebar` pattern. Nav items: Businesses (`/superuser`), Purge Log, Billing, Feedback (with unread badge).
+
+The unread feedback count is currently fetched in the layout server component and passed down. `SuperuserSidebar` receives it as a prop.
+
+### Mobile navigation
+
+Same treatment as medic and admin layouts:
+- Sidebar wrapper: `hidden md:flex`
+- Fixed bottom nav: `flex md:hidden fixed bottom-0 left-0 right-0 z-50`
+- Bottom nav items: Businesses, Billing, Feedback (with badge dot if unread > 0), Sign Out
+- Main content: `pb-16 md:pb-0`
+
+### Light mode
+
+Superuser layout and `SuperuserDashboard` included in the CSS variable coverage pass. The table (`bg-slate-800/60`, `bg-slate-900/60`, `border-slate-700/50`) maps to the same card/base/border variables as other portals. No structural changes to the dashboard table — it already displays data well.
+
+### No other changes
+
+`SuperuserDashboard` itself is already dark-themed and correctly structured. The business table, suspend/unsuspend actions, and `NewBusinessModal` are functional and out of scope for visual changes beyond light mode.
+
+---
+
 ## Out of Scope
 
 - Worker-facing features (workers use iOS only)
@@ -191,3 +217,6 @@ The existing codebase uses hardcoded Tailwind dark classes throughout. Rather th
 | `app/medic/submissions/[id]/page.tsx` | Read queue params, pass sibling IDs to SubmissionDetail |
 | `components/medic/MedicDashboard.tsx` | Clickable stat cards, pill site switcher, richer rows, section tabs |
 | `components/medic/SubmissionDetail.tsx` | Two-column layout, sticky action panel, queue nav bar, next button |
+| `app/superuser/layout.tsx` | Mobile bottom nav, pass unreadFeedback to SuperuserSidebar |
+| `components/superuser/SuperuserSidebar.tsx` | New component — active link detection, mirrors AdminSidebar pattern |
+| `components/superuser/SuperuserDashboard.tsx` | CSS variable coverage for light mode |
