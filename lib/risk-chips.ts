@@ -1,7 +1,7 @@
 import type { Submission } from './types'
 
 /** Medication review flags that require medic attention. */
-const FLAGGED_REVIEWS = [
+export const FLAGGED_REVIEWS = [
   'Opioid', 'Benzodiazepine', 'Antipsychotic', 'Anticoagulant',
   'Insulin / Diabetes', 'Antiepileptic', 'Sedative / Hypnotic',
   'Stimulant', 'Review Required',
