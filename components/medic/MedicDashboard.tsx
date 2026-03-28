@@ -23,6 +23,8 @@ const FLAGGED_REVIEWS = [
 
 const AUTO_PURGE_DAYS = 7
 
+const MEDDEC_FINAL = ['Normal Duties', 'Restricted Duties', 'Unfit for Work']
+
 function hasFlaggedMeds(sub: Submission): boolean {
   return (sub.worker_snapshot?.currentMedications || []).some(
     m => FLAGGED_REVIEWS.includes(m.reviewFlag)
@@ -99,7 +101,6 @@ export default function MedicDashboard({ sites, submissions, medDeclarations, me
   // Recalled submissions are hidden from the medic dashboard entirely
   const siteSubmissions = submissions.filter(s => s.site_id === activeTab && s.status !== 'Recalled')
   const newCount = siteSubmissions.filter(s => s.status === 'New' && !s.exported_at).length
-  const MEDDEC_FINAL = ['Normal Duties', 'Restricted Duties', 'Unfit for Work']
   const pendingMedDecCount = medDecEnabled
     ? medDeclarations.filter(m =>
         m.site_id === activeTab &&
@@ -182,7 +183,7 @@ export default function MedicDashboard({ sites, submissions, medDeclarations, me
     <div>
 
       {/* Stat cards — clickable filters */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+      <div className={`grid grid-cols-2 gap-3 mb-4 ${medDecEnabled ? 'lg:grid-cols-5' : 'lg:grid-cols-4'}`}>
         {([
           { label: 'New', status: 'New' as FilterType, value: statNew, color: 'text-indigo-400', active: 'bg-indigo-500/15 border-indigo-500/40' },
           { label: 'In Review', status: 'In Review' as FilterType, value: statInReview, color: 'text-amber-400', active: 'bg-amber-500/15 border-amber-500/40' },
@@ -192,6 +193,7 @@ export default function MedicDashboard({ sites, submissions, medDeclarations, me
           <button
             key={card.status}
             onClick={() => setFilter(f => f === card.status ? 'All' : card.status)}
+            aria-pressed={filter === card.status}
             className={`text-left p-4 rounded-xl border transition-all duration-150 ${
               filter === card.status
                 ? card.active
@@ -205,6 +207,7 @@ export default function MedicDashboard({ sites, submissions, medDeclarations, me
         {medDecEnabled && (
           <button
             onClick={() => setActiveSection('meddec')}
+            aria-pressed={activeSection === 'meddec'}
             className={`text-left p-4 rounded-xl border transition-all duration-150 ${
               activeSection === 'meddec'
                 ? 'bg-indigo-500/15 border-indigo-500/40'
