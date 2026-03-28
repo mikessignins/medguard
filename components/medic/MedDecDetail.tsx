@@ -1,7 +1,9 @@
 'use client'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import type { MedicationDeclaration, MedDecReviewStatus, ScriptUpload } from '@/lib/types'
+import { encodeQueue } from '@/lib/queue-params'
 
 const REVIEW_STATUSES: Exclude<MedDecReviewStatus, 'Pending'>[] = ['Normal Duties', 'Restricted Duties', 'Unfit for Work']
 
@@ -36,10 +38,19 @@ interface Props {
   medDec: MedicationDeclaration & { scriptUploads: ScriptUpload[] }
   siteName: string
   businessName: string
+  queueContext: { ids: string[]; pos: number } | null
 }
 
-export default function MedDecDetail({ medDec, siteName, businessName }: Props) {
+export default function MedDecDetail({ medDec, siteName, businessName, queueContext }: Props) {
   const router = useRouter()
+
+  function queueLink(targetId: string, targetPos: number): string {
+    if (!queueContext) return `/medic/med-declarations/${targetId}`
+    return `/medic/med-declarations/${targetId}?${encodeQueue(queueContext.ids, targetPos)}`
+  }
+
+  const prevId = queueContext && queueContext.pos > 0 ? queueContext.ids[queueContext.pos - 1] : null
+  const nextId = queueContext && queueContext.pos < queueContext.ids.length - 1 ? queueContext.ids[queueContext.pos + 1] : null
   const [reviewStatus, setReviewStatus] = useState<MedDecReviewStatus>(medDec.medic_review_status || 'Pending')
   const [comments, setComments] = useState(medDec.medic_comments || '')
   const [reviewRequired, setReviewRequired] = useState(medDec.review_required || false)
@@ -116,34 +127,89 @@ export default function MedDecDetail({ medDec, siteName, businessName }: Props) 
 
   return (
     <div>
-      {/* Header */}
-      <div className="flex items-center gap-3 mb-6">
-        <button
-          onClick={() => router.back()}
-          className="text-slate-400 hover:text-slate-200 transition-colors"
+      {/* Queue nav bar */}
+      <div className="flex items-center justify-between mb-4 pb-4 border-b border-slate-700/50 gap-4 flex-wrap">
+        <Link
+          href={`/medic?site=${medDec.site_id}`}
+          className="flex items-center gap-1.5 text-sm text-slate-400 hover:text-slate-200 transition-colors"
         >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
           </svg>
-        </button>
-        <div className="flex-1">
-          <h1 className="text-xl font-bold text-slate-100">
-            {isPurged ? 'PHI Purged' : medDec.worker_name || 'Medication Declaration'}
-          </h1>
-          <p className="text-sm text-slate-500">
-            Submitted {fmtDateTime(medDec.submitted_at)}
-          </p>
-        </div>
-        <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${STATUS_COLORS[reviewStatus]}`}>
-          {reviewStatus}
-        </span>
+          Back to Declarations
+        </Link>
+        {queueContext && (
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-slate-500">
+              {queueContext.pos + 1} of {queueContext.ids.length} pending
+            </span>
+            <div className="flex items-center gap-1">
+              {prevId ? (
+                <Link href={queueLink(prevId, queueContext.pos - 1)} className="p-1.5 rounded-lg bg-slate-800/60 border border-slate-700 text-slate-400 hover:text-slate-200 hover:border-slate-600 transition-colors">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+                </Link>
+              ) : (
+                <span className="p-1.5 rounded-lg bg-slate-800/30 border border-slate-800 text-slate-700">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+                </span>
+              )}
+              {nextId ? (
+                <Link href={queueLink(nextId, queueContext.pos + 1)} className="p-1.5 rounded-lg bg-slate-800/60 border border-slate-700 text-slate-400 hover:text-slate-200 hover:border-slate-600 transition-colors">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                </Link>
+              ) : (
+                <span className="p-1.5 rounded-lg bg-slate-800/30 border border-slate-800 text-slate-700">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                </span>
+              )}
+            </div>
+          </div>
+        )}
       </div>
+
+      {/* Identity bar */}
+      {!isPurged && (
+        <div className="bg-slate-800/60 border border-slate-700/50 rounded-xl px-5 py-4 mb-4 flex items-start justify-between gap-4 flex-wrap">
+          <div>
+            <h1 className="text-xl font-bold text-slate-100">{medDec.worker_name || 'Medication Declaration'}</h1>
+            <p className="text-sm text-slate-500 mt-0.5">
+              {medDec.job_title || 'Unknown role'} &middot; {medDec.employer || siteName} &middot; Submitted {fmtDateTime(medDec.submitted_at)}
+            </p>
+          </div>
+          <span className={`text-xs font-medium px-2.5 py-1 rounded-full shrink-0 ${STATUS_COLORS[reviewStatus]}`}>
+            {reviewStatus}
+          </span>
+        </div>
+      )}
+
+      {isPurged && (
+        <div className="flex items-center gap-3 mb-6">
+          <div className="flex-1">
+            <h1 className="text-xl font-bold text-slate-100">PHI Purged</h1>
+            <p className="text-sm text-slate-500">Submitted {fmtDateTime(medDec.submitted_at)}</p>
+          </div>
+          <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${STATUS_COLORS[reviewStatus]}`}>
+            {reviewStatus}
+          </span>
+        </div>
+      )}
 
       {/* Purged warning */}
       {isPurged && (
         <div className="mb-6 bg-slate-800/60 border border-slate-700 rounded-xl px-5 py-4 text-center">
           <p className="text-slate-400 font-medium">PHI has been purged from this record.</p>
           <p className="text-xs text-slate-600 mt-1">Purged: {fmtDateTime(medDec.phi_purged_at)}</p>
+        </div>
+      )}
+
+      {/* Health flags — shown prominently at top */}
+      {!isPurged && (medDec.has_recent_injury_or_illness || medDec.has_side_effects) && (
+        <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl px-5 py-4 mb-4">
+          <p className="text-sm font-semibold text-amber-300 mb-1">⚠ Health Flags</p>
+          <ul className="text-sm text-amber-200 space-y-1 list-disc list-inside">
+            {medDec.has_recent_injury_or_illness && <li>Worker has a recent injury or illness</li>}
+            {medDec.has_side_effects && <li>Medication may produce side effects that effect safety</li>}
+          </ul>
         </div>
       )}
 
@@ -158,17 +224,6 @@ export default function MedDecDetail({ medDec, siteName, businessName }: Props) 
           <TwoColRow label="Job Title" value={medDec.job_title} />
           <TwoColRow label="Site" value={siteName} />
           <TwoColRow label="Business" value={businessName} />
-        </div>
-      )}
-
-      {/* Health flags */}
-      {!isPurged && (medDec.has_recent_injury_or_illness || medDec.has_side_effects) && (
-        <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl px-5 py-4 mb-4">
-          <p className="text-sm font-semibold text-amber-300 mb-1">⚠ Health Flags</p>
-          <ul className="text-sm text-amber-200 space-y-1 list-disc list-inside">
-            {medDec.has_recent_injury_or_illness && <li>Worker has a recent injury or illness</li>}
-            {medDec.has_side_effects && <li>Medication may produce side effects that effect safety</li>}
-          </ul>
         </div>
       )}
 

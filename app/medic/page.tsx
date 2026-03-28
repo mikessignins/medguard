@@ -2,7 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import MedicDashboard from '@/components/medic/MedicDashboard'
 
-export default async function MedicPage() {
+export default async function MedicPage({ searchParams }: { searchParams: { site?: string } }) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
@@ -49,6 +49,7 @@ export default async function MedicPage() {
       submissions={submissions || []}
       medDeclarations={medDeclarations || []}
       medDecEnabled={medDecEnabled}
+      initialSite={searchParams?.site}
     />
   )
 }

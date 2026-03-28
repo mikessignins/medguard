@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { redirect, notFound } from 'next/navigation'
 import MedDecDetail from '@/components/medic/MedDecDetail'
 import type { MedDecMedication, MedDecReviewStatus, ScriptUpload } from '@/lib/types'
+import { parseQueue } from '@/lib/queue-params'
 
 function parseMedications(raw: unknown): MedDecMedication[] {
   if (!raw) return []
@@ -23,7 +24,7 @@ function parseScriptUploads(raw: unknown): ScriptUpload[] {
   } catch { return [] }
 }
 
-export default async function MedDecPage({ params }: { params: { id: string } }) {
+export default async function MedDecPage({ params, searchParams }: { params: { id: string }; searchParams: { queue?: string; pos?: string } }) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
@@ -85,11 +86,14 @@ export default async function MedDecPage({ params }: { params: { id: string } })
     phi_purged_at: raw.phi_purged_at ? String(raw.phi_purged_at) : null,
   }
 
+  const queueContext = parseQueue(searchParams)
+
   return (
     <MedDecDetail
       medDec={medDec}
       siteName={site?.name || raw.site_id}
       businessName={business?.name || raw.business_id}
+      queueContext={queueContext}
     />
   )
 }
