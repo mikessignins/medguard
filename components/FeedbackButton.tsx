@@ -53,12 +53,25 @@ export default function FeedbackButton() {
 
       {open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-          <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-md shadow-2xl">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800">
-              <h2 className="text-base font-semibold text-slate-100">Send Feedback</h2>
+          {/* Modal uses CSS variables so it adapts to light/dark automatically */}
+          <div
+            className="w-full max-w-md rounded-2xl shadow-2xl overflow-hidden"
+            style={{
+              backgroundColor: 'var(--bg-card)',
+              border: '1px solid var(--border-md)',
+            }}
+          >
+            <div
+              className="flex items-center justify-between px-6 py-4"
+              style={{ borderBottom: '1px solid var(--border)' }}
+            >
+              <h2 className="text-base font-semibold" style={{ color: 'var(--text-1)' }}>Send Feedback</h2>
               <button
                 onClick={() => setOpen(false)}
-                className="text-slate-500 hover:text-slate-300 transition-colors"
+                className="transition-colors"
+                style={{ color: 'var(--text-3)' }}
+                onMouseEnter={e => (e.currentTarget.style.color = 'var(--text-1)')}
+                onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-3)')}
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -68,19 +81,19 @@ export default function FeedbackButton() {
 
             {sent ? (
               <div className="px-6 py-10 text-center">
-                <div className="w-12 h-12 rounded-full bg-green-500/10 flex items-center justify-center mx-auto mb-3">
-                  <svg className="w-6 h-6 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className="w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-3" style={{ backgroundColor: 'rgba(16,185,129,0.1)' }}>
+                  <svg className="w-6 h-6 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
                 </div>
-                <p className="text-slate-200 font-medium">Thanks for your feedback!</p>
-                <p className="text-slate-500 text-sm mt-1">It has been sent to the MedPass team.</p>
+                <p className="font-medium" style={{ color: 'var(--text-1)' }}>Thanks for your feedback!</p>
+                <p className="text-sm mt-1" style={{ color: 'var(--text-3)' }}>It has been sent to the MedPass team.</p>
               </div>
             ) : (
               <form onSubmit={handleSubmit} className="px-6 py-5 space-y-4">
                 {/* Category */}
                 <div>
-                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
+                  <label className="block text-xs font-semibold uppercase tracking-wide mb-2" style={{ color: 'var(--text-3)' }}>
                     Category
                   </label>
                   <div className="flex flex-wrap gap-2">
@@ -89,11 +102,12 @@ export default function FeedbackButton() {
                         key={c}
                         type="button"
                         onClick={() => setCategory(c)}
-                        className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${
+                        className="px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors"
+                        style={
                           category === c
-                            ? 'bg-cyan-500/10 border-cyan-500/40 text-cyan-400'
-                            : 'bg-slate-800 border-slate-700 text-slate-400 hover:border-slate-600'
-                        }`}
+                            ? { backgroundColor: 'rgba(6,182,212,0.1)', borderColor: 'rgba(6,182,212,0.4)', color: '#06b6d4' }
+                            : { backgroundColor: 'var(--bg-surface)', borderColor: 'var(--border-md)', color: 'var(--text-2)' }
+                        }
                       >
                         {c}
                       </button>
@@ -103,7 +117,7 @@ export default function FeedbackButton() {
 
                 {/* Message */}
                 <div>
-                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
+                  <label className="block text-xs font-semibold uppercase tracking-wide mb-2" style={{ color: 'var(--text-3)' }}>
                     Message
                   </label>
                   <textarea
@@ -112,7 +126,12 @@ export default function FeedbackButton() {
                     placeholder="Describe the issue or idea…"
                     rows={4}
                     required
-                    className="w-full px-3 py-2.5 bg-slate-800 border border-slate-700 rounded-lg text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-cyan-500 transition-colors resize-none"
+                    className="w-full px-3 py-2.5 rounded-lg text-sm focus:outline-none resize-none transition-colors"
+                    style={{
+                      backgroundColor: 'var(--bg-input)',
+                      border: '1px solid var(--border-md)',
+                      color: 'var(--text-1)',
+                    }}
                   />
                 </div>
 
@@ -124,7 +143,8 @@ export default function FeedbackButton() {
                   <button
                     type="button"
                     onClick={() => setOpen(false)}
-                    className="px-4 py-2 rounded-lg text-sm font-medium text-slate-400 hover:text-slate-200 transition-colors"
+                    className="px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+                    style={{ color: 'var(--text-2)' }}
                   >
                     Cancel
                   </button>

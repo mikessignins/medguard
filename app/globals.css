@@ -146,6 +146,70 @@ body {
 [data-theme="light"] .border-cyan-500\/30 {
   border-color: #06b6d4 !important;
 }
+/* Solid (non-opacity) bg-slate-800 and bg-slate-700 — search boxes, selects, pagination, etc. */
+[data-theme="light"] .bg-slate-800 {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+}
+[data-theme="light"] .bg-slate-700 {
+  background-color: #e2e8f0 !important;
+}
+[data-theme="light"] .bg-slate-900 {
+  background-color: #f8fafc !important;
+}
+[data-theme="light"] .bg-slate-700\/60 {
+  background-color: #f1f5f9 !important;
+}
+[data-theme="light"] .border-slate-600,
+[data-theme="light"] .border-slate-600\/50 {
+  border-color: #cbd5e1 !important;
+}
+[data-theme="light"] .hover\:bg-slate-600:hover {
+  background-color: #cbd5e1 !important;
+}
+/* Hover text colours */
+[data-theme="light"] .hover\:text-slate-100:hover,
+[data-theme="light"] .hover\:text-slate-200:hover {
+  color: #0f172a !important;
+}
+/* Indigo pending-declarations banner */
+[data-theme="light"] .bg-indigo-500\/10 {
+  background-color: #eef2ff !important;
+}
+[data-theme="light"] .border-indigo-500\/20 {
+  border-color: #6366f1 !important;
+}
+[data-theme="light"] .text-indigo-300 {
+  color: #3730a3 !important;
+}
+[data-theme="light"] .text-indigo-400 {
+  color: #4338ca !important;
+}
+/* Red / emerald status chips and boxes */
+[data-theme="light"] .bg-red-500\/10 {
+  background-color: #fef2f2 !important;
+}
+[data-theme="light"] .border-red-500\/20 {
+  border-color: #ef4444 !important;
+}
+[data-theme="light"] .text-red-400 {
+  color: #b91c1c !important;
+}
+[data-theme="light"] .bg-emerald-500\/10 {
+  background-color: #f0fdf4 !important;
+}
+[data-theme="light"] .border-emerald-500\/20 {
+  border-color: #10b981 !important;
+}
+[data-theme="light"] .text-emerald-400 {
+  color: #047857 !important;
+}
+/* select element */
+[data-theme="light"] select {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  border-color: #e2e8f0 !important;
+}
 
 @layer utilities {
   .text-balance {
