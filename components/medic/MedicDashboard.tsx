@@ -289,8 +289,10 @@ export default function MedicDashboard({ sites, submissions, medDeclarations, me
 
       {/* Section tabs — only shown when medDecEnabled */}
       {medDecEnabled ? (
-        <div className="flex gap-0 border-b border-slate-800 mb-5">
+        <div role="tablist" className="flex border-b border-slate-800 mb-5">
           <button
+            role="tab"
+            aria-selected={activeSection === 'declarations'}
             onClick={() => setActiveSection('declarations')}
             className={`px-5 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
               activeSection === 'declarations'
@@ -301,6 +303,8 @@ export default function MedicDashboard({ sites, submissions, medDeclarations, me
             Emergency Declarations
           </button>
           <button
+            role="tab"
+            aria-selected={activeSection === 'meddec'}
             onClick={() => setActiveSection('meddec')}
             className={`px-5 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors flex items-center gap-2 ${
               activeSection === 'meddec'
@@ -322,7 +326,6 @@ export default function MedicDashboard({ sites, submissions, medDeclarations, me
           <div className="flex-1 h-px bg-slate-800" />
         </div>
       )}
-
 
       {activeSection === 'declarations' && (
         <>
