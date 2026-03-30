@@ -84,6 +84,10 @@ export interface Site {
   latitude: number | null
   longitude: number | null
   is_office: boolean
+  medic_phone: string | null
+  eso_name: string | null
+  safety_manager_name: string | null
+  village_admin_name: string | null
 }
 
 export interface Medication {
