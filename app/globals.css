@@ -1,12 +1,214 @@
-@import url('https://fonts.googleapis.com/css2?family=Figtree:ital,wght@0,300..900;1,300..900&display=swap');
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+/* ── Theme variables ─────────────────────────────────────── */
+:root {
+  --bg-base:    #0f172a;
+  --bg-card:    rgba(30, 41, 59, 0.6);
+  --bg-surface: rgba(15, 23, 42, 0.6);
+  --bg-input:   rgba(15, 23, 42, 0.6);
+  --border:     rgba(100, 116, 139, 0.12);
+  --border-md:  rgba(100, 116, 139, 0.2);
+  --text-1:     #f1f5f9;
+  --text-2:     #94a3b8;
+  --text-3:     #64748b;
+}
+
+[data-theme="light"] {
+  --bg-base:    #f1f5f9;
+  --bg-card:    #ffffff;
+  --bg-surface: #f8fafc;
+  --bg-input:   #f8fafc;
+  --border:     #e2e8f0;
+  --border-md:  #cbd5e1;
+  --text-1:     #0f172a;
+  --text-2:     #475569;
+  --text-3:     #64748b;
+}
+
+/* Apply to surfaces we can't easily migrate via component props */
 body {
-  font-family: 'Figtree', sans-serif;
-  background-color: #0F172A;
+  font-family: var(--font-figtree), sans-serif;
+  background-color: var(--bg-base);
+  color: var(--text-1);
+}
+
+/* Light overrides for existing Tailwind classes used in untouched components */
+[data-theme="light"] .bg-slate-950 {
+  background-color: #f1f5f9 !important;
+}
+[data-theme="light"] .border-slate-800 {
+  border-color: #e2e8f0 !important;
+}
+[data-theme="light"] .text-slate-100 {
+  color: #0f172a !important;
+}
+[data-theme="light"] .text-slate-300 {
+  color: #334155 !important;
+}
+[data-theme="light"] .text-slate-400 {
+  color: #475569 !important;
+}
+[data-theme="light"] .text-slate-500 {
+  color: #64748b !important;
+}
+[data-theme="light"] .hover\:bg-slate-800:hover {
+  background-color: #e2e8f0 !important;
+}
+/* Opacity-variant classes used in detail forms and cards */
+[data-theme="light"] .bg-slate-800\/60,
+[data-theme="light"] .bg-slate-800\/50,
+[data-theme="light"] .bg-slate-800\/40,
+[data-theme="light"] .bg-slate-800\/30 {
+  background-color: #ffffff !important;
+}
+[data-theme="light"] .bg-slate-900\/60,
+[data-theme="light"] .bg-slate-900\/50,
+[data-theme="light"] .bg-slate-900\/40 {
+  background-color: #f8fafc !important;
+}
+[data-theme="light"] .border-slate-700\/50,
+[data-theme="light"] .border-slate-700\/30,
+[data-theme="light"] .border-slate-700 {
+  border-color: #e2e8f0 !important;
+}
+[data-theme="light"] .bg-slate-700\/30,
+[data-theme="light"] .bg-slate-700\/50 {
+  background-color: #f1f5f9 !important;
+}
+[data-theme="light"] .hover\:bg-slate-700\/30:hover,
+[data-theme="light"] .hover\:bg-slate-700:hover {
+  background-color: #e2e8f0 !important;
+}
+[data-theme="light"] .text-slate-200 {
+  color: #1e293b !important;
+}
+[data-theme="light"] .text-slate-600 {
+  color: #475569 !important;
+}
+[data-theme="light"] .border-slate-800\/60,
+[data-theme="light"] .border-slate-800\/40 {
+  border-color: #e2e8f0 !important;
+}
+[data-theme="light"] .placeholder-slate-500::placeholder {
+  color: #94a3b8 !important;
+}
+[data-theme="light"] textarea,
+[data-theme="light"] input[type="text"],
+[data-theme="light"] input[type="email"],
+[data-theme="light"] input[type="password"],
+[data-theme="light"] input[type="date"] {
+  color: #0f172a !important;
+}
+/* Health flags / amber warnings — readable in light mode */
+[data-theme="light"] .bg-amber-500\/10 {
+  background-color: #fef3c7 !important;
+}
+[data-theme="light"] .border-amber-500\/20 {
+  border-color: #d97706 !important;
+}
+[data-theme="light"] .text-amber-300 {
+  color: #92400e !important;
+}
+[data-theme="light"] .text-amber-200 {
+  color: #78350f !important;
+}
+[data-theme="light"] .text-amber-400 {
+  color: #b45309 !important;
+}
+/* Orange flagged medication callout in light mode */
+[data-theme="light"] .bg-orange-500\/\[0\.08\],
+[data-theme="light"] .bg-orange-500\/10 {
+  background-color: #fff7ed !important;
+}
+[data-theme="light"] .border-orange-500\/25,
+[data-theme="light"] .border-orange-500\/20 {
+  border-color: #ea580c !important;
+}
+[data-theme="light"] .text-orange-400 {
+  color: #c2410c !important;
+}
+[data-theme="light"] .text-orange-300 {
+  color: #9a3412 !important;
+}
+/* Cyan accent text in light mode */
+[data-theme="light"] .text-cyan-400 {
+  color: #0e7490 !important;
+}
+[data-theme="light"] .text-cyan-300 {
+  color: #0e7490 !important;
+}
+[data-theme="light"] .bg-cyan-500\/10 {
+  background-color: #ecfeff !important;
+}
+[data-theme="light"] .border-cyan-500\/20,
+[data-theme="light"] .border-cyan-500\/30 {
+  border-color: #06b6d4 !important;
+}
+/* Solid (non-opacity) bg-slate-800 and bg-slate-700 — search boxes, selects, pagination, etc. */
+[data-theme="light"] .bg-slate-800 {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+}
+[data-theme="light"] .bg-slate-700 {
+  background-color: #e2e8f0 !important;
+}
+[data-theme="light"] .bg-slate-900 {
+  background-color: #f8fafc !important;
+}
+[data-theme="light"] .bg-slate-700\/60 {
+  background-color: #f1f5f9 !important;
+}
+[data-theme="light"] .border-slate-600,
+[data-theme="light"] .border-slate-600\/50 {
+  border-color: #cbd5e1 !important;
+}
+[data-theme="light"] .hover\:bg-slate-600:hover {
+  background-color: #cbd5e1 !important;
+}
+/* Hover text colours */
+[data-theme="light"] .hover\:text-slate-100:hover,
+[data-theme="light"] .hover\:text-slate-200:hover {
+  color: #0f172a !important;
+}
+/* Indigo pending-declarations banner */
+[data-theme="light"] .bg-indigo-500\/10 {
+  background-color: #eef2ff !important;
+}
+[data-theme="light"] .border-indigo-500\/20 {
+  border-color: #6366f1 !important;
+}
+[data-theme="light"] .text-indigo-300 {
+  color: #3730a3 !important;
+}
+[data-theme="light"] .text-indigo-400 {
+  color: #4338ca !important;
+}
+/* Red / emerald status chips and boxes */
+[data-theme="light"] .bg-red-500\/10 {
+  background-color: #fef2f2 !important;
+}
+[data-theme="light"] .border-red-500\/20 {
+  border-color: #ef4444 !important;
+}
+[data-theme="light"] .text-red-400 {
+  color: #b91c1c !important;
+}
+[data-theme="light"] .bg-emerald-500\/10 {
+  background-color: #f0fdf4 !important;
+}
+[data-theme="light"] .border-emerald-500\/20 {
+  border-color: #10b981 !important;
+}
+[data-theme="light"] .text-emerald-400 {
+  color: #047857 !important;
+}
+/* select element */
+[data-theme="light"] select {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  border-color: #e2e8f0 !important;
 }
 
 @layer utilities {

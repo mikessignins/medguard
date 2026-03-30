@@ -148,41 +148,41 @@ export default function SitesManager({ sites: initialSites, businessId }: Props)
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-slate-800">Sites</h1>
+        <h1 className="text-2xl font-bold text-slate-100">Sites</h1>
         <button
           onClick={openAdd}
-          className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white text-sm font-medium rounded-lg transition-colors"
+          className="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white text-sm font-medium rounded-lg transition-colors"
         >
           + Add Site
         </button>
       </div>
 
       {error && !isModalOpen && (
-        <div className="mb-4 bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-lg">
+        <div className="mb-4 bg-red-500/10 border border-red-500/20 text-red-400 text-sm px-4 py-3 rounded-lg">
           {error}
         </div>
       )}
 
-      {sites.length === 0 ? (
-        <div className="text-center py-12 text-slate-400">
+      {sites.length === 0 && !isModalOpen ? (
+        <div className="text-center py-12 text-slate-500">
           <p>No sites yet. Add your first site above.</p>
         </div>
       ) : (
-        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden mb-6">
+        <div className="bg-slate-800/60 border border-slate-700/50 rounded-xl overflow-hidden mb-6">
           {sites.map((site, i) => (
             <div
               key={site.id}
-              className={`px-5 py-4 ${i > 0 ? 'border-t border-slate-100' : ''}`}
+              className={`px-5 py-4 ${i > 0 ? 'border-t border-slate-700/50' : ''}`}
             >
               <div className="flex items-start justify-between gap-4">
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
-                    <p className="font-medium text-slate-800">{site.name}</p>
+                    <p className="font-medium text-slate-100">{site.name}</p>
                     {site.is_office && (
-                      <span className="text-xs bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full">Office</span>
+                      <span className="text-xs bg-slate-700/50 text-slate-400 px-2 py-0.5 rounded-full">Office</span>
                     )}
                   </div>
-                  <p className="text-xs text-slate-400 mt-0.5">
+                  <p className="text-xs text-slate-500 mt-0.5">
                     {site.latitude != null && site.longitude != null
                       ? `${site.latitude.toFixed(4)}, ${site.longitude.toFixed(4)}`
                       : 'No coordinates'}
@@ -190,16 +190,16 @@ export default function SitesManager({ sites: initialSites, businessId }: Props)
                   {(site.medic_phone || site.eso_name || site.safety_manager_name || site.village_admin_name) && (
                     <div className="mt-2 grid grid-cols-2 gap-x-6 gap-y-1">
                       {site.medic_phone && (
-                        <p className="text-xs text-slate-500"><span className="font-medium">Medic:</span> {site.medic_phone}</p>
+                        <p className="text-xs text-slate-500"><span className="font-medium text-slate-400">Medic:</span> {site.medic_phone}</p>
                       )}
                       {site.eso_name && (
-                        <p className="text-xs text-slate-500"><span className="font-medium">ESO:</span> {site.eso_name}</p>
+                        <p className="text-xs text-slate-500"><span className="font-medium text-slate-400">ESO:</span> {site.eso_name}</p>
                       )}
                       {site.safety_manager_name && (
-                        <p className="text-xs text-slate-500"><span className="font-medium">Safety Mgr:</span> {site.safety_manager_name}</p>
+                        <p className="text-xs text-slate-500"><span className="font-medium text-slate-400">Safety Mgr:</span> {site.safety_manager_name}</p>
                       )}
                       {site.village_admin_name && (
-                        <p className="text-xs text-slate-500"><span className="font-medium">Village Admin:</span> {site.village_admin_name}</p>
+                        <p className="text-xs text-slate-500"><span className="font-medium text-slate-400">Village Admin:</span> {site.village_admin_name}</p>
                       )}
                     </div>
                   )}
@@ -207,14 +207,14 @@ export default function SitesManager({ sites: initialSites, businessId }: Props)
                 <div className="flex items-center gap-2 shrink-0">
                   <button
                     onClick={() => openEdit(site)}
-                    className="px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+                    className="px-3 py-1.5 text-xs text-slate-400 hover:bg-slate-700/50 rounded-lg transition-colors"
                   >
                     Edit
                   </button>
                   <button
                     onClick={() => handleDeleteSite(site.id, site.name)}
                     disabled={deletingId === site.id}
-                    className="px-3 py-1.5 text-xs text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
+                    className="px-3 py-1.5 text-xs text-red-400 hover:bg-red-500/10 rounded-lg transition-colors disabled:opacity-50"
                   >
                     {deletingId === site.id ? 'Deleting...' : 'Delete'}
                   </button>
@@ -227,9 +227,9 @@ export default function SitesManager({ sites: initialSites, businessId }: Props)
 
       {/* Add / Edit Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto">
-            <h3 className="text-lg font-semibold text-slate-800 mb-5">
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-900 border border-slate-700/50 rounded-2xl shadow-2xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto">
+            <h3 className="text-lg font-semibold text-slate-100 mb-5">
               {isEditing ? `Edit "${editingSite!.name}"` : 'Add New Site'}
             </h3>
             <form onSubmit={isEditing ? handleEditSite : handleAddSite} className="space-y-5">
@@ -238,36 +238,36 @@ export default function SitesManager({ sites: initialSites, businessId }: Props)
               <div className="space-y-3">
                 <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Site Details</p>
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Site Name *</label>
+                  <label className="block text-sm font-medium text-slate-400 mb-1">Site Name *</label>
                   <input
                     type="text"
                     value={form.name}
                     onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
                     required
-                    className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                    className="w-full px-4 py-2.5 bg-slate-800/60 border border-slate-700 rounded-lg focus:outline-none focus:border-cyan-500 text-sm text-slate-100 placeholder-slate-500"
                     placeholder="e.g. Northern Mine Site"
                   />
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Latitude</label>
+                    <label className="block text-sm font-medium text-slate-400 mb-1">Latitude</label>
                     <input
                       type="number"
                       step="any"
                       value={form.latitude}
                       onChange={e => setForm(f => ({ ...f, latitude: e.target.value }))}
-                      className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                      className="w-full px-4 py-2.5 bg-slate-800/60 border border-slate-700 rounded-lg focus:outline-none focus:border-cyan-500 text-sm text-slate-100 placeholder-slate-500"
                       placeholder="-23.4567"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Longitude</label>
+                    <label className="block text-sm font-medium text-slate-400 mb-1">Longitude</label>
                     <input
                       type="number"
                       step="any"
                       value={form.longitude}
                       onChange={e => setForm(f => ({ ...f, longitude: e.target.value }))}
-                      className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                      className="w-full px-4 py-2.5 bg-slate-800/60 border border-slate-700 rounded-lg focus:outline-none focus:border-cyan-500 text-sm text-slate-100 placeholder-slate-500"
                       placeholder="133.8888"
                     />
                   </div>
@@ -277,59 +277,61 @@ export default function SitesManager({ sites: initialSites, businessId }: Props)
                     type="checkbox"
                     checked={form.is_office}
                     onChange={e => setForm(f => ({ ...f, is_office: e.target.checked }))}
-                    className="rounded border-slate-300 text-slate-800 focus:ring-slate-500"
+                    className="rounded border-slate-600 bg-slate-700 text-cyan-500 focus:ring-cyan-500"
                   />
-                  <span className="text-sm text-slate-700">This is an office site</span>
+                  <span className="text-sm text-slate-300">This is an office site</span>
                 </label>
               </div>
 
               {/* Site Contacts */}
-              <div className="space-y-3 pt-1 border-t border-slate-100">
-                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide pt-2">Site Contacts <span className="font-normal normal-case">(optional)</span></p>
+              <div className="space-y-3 pt-1 border-t border-slate-700/50">
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide pt-2">
+                  Site Contacts <span className="font-normal normal-case">(optional)</span>
+                </p>
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Medic Phone Number</label>
+                  <label className="block text-sm font-medium text-slate-400 mb-1">Medic Phone Number</label>
                   <input
                     type="tel"
                     value={form.medic_phone}
                     onChange={e => setForm(f => ({ ...f, medic_phone: e.target.value }))}
-                    className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                    className="w-full px-4 py-2.5 bg-slate-800/60 border border-slate-700 rounded-lg focus:outline-none focus:border-cyan-500 text-sm text-slate-100 placeholder-slate-500"
                     placeholder="e.g. 0400 123 456"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Emergency Services Officer (ESO)</label>
+                  <label className="block text-sm font-medium text-slate-400 mb-1">Emergency Services Officer (ESO)</label>
                   <input
                     type="text"
                     value={form.eso_name}
                     onChange={e => setForm(f => ({ ...f, eso_name: e.target.value }))}
-                    className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                    className="w-full px-4 py-2.5 bg-slate-800/60 border border-slate-700 rounded-lg focus:outline-none focus:border-cyan-500 text-sm text-slate-100 placeholder-slate-500"
                     placeholder="Full name"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Site Safety Manager</label>
+                  <label className="block text-sm font-medium text-slate-400 mb-1">Site Safety Manager</label>
                   <input
                     type="text"
                     value={form.safety_manager_name}
                     onChange={e => setForm(f => ({ ...f, safety_manager_name: e.target.value }))}
-                    className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                    className="w-full px-4 py-2.5 bg-slate-800/60 border border-slate-700 rounded-lg focus:outline-none focus:border-cyan-500 text-sm text-slate-100 placeholder-slate-500"
                     placeholder="Full name"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Village Admin</label>
+                  <label className="block text-sm font-medium text-slate-400 mb-1">Village Admin</label>
                   <input
                     type="text"
                     value={form.village_admin_name}
                     onChange={e => setForm(f => ({ ...f, village_admin_name: e.target.value }))}
-                    className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                    className="w-full px-4 py-2.5 bg-slate-800/60 border border-slate-700 rounded-lg focus:outline-none focus:border-cyan-500 text-sm text-slate-100 placeholder-slate-500"
                     placeholder="Full name"
                   />
                 </div>
               </div>
 
               {error && (
-                <div className="bg-red-50 border border-red-200 text-red-700 text-sm px-3 py-2 rounded-lg">
+                <div className="bg-red-500/10 border border-red-500/20 text-red-400 text-sm px-3 py-2 rounded-lg">
                   {error}
                 </div>
               )}
@@ -338,7 +340,7 @@ export default function SitesManager({ sites: initialSites, businessId }: Props)
                 <button
                   type="submit"
                   disabled={loading}
-                  className="flex-1 px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-white rounded-lg font-medium text-sm transition-colors disabled:opacity-50"
+                  className="flex-1 px-4 py-2.5 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg font-medium text-sm transition-colors disabled:opacity-50"
                 >
                   {loading ? (isEditing ? 'Saving...' : 'Adding...') : (isEditing ? 'Save Changes' : 'Add Site')}
                 </button>
@@ -346,7 +348,7 @@ export default function SitesManager({ sites: initialSites, businessId }: Props)
                   type="button"
                   onClick={closeModal}
                   disabled={loading}
-                  className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-medium text-sm transition-colors"
+                  className="px-4 py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg font-medium text-sm transition-colors"
                 >
                   Cancel
                 </button>
