@@ -78,9 +78,9 @@ async function generatePdf(id: string) {
       { status: 422 }
     )
   }
-  if (raw.status !== 'Approved') {
+  if (!['Approved', 'Requires Follow-up'].includes(raw.status)) {
     return new NextResponse(
-      `Only approved declarations can be exported. Current status: ${raw.status ?? 'Unknown'}.`,
+      `Only declarations with a final decision can be exported. Current status: ${raw.status ?? 'Unknown'}.`,
       { status: 422 }
     )
   }

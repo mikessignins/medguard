@@ -69,6 +69,7 @@ interface Props {
   businessName: string
   currentUserId: string
   queueContext: { ids: string[]; pos: number } | null
+  backHref?: string
 }
 
 function buildPdfFilename(
@@ -108,7 +109,7 @@ function InfoRow({ label, value }: { label: string; value?: string | number | bo
   )
 }
 
-export default function SubmissionDetail({ submission, siteName, businessName, currentUserId, queueContext }: Props) {
+export default function SubmissionDetail({ submission, siteName, businessName, currentUserId, queueContext, backHref }: Props) {
   const router = useRouter()
   const supabase = createClient()
 
@@ -279,7 +280,7 @@ export default function SubmissionDetail({ submission, siteName, businessName, c
       {/* Queue nav bar */}
       <div className="no-print flex items-center justify-between mb-4 pb-4 border-b border-slate-700/50 gap-4 flex-wrap">
         <Link
-          href={`/medic?site=${submission.site_id}`}
+          href={backHref || `/medic?site=${submission.site_id}`}
           className="flex items-center gap-1.5 text-sm text-slate-400 hover:text-slate-200 transition-colors"
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -680,7 +681,7 @@ export default function SubmissionDetail({ submission, siteName, businessName, c
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3M3 17V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
                       </svg>
-                      Export PDF
+                      {exportedAt ? 'Download PDF Again' : 'Export PDF'}
                     </>
                   )}
                 </button>
@@ -690,7 +691,7 @@ export default function SubmissionDetail({ submission, siteName, businessName, c
                     <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                     </svg>
-                    Exported {fmtDateTime(exportedAt)}
+                    Exported {fmtDateTime(exportedAt)}. Available to re-export until it is purged.
                   </p>
                 )}
               </div>
@@ -708,7 +709,7 @@ export default function SubmissionDetail({ submission, siteName, businessName, c
                   </Link>
                 ) : (
                   <Link
-                    href={`/medic?site=${submission.site_id}`}
+                    href={backHref || `/medic?site=${submission.site_id}`}
                     className="flex items-center justify-center gap-2 w-full px-4 py-2.5 bg-slate-700/50 border border-slate-700 text-slate-300 hover:bg-slate-700 rounded-lg text-sm font-medium transition-colors"
                   >
                     ← Back to list

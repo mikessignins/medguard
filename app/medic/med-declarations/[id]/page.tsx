@@ -24,7 +24,7 @@ function parseScriptUploads(raw: unknown): ScriptUpload[] {
   } catch { return [] }
 }
 
-export default async function MedDecPage({ params, searchParams }: { params: { id: string }; searchParams: { queue?: string; pos?: string } }) {
+export default async function MedDecPage({ params, searchParams }: { params: { id: string }; searchParams: { queue?: string; pos?: string; view?: string; site?: string } }) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
@@ -87,6 +87,9 @@ export default async function MedDecPage({ params, searchParams }: { params: { i
   }
 
   const queueContext = parseQueue(searchParams)
+  const backHref = searchParams.view === 'exports'
+    ? `/medic/exports${searchParams.site ? `?site=${encodeURIComponent(searchParams.site)}` : ''}`
+    : `/medic${raw.site_id ? `?site=${encodeURIComponent(String(raw.site_id))}` : ''}`
 
   return (
     <MedDecDetail
@@ -94,6 +97,7 @@ export default async function MedDecPage({ params, searchParams }: { params: { i
       siteName={site?.name || raw.site_id}
       businessName={business?.name || raw.business_id}
       queueContext={queueContext}
+      backHref={backHref}
     />
   )
 }

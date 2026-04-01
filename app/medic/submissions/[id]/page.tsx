@@ -64,7 +64,7 @@ export default async function SubmissionPage({
   searchParams,
 }: {
   params: { id: string }
-  searchParams: { queue?: string; pos?: string }
+  searchParams: { queue?: string; pos?: string; view?: string; site?: string }
 }) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -117,6 +117,9 @@ export default async function SubmissionPage({
   }
 
   const queueContext = parseQueue(searchParams)
+  const backHref = searchParams.view === 'exports'
+    ? `/medic/exports${searchParams.site ? `?site=${encodeURIComponent(searchParams.site)}` : ''}`
+    : `/medic${raw.site_id ? `?site=${encodeURIComponent(String(raw.site_id))}` : ''}`
 
   return (
     <SubmissionDetail
@@ -125,6 +128,7 @@ export default async function SubmissionPage({
       businessName={business?.name || raw.business_id}
       currentUserId={user.id}
       queueContext={queueContext}
+      backHref={backHref}
     />
   )
 }
