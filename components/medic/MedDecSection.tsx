@@ -1,4 +1,5 @@
 'use client'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { format } from 'date-fns'
 import type { MedicationDeclaration, MedDecReviewStatus } from '@/lib/types'
@@ -13,7 +14,10 @@ const STATUS_COLORS: Record<MedDecReviewStatus, string> = {
 }
 
 interface Props {
-  medDeclarations: MedicationDeclaration[]
+  medDeclarations: Array<Pick<
+    MedicationDeclaration,
+    'id' | 'site_id' | 'worker_name' | 'submitted_at' | 'medic_review_status' | 'exported_at' | 'phi_purged_at' | 'medications' | 'has_recent_injury_or_illness' | 'has_side_effects'
+  >>
   siteId: string
   exportsHref?: string
 }
@@ -61,9 +65,9 @@ export default function MedDecSection({ medDeclarations, siteId, exportsHref = '
           {active.map((m, idx) => {
             const hasSideEffects = m.has_side_effects || m.has_recent_injury_or_illness
             return (
-              <button
+              <Link
                 key={m.id}
-                onClick={() => router.push(`/medic/med-declarations/${m.id}?${encodeQueue(active.map((x) => x.id), idx)}`)}
+                href={`/medic/med-declarations/${m.id}?${encodeQueue(active.map((x) => x.id), idx)}`}
                 className="w-full text-left bg-slate-800/60 backdrop-blur-sm border border-slate-700/50 rounded-xl px-5 py-4 hover:border-slate-600 transition-colors flex items-center justify-between"
               >
                 <div>
@@ -80,7 +84,7 @@ export default function MedDecSection({ medDeclarations, siteId, exportsHref = '
                 <span className={`text-xs font-medium px-2.5 py-1 rounded-full shrink-0 ${STATUS_COLORS[m.medic_review_status as MedDecReviewStatus] || STATUS_COLORS.Pending}`}>
                   {m.medic_review_status || 'Pending'}
                 </span>
-              </button>
+              </Link>
             )
           })}
         </div>

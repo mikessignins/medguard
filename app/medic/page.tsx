@@ -16,12 +16,15 @@ export default async function MedicPage({ searchParams }: { searchParams: { site
   if (!account) redirect('/login')
 
   const siteIds: string[] = account.site_ids || []
+  const siteSelect = 'id,name,is_office'
+  const submissionSelect = 'id,business_id,site_id,worker_id,worker_snapshot,role,visit_date,shift_type,status,submitted_at,exported_at,phi_purged_at'
+  const medDecSelect = 'id,business_id,site_id,worker_name,submitted_at,medic_review_status,exported_at,phi_purged_at,medications,has_recent_injury_or_illness,has_side_effects'
 
   const [{ data: sites }, { data: submissions }, { data: business }] = await Promise.all([
-    supabase.from('sites').select('*').in('id', siteIds.length ? siteIds : ['__none__']),
+    supabase.from('sites').select(siteSelect).in('id', siteIds.length ? siteIds : ['__none__']),
     supabase
       .from('submissions')
-      .select('*')
+      .select(submissionSelect)
       .in('site_id', siteIds.length ? siteIds : ['__none__'])
       .order('submitted_at', { ascending: false }),
     supabase
@@ -37,7 +40,7 @@ export default async function MedicPage({ searchParams }: { searchParams: { site
   if (medDecEnabled && siteIds.length > 0) {
     const { data } = await supabase
       .from('medication_declarations')
-      .select('*')
+      .select(medDecSelect)
       .in('site_id', siteIds)
       .order('submitted_at', { ascending: false })
     medDeclarations = data

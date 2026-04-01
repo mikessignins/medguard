@@ -1,5 +1,6 @@
 'use client'
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { format } from 'date-fns'
 import { createClient } from '@/lib/supabase/client'
@@ -19,7 +20,7 @@ const STATUS_COLORS: Record<SubmissionStatus, string> = {
 
 const MEDDEC_FINAL = ['Normal Duties', 'Restricted Duties', 'Unfit for Work']
 
-function RiskChips({ sub }: { sub: Submission }) {
+function RiskChips({ sub }: { sub: Pick<Submission, 'worker_snapshot'> }) {
   const chips = computeRiskChips(sub)
   return (
     <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
@@ -40,12 +41,22 @@ function RiskChips({ sub }: { sub: Submission }) {
   )
 }
 
+type MedicDashboardSubmission = Pick<
+  Submission,
+  'id' | 'business_id' | 'site_id' | 'worker_snapshot' | 'role' | 'visit_date' | 'shift_type' | 'status' | 'submitted_at' | 'exported_at' | 'phi_purged_at'
+>
+
+type MedicDashboardMedDec = Pick<
+  MedicationDeclaration,
+  'id' | 'business_id' | 'site_id' | 'worker_name' | 'submitted_at' | 'medic_review_status' | 'exported_at' | 'phi_purged_at' | 'medications' | 'has_recent_injury_or_illness' | 'has_side_effects'
+>
+
 type FilterType = 'All' | 'New' | 'In Review'
 
 interface Props {
-  sites: Site[]
-  submissions: Submission[]
-  medDeclarations: MedicationDeclaration[]
+  sites: Array<Pick<Site, 'id' | 'name' | 'is_office'>>
+  submissions: MedicDashboardSubmission[]
+  medDeclarations: MedicDashboardMedDec[]
   medDecEnabled: boolean
   initialSite?: string
 }
@@ -111,7 +122,7 @@ export default function MedicDashboard({ sites, submissions, medDeclarations, me
   const grouped = ACTIVE_STATUS_ORDER.reduce((acc, status) => {
     acc[status] = filtered.filter((s) => s.status === status)
     return acc
-  }, {} as Record<SubmissionStatus, Submission[]>)
+  }, {} as Record<SubmissionStatus, MedicDashboardSubmission[]>)
 
   if (sites.length === 0) {
     return (
@@ -305,13 +316,13 @@ export default function MedicDashboard({ sites, submissions, medDeclarations, me
                 </h2>
                 <div className="bg-slate-800/60 backdrop-blur-sm border border-slate-700/50 rounded-xl overflow-hidden">
                   {items.map((sub, i) => (
-                    <button
+                    <Link
                       key={sub.id}
-                      onClick={() => {
+                      href={(() => {
                         const queueIds = ACTIVE_STATUS_ORDER.flatMap((groupStatus) => grouped[groupStatus] ?? []).map((item) => item.id)
                         const pos = queueIds.indexOf(sub.id)
-                        router.push(`/medic/submissions/${sub.id}?${encodeQueue(queueIds, pos)}`)
-                      }}
+                        return `/medic/submissions/${sub.id}?${encodeQueue(queueIds, pos)}`
+                      })()}
                       className={`w-full text-left px-5 py-4 flex items-center justify-between hover:bg-slate-700/30 transition-colors ${i > 0 ? 'border-t border-slate-700/50' : ''}`}
                     >
                       <div className="flex-1 min-w-0">
@@ -328,7 +339,7 @@ export default function MedicDashboard({ sites, submissions, medDeclarations, me
                       <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${STATUS_COLORS[status]} shrink-0 ml-3`}>
                         {status}
                       </span>
-                    </button>
+                    </Link>
                   ))}
                 </div>
               </div>

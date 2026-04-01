@@ -1,4 +1,4 @@
-import type { Submission } from './types'
+import type { Submission, WorkerSnapshot } from './types'
 
 /** Medication review flags that require medic attention. */
 export const FLAGGED_REVIEWS = [
@@ -17,7 +17,7 @@ export interface RiskChip {
  * Computes risk indicator chips for a submission row or detail header.
  * Returns a 'clear' chip if no risk flags are present.
  */
-export function computeRiskChips(sub: Submission): RiskChip[] {
+export function computeRiskChips(sub: Pick<Submission, 'worker_snapshot'> | { worker_snapshot: WorkerSnapshot | null | undefined }): RiskChip[] {
   const ws = sub.worker_snapshot
   if (!ws) return [{ type: 'clear', label: 'No flags' }]
 

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { format } from 'date-fns'
 import type { MedDecReviewStatus, MedicationDeclaration, Site, Submission, SubmissionStatus } from '@/lib/types'
@@ -56,7 +57,7 @@ function SitePicker({
   onChange,
   badgeCounts,
 }: {
-  sites: Site[]
+  sites: Array<Pick<Site, 'id' | 'name' | 'is_office'>>
   activeTab: string
   onChange: (siteId: string) => void
   badgeCounts: Record<string, number>
@@ -95,9 +96,9 @@ function SectionHeader({ title, subtitle }: { title: string; subtitle: string })
 }
 
 interface Props {
-  sites: Site[]
-  submissions: Submission[]
-  medDeclarations: MedicationDeclaration[]
+  sites: Array<Pick<Site, 'id' | 'name' | 'is_office'>>
+  submissions: MedicExportsSubmission[]
+  medDeclarations: MedicExportsMedDec[]
   initialSite?: string
 }
 
@@ -129,12 +130,12 @@ export default function MedicExportsDashboard({ sites, submissions, medDeclarati
     })
   )
 
-  function openSubmission(id: string) {
-    router.push(`/medic/submissions/${id}?view=exports&site=${activeTab}`)
+  function submissionHref(id: string) {
+    return `/medic/submissions/${id}?view=exports&site=${activeTab}`
   }
 
-  function openMedDec(id: string) {
-    router.push(`/medic/med-declarations/${id}?view=exports&site=${activeTab}`)
+  function medDecHref(id: string) {
+    return `/medic/med-declarations/${id}?view=exports&site=${activeTab}`
   }
 
   function toggleSelected(setter: React.Dispatch<React.SetStateAction<Set<string>>>, id: string) {
@@ -225,13 +226,13 @@ export default function MedicExportsDashboard({ sites, submissions, medDeclarati
           <div className="rounded-xl border border-slate-700/50 bg-slate-800/60 overflow-hidden">
             <div className="px-4 py-3 border-b border-slate-700/50"><p className="text-xs font-semibold uppercase tracking-widest text-slate-500">Ready to Export</p></div>
             {readySubmissions.map((sub, i) => (
-              <button key={sub.id} onClick={() => openSubmission(sub.id)} className={`w-full text-left px-5 py-4 flex items-center justify-between hover:bg-slate-700/30 transition-colors ${i > 0 ? 'border-t border-slate-700/50' : ''}`}>
+              <Link key={sub.id} href={submissionHref(sub.id)} className={`w-full text-left px-5 py-4 flex items-center justify-between hover:bg-slate-700/30 transition-colors ${i > 0 ? 'border-t border-slate-700/50' : ''}`}>
                 <div>
                   <p className="font-semibold text-slate-100">{sub.worker_snapshot?.fullName || 'Unknown Worker'}</p>
                   <p className="text-sm text-slate-500 mt-1">{fmtDate(sub.visit_date)} · {sub.shift_type || 'N/A'}</p>
                 </div>
                 <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${SUBMISSION_STATUS_COLORS[sub.status]}`}>{sub.status}</span>
-              </button>
+              </Link>
             ))}
           </div>
         )}
@@ -256,13 +257,13 @@ export default function MedicExportsDashboard({ sites, submissions, medDeclarati
               {exportedSubmissions.map((sub, i) => (
                 <div key={sub.id} className={`flex items-center gap-3 px-4 py-4 ${i > 0 ? 'border-t border-slate-700/50' : ''}`}>
                   <input type="checkbox" checked={selectedSubmissionIds.has(sub.id)} onChange={() => toggleSelected(setSelectedSubmissionIds, sub.id)} className="w-4 h-4 rounded border-slate-600 bg-slate-700 text-red-500 cursor-pointer" />
-                  <button onClick={() => openSubmission(sub.id)} className="flex-1 text-left flex items-center justify-between hover:bg-slate-700/30 rounded-lg px-2 py-1 -mx-2 -my-1 transition-colors">
+                  <Link href={submissionHref(sub.id)} className="flex-1 text-left flex items-center justify-between hover:bg-slate-700/30 rounded-lg px-2 py-1 -mx-2 -my-1 transition-colors">
                     <div>
                       <p className="font-semibold text-slate-100">{sub.worker_snapshot?.fullName || 'Unknown Worker'}</p>
                       <p className="text-sm text-slate-500 mt-1">{fmtDate(sub.visit_date)} · {sub.shift_type || 'N/A'}</p>
                     </div>
                     {sub.exported_at && <PurgeCountdown exportedAt={sub.exported_at} />}
-                  </button>
+                  </Link>
                 </div>
               ))}
             </div>
@@ -273,13 +274,13 @@ export default function MedicExportsDashboard({ sites, submissions, medDeclarati
           <div className="rounded-xl border border-slate-800 bg-slate-900/60 overflow-hidden">
             <div className="px-4 py-3 border-b border-slate-800"><p className="text-xs font-semibold uppercase tracking-widest text-slate-500">Purged History</p></div>
             {purgedSubmissions.map((sub, i) => (
-              <button key={sub.id} onClick={() => openSubmission(sub.id)} className={`w-full text-left px-5 py-4 flex items-center justify-between hover:bg-slate-800 transition-colors ${i > 0 ? 'border-t border-slate-800' : ''}`}>
+              <Link key={sub.id} href={submissionHref(sub.id)} className={`w-full text-left px-5 py-4 flex items-center justify-between hover:bg-slate-800 transition-colors ${i > 0 ? 'border-t border-slate-800' : ''}`}>
                 <div>
                   <p className="font-semibold text-slate-400">PHI Purged</p>
                   <p className="text-sm text-slate-600 mt-1">{fmtDate(sub.visit_date)}</p>
                 </div>
                 <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-slate-700 text-slate-500">Purged</span>
-              </button>
+              </Link>
             ))}
           </div>
         )}
@@ -297,13 +298,13 @@ export default function MedicExportsDashboard({ sites, submissions, medDeclarati
           <div className="rounded-xl border border-slate-700/50 bg-slate-800/60 overflow-hidden">
             <div className="px-4 py-3 border-b border-slate-700/50"><p className="text-xs font-semibold uppercase tracking-widest text-slate-500">Ready to Export</p></div>
             {readyMedDecs.map((m, i) => (
-              <button key={m.id} onClick={() => openMedDec(m.id)} className={`w-full text-left px-5 py-4 flex items-center justify-between hover:bg-slate-700/30 transition-colors ${i > 0 ? 'border-t border-slate-700/50' : ''}`}>
+              <Link key={m.id} href={medDecHref(m.id)} className={`w-full text-left px-5 py-4 flex items-center justify-between hover:bg-slate-700/30 transition-colors ${i > 0 ? 'border-t border-slate-700/50' : ''}`}>
                 <div>
                   <p className="font-semibold text-slate-100">{m.worker_name || 'Unknown Worker'}</p>
                   <p className="text-sm text-slate-500 mt-1">{fmtDate(m.submitted_at)} · {m.medications?.length ?? 0} medication{(m.medications?.length ?? 0) === 1 ? '' : 's'}</p>
                 </div>
                 <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${MED_DEC_STATUS_COLORS[m.medic_review_status]}`}>{m.medic_review_status}</span>
-              </button>
+              </Link>
             ))}
           </div>
         )}
@@ -328,13 +329,13 @@ export default function MedicExportsDashboard({ sites, submissions, medDeclarati
               {exportedMedDecs.map((m, i) => (
                 <div key={m.id} className={`flex items-center gap-3 px-4 py-4 ${i > 0 ? 'border-t border-slate-700/50' : ''}`}>
                   <input type="checkbox" checked={selectedMedDecIds.has(m.id)} onChange={() => toggleSelected(setSelectedMedDecIds, m.id)} className="w-4 h-4 rounded border-slate-600 bg-slate-700 text-red-500 cursor-pointer" />
-                  <button onClick={() => openMedDec(m.id)} className="flex-1 text-left flex items-center justify-between hover:bg-slate-700/30 rounded-lg px-2 py-1 -mx-2 -my-1 transition-colors">
+                  <Link href={medDecHref(m.id)} className="flex-1 text-left flex items-center justify-between hover:bg-slate-700/30 rounded-lg px-2 py-1 -mx-2 -my-1 transition-colors">
                     <div>
                       <p className="font-semibold text-slate-100">{m.worker_name || 'Unknown Worker'}</p>
                       <p className="text-sm text-slate-500 mt-1">{fmtDate(m.submitted_at)} · {m.medications?.length ?? 0} medication{(m.medications?.length ?? 0) === 1 ? '' : 's'}</p>
                     </div>
                     {m.exported_at && <PurgeCountdown exportedAt={m.exported_at} />}
-                  </button>
+                  </Link>
                 </div>
               ))}
             </div>
@@ -345,13 +346,13 @@ export default function MedicExportsDashboard({ sites, submissions, medDeclarati
           <div className="rounded-xl border border-slate-800 bg-slate-900/60 overflow-hidden">
             <div className="px-4 py-3 border-b border-slate-800"><p className="text-xs font-semibold uppercase tracking-widest text-slate-500">Purged History</p></div>
             {purgedMedDecs.map((m, i) => (
-              <button key={m.id} onClick={() => openMedDec(m.id)} className={`w-full text-left px-5 py-4 flex items-center justify-between hover:bg-slate-800 transition-colors ${i > 0 ? 'border-t border-slate-800' : ''}`}>
+              <Link key={m.id} href={medDecHref(m.id)} className={`w-full text-left px-5 py-4 flex items-center justify-between hover:bg-slate-800 transition-colors ${i > 0 ? 'border-t border-slate-800' : ''}`}>
                 <div>
                   <p className="font-semibold text-slate-400">PHI Purged</p>
                   <p className="text-sm text-slate-600 mt-1">{fmtDate(m.submitted_at)}</p>
                 </div>
                 <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-slate-700 text-slate-500">Purged</span>
-              </button>
+              </Link>
             ))}
           </div>
         )}
@@ -359,3 +360,12 @@ export default function MedicExportsDashboard({ sites, submissions, medDeclarati
     </div>
   )
 }
+type MedicExportsSubmission = Pick<
+  Submission,
+  'id' | 'business_id' | 'site_id' | 'worker_snapshot' | 'visit_date' | 'shift_type' | 'status' | 'submitted_at' | 'exported_at' | 'phi_purged_at'
+>
+
+type MedicExportsMedDec = Pick<
+  MedicationDeclaration,
+  'id' | 'business_id' | 'site_id' | 'worker_name' | 'submitted_at' | 'medic_review_status' | 'exported_at' | 'phi_purged_at' | 'medications'
+>
