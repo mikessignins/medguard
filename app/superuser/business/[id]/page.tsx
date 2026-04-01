@@ -1,10 +1,13 @@
 import { createClient } from '@/lib/supabase/server'
+import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { redirect, notFound } from 'next/navigation'
 import Link from 'next/link'
 import { format } from 'date-fns'
 import ReminderIntervalPicker from '@/components/superuser/ReminderIntervalPicker'
 import ModulesToggle from '@/components/superuser/ModulesToggle'
 import LogoUpload from '@/components/superuser/LogoUpload'
+import TrialPeriodManager from '@/components/superuser/TrialPeriodManager'
+import IsTestOverride from '@/components/superuser/IsTestOverride'
 
 export default async function BusinessDetailPage({ params }: { params: { id: string } }) {
   const supabase = await createClient()
@@ -19,7 +22,12 @@ export default async function BusinessDetailPage({ params }: { params: { id: str
 
   if (!account || account.role !== 'superuser') redirect('/')
 
-  const { data: business } = await supabase
+  const service = createServiceClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  )
+
+  const { data: business } = await service
     .from('businesses')
     .select('*')
     .eq('id', params.id)
@@ -27,11 +35,17 @@ export default async function BusinessDetailPage({ params }: { params: { id: str
 
   if (!business) notFound()
 
-  const [{ data: admins }, { data: medics }, { data: sites }, { data: subStats }] = await Promise.all([
-    supabase.from('user_accounts').select('id, display_name, email, contract_end_date').eq('business_id', params.id).eq('role', 'admin'),
-    supabase.from('user_accounts').select('id, display_name, email, role, site_ids, contract_end_date').eq('business_id', params.id).in('role', ['medic', 'pending_medic']),
-    supabase.from('sites').select('id, name, is_office, latitude, longitude').eq('business_id', params.id),
-    supabase.from('submissions').select('status').eq('business_id', params.id),
+  const [{ data: admins }, { data: medics }, { data: sites }, { data: subStats }, { data: newSubmissions }] = await Promise.all([
+    service.from('user_accounts').select('id, display_name, email, contract_end_date').eq('business_id', params.id).eq('role', 'admin'),
+    service.from('user_accounts').select('id, display_name, email, role, site_ids, contract_end_date').eq('business_id', params.id).in('role', ['medic', 'pending_medic']),
+    service.from('sites').select('id, name, is_office, latitude, longitude').eq('business_id', params.id),
+    service.from('submissions').select('status').eq('business_id', params.id),
+    // Non-PHI fields only — superusers never see worker_snapshot
+    service.from('submissions')
+      .select('id, submitted_at, site_name, is_test')
+      .eq('business_id', params.id)
+      .eq('status', 'New')
+      .order('submitted_at', { ascending: false }),
   ])
 
   const statusCounts = (subStats || []).reduce((acc, s) => {
@@ -104,6 +118,17 @@ export default async function BusinessDetailPage({ params }: { params: { id: str
         <LogoUpload
           businessId={business.id}
           currentLogoUrl={business.logo_url}
+        />
+
+        {/* Trial period — controls auto-tagging of new submissions as test forms */}
+        <TrialPeriodManager
+          businessId={business.id}
+          initialTrialUntil={business.trial_until ?? null}
+        />
+
+        {/* Manual is_test override — only shows when there are 'New' submissions */}
+        <IsTestOverride
+          initialSubmissions={newSubmissions ?? []}
         />
 
         {/* Admins */}

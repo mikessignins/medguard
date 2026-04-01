@@ -61,6 +61,23 @@ async function generateMedDecPdf(id: string) {
     } catch { /* continue without logo */ }
   }
 
+  // Export gates
+  if (raw.is_test) {
+    return new NextResponse(
+      'This is a test submission and cannot be exported. Test submissions do not count toward billing and are excluded from the governance workflow.',
+      { status: 422 }
+    )
+  }
+
+  // Gate: only export reviewed (non-pending, non-in-review) declarations
+  const PENDING_STATUSES = ['Pending', 'In Review']
+  if (PENDING_STATUSES.includes(raw.medic_review_status)) {
+    return new NextResponse(
+      `Medication declarations must be reviewed before they can be exported. Current status: ${raw.medic_review_status}.`,
+      { status: 422 }
+    )
+  }
+
   const rawUploads = parseArray<ScriptUpload>(raw.script_uploads)
 
   // Fetch script image buffers
@@ -84,15 +101,7 @@ async function generateMedDecPdf(id: string) {
     }
   }
 
-  // Mark exported_at if not already set
-  if (!raw.exported_at) {
-    await supabase
-      .from('medication_declarations')
-      .update({ exported_at: new Date().toISOString() })
-      .eq('id', id)
-  }
-
-  // Build filename
+  // Build filename (exported_at written after PDF is confirmed — see below)
   const fullName  = raw.worker_name?.trim() || 'Unknown'
   const nameParts = fullName.split(/\s+/)
   const surname   = nameParts.length > 1 ? nameParts[nameParts.length - 1] : fullName
@@ -341,6 +350,17 @@ async function generateMedDecPdf(id: string) {
 
   doc.end()
   const pdfBuffer = await bufferPromise
+
+  // Mark exported_at and exported_by_name only after PDF generation succeeds.
+  if (!raw.exported_at) {
+    await supabase
+      .from('medication_declarations')
+      .update({
+        exported_at: new Date().toISOString(),
+        exported_by_name: auth.account.display_name as string,
+      })
+      .eq('id', id)
+  }
 
   return new NextResponse(pdfBuffer as unknown as BodyInit, {
     status: 200,

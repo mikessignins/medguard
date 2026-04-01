@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { createClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
+import { hasMedicScopeAccess } from '@/lib/medic-scope'
 
 export const runtime = 'nodejs'
 
@@ -24,7 +25,7 @@ export async function POST(request: NextRequest) {
   if (!user) return new NextResponse('Unauthorized', { status: 401 })
 
   const { data: account } = await authClient
-    .from('user_accounts').select('role, display_name').eq('id', user.id).single()
+    .from('user_accounts').select('role, display_name, business_id, site_ids').eq('id', user.id).single()
   if (!account || account.role !== 'medic') {
     return new NextResponse('Forbidden', { status: 403 })
   }
@@ -49,8 +50,17 @@ export async function POST(request: NextRequest) {
   // Fetch med decs before wiping — guard: all must be exported first
   const { data: medDecs } = await supabase
     .from('medication_declarations')
-    .select('id, business_id, site_id, worker_name, worker_dob, exported_at')
+    .select('id, business_id, site_id, site_name, worker_name, worker_dob, exported_at, exported_by_name, medic_name, medic_reviewed_at')
     .in('id', ids)
+
+  if ((medDecs ?? []).length !== ids.length) {
+    return NextResponse.json({ error: 'One or more declarations were not found.' }, { status: 404 })
+  }
+
+  const outOfScope = (medDecs ?? []).some((declaration) => !hasMedicScopeAccess(account, declaration))
+  if (outOfScope) {
+    return new NextResponse('Forbidden', { status: 403 })
+  }
 
   const unexported = (medDecs ?? []).filter(m => !m.exported_at)
   if (unexported.length > 0) {
@@ -60,28 +70,23 @@ export async function POST(request: NextRequest) {
     )
   }
 
-  // Fetch site names
-  const allSiteIds = (medDecs ?? []).map(m => m.site_id).filter((id): id is string => !!id)
-  const uniqueSiteIds = allSiteIds.filter((id, i) => allSiteIds.indexOf(id) === i)
-  let siteMap: Record<string, string> = {}
-  if (uniqueSiteIds.length > 0) {
-    const { data: sites } = await supabase.from('sites').select('id, name').in('id', uniqueSiteIds)
-    siteMap = Object.fromEntries((sites ?? []).map(s => [s.id, s.name]))
-  }
-
-  // Build audit log entries
+  // Build audit log entries (site_name already snapshotted on row since migration 002)
   const purgedAt = new Date().toISOString()
   const auditRows = (medDecs ?? []).map(m => ({
-    submission_id: m.id,
-    worker_name: m.worker_name ?? null,
-    worker_dob: m.worker_dob ?? null,
-    site_id: m.site_id ?? null,
-    site_name: m.site_id ? (siteMap[m.site_id] ?? null) : null,
-    business_id: m.business_id,
-    medic_user_id: user.id,
-    medic_name: account.display_name as string,
-    purged_at: purgedAt,
-    form_type: 'medication_declaration',
+    submission_id:    m.id,
+    worker_name:      m.worker_name ?? null,
+    worker_dob:       m.worker_dob ?? null,
+    site_id:          m.site_id ?? null,
+    site_name:        m.site_name ?? null,
+    business_id:      m.business_id,
+    medic_user_id:    user.id,
+    medic_name:       account.display_name as string,
+    purged_at:        purgedAt,
+    form_type:        'medication_declaration',
+    exported_at:      m.exported_at ?? null,
+    exported_by_name: m.exported_by_name ?? null,
+    approved_by_name: m.medic_name ?? null,
+    approved_at:      m.medic_reviewed_at ?? null,
   }))
 
   if (auditRows.length > 0) {

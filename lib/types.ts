@@ -28,6 +28,7 @@ export interface UserAccount {
   role: UserRole
   site_ids: string[]
   contract_end_date: string | null
+  preferred_language?: string | null
 }
 
 export interface Business {
@@ -35,6 +36,7 @@ export interface Business {
   name: string
   contact_email: string
   is_suspended?: boolean
+  trial_until?: string | null
   reminder_interval_months?: number
   confidential_med_dec_enabled?: boolean
   logo_url?: string | null
@@ -57,6 +59,7 @@ export interface MedicationDeclaration {
   id: string
   business_id: string
   site_id: string
+  site_name?: string | null
   worker_id: string
   worker_name: string
   worker_dob: string
@@ -74,7 +77,9 @@ export interface MedicationDeclaration {
   medic_reviewed_at: string | null
   script_uploads: ScriptUpload[]
   exported_at: string | null
+  exported_by_name?: string | null
   phi_purged_at: string | null
+  is_test?: boolean
 }
 
 export interface Site {
@@ -136,6 +141,7 @@ export interface Decision {
   outcome: string
   note?: string
   decided_by_user_id: string
+  decided_by_name?: string
   decided_at: string
 }
 
@@ -153,6 +159,7 @@ export interface Submission {
   id: string
   business_id: string
   site_id: string
+  site_name?: string | null
   worker_id: string
   worker_snapshot: WorkerSnapshot
   role: string
@@ -164,8 +171,11 @@ export interface Submission {
   site_specific_answers: Record<string, unknown>
   decision: Decision | null
   exported_at: string | null
+  exported_by_name?: string | null
   phi_purged_at: string | null
   comments: MedicComment[]
+  version?: number
+  is_test?: boolean
 }
 
 export interface WorkerMembership {

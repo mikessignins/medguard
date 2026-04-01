@@ -3,6 +3,7 @@ import { usePathname, useRouter } from 'next/navigation'
 
 const NAV_ITEMS = [
   { label: 'Overview', href: '/admin' },
+  { label: 'Submissions', href: '/admin/submissions' },
   { label: 'Staff', href: '/admin/staff' },
   { label: 'Sites', href: '/admin/sites' },
   { label: 'Invite Code', href: '/admin/invite' },

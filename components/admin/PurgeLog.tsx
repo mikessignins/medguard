@@ -14,6 +14,10 @@ interface PurgeLogEntry {
   medic_name: string | null
   purged_at: string
   form_type: string | null
+  exported_at: string | null
+  exported_by_name: string | null
+  approved_by_name: string | null
+  approved_at: string | null
 }
 
 interface Props {
@@ -115,8 +119,7 @@ export default function PurgeLog({ logs, showBusiness = false }: Props) {
                     <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Site</th>
                     {hasFormTypes && <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Form Type</th>}
                     {showBusiness && <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Business</th>}
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Purged By</th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">Date &amp; Time</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Audit Chain</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -159,15 +162,48 @@ export default function PurgeLog({ logs, showBusiness = false }: Props) {
                             {entry.business_id ?? <span className="text-slate-600 italic">—</span>}
                           </td>
                         )}
-                        <td className="px-4 py-3 text-slate-400">
-                          {isAuto ? (
-                            <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-slate-700 text-slate-400">Auto-purge</span>
-                          ) : (
-                            entry.medic_name ?? <span className="text-slate-600 italic">—</span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3 text-slate-400 whitespace-nowrap">
-                          {(() => { try { return format(new Date(entry.purged_at), 'dd MMM yyyy, HH:mm') } catch { return entry.purged_at } })()}
+                        <td className="px-4 py-3">
+                          <div className="space-y-1 text-xs">
+                            {entry.approved_by_name && (
+                              <div className="flex items-start gap-1.5">
+                                <span className="text-slate-600 w-16 shrink-0">Approved</span>
+                                <span className="text-slate-400">
+                                  {entry.approved_by_name}
+                                  {entry.approved_at && (
+                                    <span className="text-slate-600 ml-1">
+                                      · {(() => { try { return format(new Date(entry.approved_at), 'dd MMM yy, HH:mm') } catch { return '' } })()}
+                                    </span>
+                                  )}
+                                </span>
+                              </div>
+                            )}
+                            {entry.exported_by_name && (
+                              <div className="flex items-start gap-1.5">
+                                <span className="text-slate-600 w-16 shrink-0">Exported</span>
+                                <span className="text-slate-400">
+                                  {entry.exported_by_name}
+                                  {entry.exported_at && (
+                                    <span className="text-slate-600 ml-1">
+                                      · {(() => { try { return format(new Date(entry.exported_at), 'dd MMM yy, HH:mm') } catch { return '' } })()}
+                                    </span>
+                                  )}
+                                </span>
+                              </div>
+                            )}
+                            <div className="flex items-start gap-1.5">
+                              <span className="text-slate-600 w-16 shrink-0">Purged</span>
+                              <span className="text-slate-400">
+                                {isAuto ? (
+                                  <span className="font-medium px-1.5 py-0.5 rounded bg-slate-700 text-slate-400">Auto</span>
+                                ) : (
+                                  entry.medic_name ?? <span className="italic text-slate-600">Unknown</span>
+                                )}
+                                <span className="text-slate-600 ml-1">
+                                  · {(() => { try { return format(new Date(entry.purged_at), 'dd MMM yy, HH:mm') } catch { return entry.purged_at } })()}
+                                </span>
+                              </span>
+                            </div>
+                          </div>
                         </td>
                       </tr>
                     )

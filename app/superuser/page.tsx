@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { redirect } from 'next/navigation'
 import SuperuserDashboard from '@/components/superuser/SuperuserDashboard'
 import type { Business } from '@/lib/types'
@@ -26,20 +27,25 @@ export default async function SuperuserPage() {
 
   if (!account || account.role !== 'superuser') redirect('/')
 
-  const { data: businesses } = await supabase
+  const service = createServiceClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  )
+
+  const { data: businesses } = await service
     .from('businesses')
     .select('*')
     .order('name')
 
-  const { data: allUsers } = await supabase
+  const { data: allUsers } = await service
     .from('user_accounts')
     .select('business_id, role')
 
-  const { data: allSites } = await supabase
+  const { data: allSites } = await service
     .from('sites')
     .select('business_id')
 
-  const { data: allSubmissions } = await supabase
+  const { data: allSubmissions } = await service
     .from('submissions')
     .select('business_id, submitted_at')
     .order('submitted_at', { ascending: false })

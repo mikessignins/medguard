@@ -27,12 +27,15 @@ export default async function SuperuserBillingPage() {
     service
       .from('submissions')
       .select('business_id, submitted_at, status')
-      .in('status', ['In Review', 'Approved', 'Requires Follow-up'])
+      // All statuses count for billing except Recalled and test submissions
+      .neq('status', 'Recalled')
+      .eq('is_test', false)
       .order('submitted_at', { ascending: false }),
     service
       .from('medication_declarations')
       .select('business_id, submitted_at, medic_review_status')
-      .in('medic_review_status', ['Normal Duties', 'Restricted Duties', 'Unfit for Work'])
+      // All submitted med decs count — no recalled equivalent, exclude test submissions
+      .eq('is_test', false)
       .order('submitted_at', { ascending: false }),
   ])
 

@@ -28,6 +28,13 @@ export default function InviteCodeManager({ initialCode, businessId }: Props) {
 
     setLoading(false)
     if (upsertError) { setError(upsertError.message); return }
+
+    fetch('/api/admin/audit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'invite_code_regenerated' }),
+    }).catch(() => { /* non-blocking */ })
+
     setCode(newCode)
   }
 

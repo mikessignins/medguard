@@ -13,17 +13,23 @@ export default async function MedicLayout({ children }: { children: React.ReactN
 
   const { data: account } = await supabase
     .from('user_accounts')
-    .select('display_name, role, business_id')
+    .select('display_name, role, business_id, contract_end_date')
     .eq('id', user.id)
     .single()
 
   if (!account || account.role !== 'medic') redirect('/')
 
+  if (account.contract_end_date && new Date(account.contract_end_date) < new Date()) {
+    redirect('/expired')
+  }
+
   const { data: business } = await supabase
     .from('businesses')
-    .select('logo_url')
+    .select('logo_url, is_suspended')
     .eq('id', account.business_id)
     .single()
+
+  if (business?.is_suspended) redirect('/suspended')
 
   return (
     <div className="flex min-h-screen bg-slate-950">

@@ -4,6 +4,7 @@ import { createClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
 import { randomUUID } from 'crypto'
 import type { MedicComment } from '@/lib/types'
+import { hasMedicScopeAccess } from '@/lib/medic-scope'
 
 export const runtime = 'nodejs'
 
@@ -27,11 +28,16 @@ async function getAuthenticatedMedic() {
   if (!user) return null
   const { data: account } = await authClient
     .from('user_accounts')
-    .select('role, display_name')
+    .select('role, display_name, business_id, site_ids')
     .eq('id', user.id)
     .single()
   if (!account || account.role !== 'medic') return null
-  return { id: user.id, name: account.display_name as string }
+  return {
+    id: user.id,
+    name: account.display_name as string,
+    business_id: account.business_id ?? null,
+    site_ids: account.site_ids ?? [],
+  }
 }
 
 function serviceClient() {
@@ -49,6 +55,16 @@ async function fetchComments(submissionId: string): Promise<MedicComment[]> {
     .single()
   const raw = data?.comments
   return Array.isArray(raw) ? (raw as MedicComment[]) : []
+}
+
+async function fetchScopedSubmission(submissionId: string) {
+  const { data } = await serviceClient()
+    .from('submissions')
+    .select('id, business_id, site_id, comments')
+    .eq('id', submissionId)
+    .single()
+
+  return data
 }
 
 async function writeComments(submissionId: string, comments: MedicComment[]) {
@@ -78,6 +94,10 @@ export async function POST(
   const note = body.note?.trim()
   if (!note) return new NextResponse('note is required', { status: 400 })
 
+  const submission = await fetchScopedSubmission(params.id)
+  if (!submission) return new NextResponse('Submission not found', { status: 404 })
+  if (!hasMedicScopeAccess(medic, submission)) return new NextResponse('Forbidden', { status: 403 })
+
   const newComment: MedicComment = {
     id: randomUUID(),
     medic_user_id: medic.id,
@@ -88,7 +108,7 @@ export async function POST(
     edited_at: null,
   }
 
-  const current = await fetchComments(params.id)
+  const current = Array.isArray(submission.comments) ? (submission.comments as MedicComment[]) : await fetchComments(params.id)
   const error = await writeComments(params.id, [...current, newComment])
   if (error) {
     console.error('[comments/POST] error:', error)
@@ -117,7 +137,11 @@ export async function PATCH(
   const note = body.note?.trim()
   if (!note || !body.commentId) return new NextResponse('commentId and note required', { status: 400 })
 
-  const current = await fetchComments(params.id)
+  const submission = await fetchScopedSubmission(params.id)
+  if (!submission) return new NextResponse('Submission not found', { status: 404 })
+  if (!hasMedicScopeAccess(medic, submission)) return new NextResponse('Forbidden', { status: 403 })
+
+  const current = Array.isArray(submission.comments) ? (submission.comments as MedicComment[]) : await fetchComments(params.id)
   const idx = current.findIndex(c => c.id === body.commentId)
   if (idx === -1) return new NextResponse('Comment not found', { status: 404 })
   if (current[idx].medic_user_id !== medic.id) return new NextResponse('Forbidden', { status: 403 })
@@ -152,7 +176,11 @@ export async function DELETE(
 
   if (!body.commentId) return new NextResponse('commentId required', { status: 400 })
 
-  const current = await fetchComments(params.id)
+  const submission = await fetchScopedSubmission(params.id)
+  if (!submission) return new NextResponse('Submission not found', { status: 404 })
+  if (!hasMedicScopeAccess(medic, submission)) return new NextResponse('Forbidden', { status: 403 })
+
+  const current = Array.isArray(submission.comments) ? (submission.comments as MedicComment[]) : await fetchComments(params.id)
   const comment = current.find(c => c.id === body.commentId)
   if (!comment) return new NextResponse('Comment not found', { status: 404 })
   if (comment.medic_user_id !== medic.id) return new NextResponse('Forbidden', { status: 403 })

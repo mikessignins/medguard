@@ -71,7 +71,21 @@ async function generatePdf(id: string) {
     } catch { /* continue without logo */ }
   }
 
-  // 4. Parse snapshot / decision / scripts
+  // 4. Export gates
+  if (raw.is_test) {
+    return new NextResponse(
+      'This is a test submission and cannot be exported. Test submissions do not count toward billing and are excluded from the governance workflow.',
+      { status: 422 }
+    )
+  }
+  if (raw.status !== 'Approved') {
+    return new NextResponse(
+      `Only approved declarations can be exported. Current status: ${raw.status ?? 'Unknown'}.`,
+      { status: 422 }
+    )
+  }
+
+  // 5. Parse snapshot / decision / scripts
   const ws         = parseJson<WorkerSnapshot>(raw.worker_snapshot)
   const decision   = parseJson<Decision>(raw.decision)
   const rawUploads = parseArray<ScriptUpload>(raw.script_uploads)
@@ -96,15 +110,7 @@ async function generatePdf(id: string) {
     }
   }
 
-  // 6. Mark exported_at if not already set
-  if (!raw.exported_at) {
-    await supabase
-      .from('submissions')
-      .update({ exported_at: new Date().toISOString() })
-      .eq('id', raw.id)
-  }
-
-  // 7. Build filename
+  // 6. Build filename (exported_at written after PDF is confirmed — see below)
   const fullName   = ws?.fullName?.trim() || 'Unknown'
   const nameParts  = fullName.split(/\s+/)
   const surname    = nameParts.length > 1 ? nameParts[nameParts.length - 1] : fullName
@@ -395,6 +401,18 @@ async function generatePdf(id: string) {
 
   doc.end()
   const pdfBuffer = await bufferPromise
+
+  // Mark exported_at and exported_by_name only after PDF generation succeeds.
+  // This prevents the countdown starting on a form whose PDF was never delivered.
+  if (!raw.exported_at) {
+    await supabase
+      .from('submissions')
+      .update({
+        exported_at: new Date().toISOString(),
+        exported_by_name: auth.account.display_name as string,
+      })
+      .eq('id', raw.id)
+  }
 
   return new NextResponse(pdfBuffer as unknown as BodyInit, {
     status: 200,

@@ -94,6 +94,22 @@ export default function StaffManager({ pendingMedics: initialPending, activeMedi
       return
     }
 
+    // Audit log — fire-and-forget, non-blocking
+    fetch('/api/admin/audit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: isApproving ? 'medic_approved' : 'site_assignment_changed',
+        target_user_id: modalMedic.id,
+        target_name: modalMedic.display_name,
+        detail: {
+          site_ids: selectedSiteIds,
+          site_names: getSiteNames(selectedSiteIds),
+          contract_end_date: contractEndDate || null,
+        },
+      }),
+    }).catch(() => { /* non-blocking */ })
+
     const updated = { ...modalMedic, ...updates } as UserAccount
 
     if (isApproving) {
@@ -123,6 +139,16 @@ export default function StaffManager({ pendingMedics: initialPending, activeMedi
       setLoading(null)
       return
     }
+
+    fetch('/api/admin/audit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'medic_revoked',
+        target_user_id: medic.id,
+        target_name: medic.display_name,
+      }),
+    }).catch(() => { /* non-blocking */ })
 
     const updated = { ...medic, role: 'pending_medic' as const }
     setActiveMedics(prev => prev.filter(m => m.id !== medic.id))
@@ -155,6 +181,21 @@ export default function StaffManager({ pendingMedics: initialPending, activeMedi
     }
 
     setContractorSuccess(`Contractor medic account created for ${contractorForm.email}.`)
+
+    fetch('/api/admin/audit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'contractor_medic_created',
+        target_name: contractorForm.display_name.trim(),
+        detail: {
+          email: contractorForm.email.trim(),
+          site_names: getSiteNames(contractorForm.site_ids),
+          contract_end_date: contractorForm.contract_end_date || null,
+        },
+      }),
+    }).catch(() => { /* non-blocking */ })
+
     setContractorForm(EMPTY_CONTRACTOR)
 
     const { data: refreshed } = await supabase

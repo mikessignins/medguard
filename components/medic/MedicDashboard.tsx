@@ -88,23 +88,47 @@ export default function MedicDashboard({ sites, submissions, medDeclarations, me
   const [purgeError, setPurgeError] = useState('')
   const router = useRouter()
 
-  // Auto-refresh when a worker recalls a submission from iOS
+  // Real-time sync: refresh when any submission changes on this medic's sites.
+  // Covers: new submissions from iOS, status changes by another medic or iOS,
+  // worker recalls, and comment updates.
   useEffect(() => {
     const supabase = createClient()
     const siteIds = sites.map(s => s.id)
     if (siteIds.length === 0) return
 
     const channel = supabase
-      .channel('medic-submissions-watch')
+      .channel('medic-realtime')
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'submissions',
+      }, (payload) => {
+        const row = payload.new as { site_id?: string }
+        if (siteIds.includes(row.site_id ?? '')) router.refresh()
+      })
       .on('postgres_changes', {
         event: 'UPDATE',
         schema: 'public',
         table: 'submissions',
       }, (payload) => {
-        const updated = payload.new as { site_id?: string; status?: string }
-        if (siteIds.includes(updated.site_id ?? '') && updated.status === 'Recalled') {
-          router.refresh()
-        }
+        const row = payload.new as { site_id?: string }
+        if (siteIds.includes(row.site_id ?? '')) router.refresh()
+      })
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'medication_declarations',
+      }, (payload) => {
+        const row = payload.new as { site_id?: string }
+        if (siteIds.includes(row.site_id ?? '')) router.refresh()
+      })
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'medication_declarations',
+      }, (payload) => {
+        const row = payload.new as { site_id?: string }
+        if (siteIds.includes(row.site_id ?? '')) router.refresh()
       })
       .subscribe()
 
