@@ -106,7 +106,7 @@ export default function SuperuserBilling({ businesses, submissions, medDeclarati
     <div>
       <div className="mb-8">
         <h1 className="text-xl font-bold text-slate-100">Billing Overview</h1>
-        <p className="text-sm text-slate-500 mt-0.5">All reviewed forms across all businesses — counts update in real time.</p>
+        <p className="text-sm text-slate-500 mt-0.5">Billable totals include all non-test emergency declarations except recalled forms, plus all non-test medication declarations.</p>
       </div>
 
       {/* Business selector */}

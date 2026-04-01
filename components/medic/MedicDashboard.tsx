@@ -9,8 +9,6 @@ import { computeRiskChips, type RiskChip } from '@/lib/risk-chips'
 import { encodeQueue } from '@/lib/queue-params'
 
 const ACTIVE_STATUS_ORDER: SubmissionStatus[] = ['New', 'In Review']
-const FINAL_SUBMISSION_STATUSES: SubmissionStatus[] = ['Approved', 'Requires Follow-up']
-
 const STATUS_COLORS: Record<SubmissionStatus, string> = {
   'New': 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20',
   'In Review': 'bg-amber-500/10 text-amber-400 border border-amber-500/20',
@@ -91,10 +89,17 @@ export default function MedicDashboard({ sites, submissions, medDeclarations, me
   const siteSubmissions = submissions.filter((s) => s.site_id === activeTab && s.status !== 'Recalled')
   const activeQueueSubmissions = siteSubmissions.filter((s) => !s.exported_at && !s.phi_purged_at && ACTIVE_STATUS_ORDER.includes(s.status))
   const newCount = activeQueueSubmissions.filter((s) => s.status === 'New').length
-  const pendingMedDecCount = medDecEnabled
-    ? medDeclarations.filter((m) => m.site_id === activeTab && !m.exported_at && !m.phi_purged_at && !MEDDEC_FINAL.includes(m.medic_review_status)).length
-    : 0
-  const readyToExportCount = siteSubmissions.filter((s) => !s.exported_at && !s.phi_purged_at && FINAL_SUBMISSION_STATUSES.includes(s.status)).length
+  const inReviewCount = activeQueueSubmissions.filter((s) => s.status === 'In Review').length
+  const approvedCount = siteSubmissions.filter((s) => !s.exported_at && !s.phi_purged_at && s.status === 'Approved').length
+  const followUpCount = siteSubmissions.filter((s) => !s.exported_at && !s.phi_purged_at && s.status === 'Requires Follow-up').length
+
+  const activeMedDecs = medDecEnabled
+    ? medDeclarations.filter((m) => m.site_id === activeTab && !m.exported_at && !m.phi_purged_at && !MEDDEC_FINAL.includes(m.medic_review_status))
+    : []
+  const medDecPendingCount = activeMedDecs.filter((m) => !m.medic_review_status || m.medic_review_status === 'Pending').length
+  const medDecInReviewCount = activeMedDecs.filter((m) => m.medic_review_status === 'In Review').length
+  const medDecActiveCount = activeMedDecs.length
+  const readyToExportCount = approvedCount + followUpCount
   const readyMedDecCount = medDecEnabled
     ? medDeclarations.filter((m) => m.site_id === activeTab && !m.exported_at && !m.phi_purged_at && MEDDEC_FINAL.includes(m.medic_review_status)).length
     : 0
@@ -117,44 +122,69 @@ export default function MedicDashboard({ sites, submissions, medDeclarations, me
     )
   }
 
-  const statNew = activeQueueSubmissions.filter((s) => s.status === 'New').length
-  const statInReview = activeQueueSubmissions.filter((s) => s.status === 'In Review').length
+  const declarationCards = [
+    { label: 'New', value: newCount, color: 'text-indigo-400', active: 'bg-indigo-500/15 border-indigo-500/40', onClick: () => { setActiveSection('declarations'); setFilter((value) => value === 'New' ? 'All' : 'New') }, selected: activeSection === 'declarations' && filter === 'New', helper: 'Needs first review' },
+    { label: 'In Review', value: inReviewCount, color: 'text-amber-400', active: 'bg-amber-500/15 border-amber-500/40', onClick: () => { setActiveSection('declarations'); setFilter((value) => value === 'In Review' ? 'All' : 'In Review') }, selected: activeSection === 'declarations' && filter === 'In Review', helper: 'Already opened by a medic' },
+    { label: 'Approved', value: approvedCount, color: 'text-emerald-400', active: 'bg-emerald-500/15 border-emerald-500/40', onClick: () => router.push(`/medic/exports?site=${activeTab}`), selected: false, helper: 'Ready to export' },
+    { label: 'Follow-up', value: followUpCount, color: 'text-red-400', active: 'bg-red-500/15 border-red-500/40', onClick: () => router.push(`/medic/exports?site=${activeTab}`), selected: false, helper: 'Decision made, export from exports' },
+  ] as const
+
+  const medDecCards = [
+    { label: 'Pending', value: medDecPendingCount, color: 'text-violet-400', active: 'bg-violet-500/15 border-violet-500/40', helper: 'Not yet opened' },
+    { label: 'In Review', value: medDecInReviewCount, color: 'text-amber-400', active: 'bg-amber-500/15 border-amber-500/40', helper: 'Already opened by a medic' },
+    { label: 'Ready to Export', value: readyMedDecCount, color: 'text-emerald-400', active: 'bg-emerald-500/15 border-emerald-500/40', helper: 'Moved to exports after final decision' },
+  ] as const
 
   return (
     <div>
-      <div className={`grid grid-cols-2 gap-3 mb-4 ${medDecEnabled ? 'lg:grid-cols-3' : 'lg:grid-cols-2'}`}>
-        {([
-          { label: 'New', status: 'New' as FilterType, value: statNew, color: 'text-indigo-400', active: 'bg-indigo-500/15 border-indigo-500/40' },
-          { label: 'In Review', status: 'In Review' as FilterType, value: statInReview, color: 'text-amber-400', active: 'bg-amber-500/15 border-amber-500/40' },
-        ] as const).map((card) => (
-          <button
-            key={card.status}
-            onClick={() => setFilter((value) => value === card.status ? 'All' : card.status)}
-            aria-pressed={filter === card.status}
-            className={`text-left p-4 rounded-xl border transition-all duration-150 ${
-              filter === card.status
-                ? card.active
-                : 'bg-slate-800/60 border-slate-700/50 hover:border-slate-600/60'
-            }`}
-          >
-            <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">{card.label}</p>
-            <p className={`text-2xl font-bold ${card.color}`}>{card.value}</p>
-          </button>
-        ))}
+      <div className="space-y-3 mb-4">
+        <div>
+          <p className="text-xs uppercase tracking-widest text-slate-500 mb-2">Emergency Medical Forms</p>
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            {declarationCards.map((card) => (
+              <button
+                key={card.label}
+                onClick={card.onClick}
+                aria-pressed={card.selected}
+                className={`text-left p-4 rounded-xl border transition-all duration-150 ${
+                  card.selected
+                    ? card.active
+                    : 'bg-slate-800/60 border-slate-700/50 hover:border-slate-600/60'
+                }`}
+              >
+                <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">{card.label}</p>
+                <p className={`text-2xl font-bold ${card.color}`}>{card.value}</p>
+                <p className="text-xs text-slate-600 mt-1">{card.helper}</p>
+              </button>
+            ))}
+          </div>
+        </div>
+
         {medDecEnabled && (
-          <button
-            onClick={() => setActiveSection('meddec')}
-            aria-pressed={activeSection === 'meddec'}
-            className={`text-left p-4 rounded-xl border transition-all duration-150 ${
-              activeSection === 'meddec'
-                ? 'bg-indigo-500/15 border-indigo-500/40'
-                : 'bg-slate-800/60 border-slate-700/50 hover:border-slate-600/60'
-            }`}
-          >
-            <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Med Decs</p>
-            <p className="text-2xl font-bold text-violet-400">{pendingMedDecCount}</p>
-            <p className="text-xs text-slate-600 mt-0.5">pending</p>
-          </button>
+          <div>
+            <p className="text-xs uppercase tracking-widest text-slate-500 mb-2">Confidential Medication Declarations</p>
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+              {medDecCards.map((card) => (
+                <button
+                  key={card.label}
+                  onClick={() => {
+                    if (card.label === 'Ready to Export') router.push(`/medic/exports?site=${activeTab}`)
+                    else setActiveSection('meddec')
+                  }}
+                  aria-pressed={activeSection === 'meddec' && card.label !== 'Ready to Export'}
+                  className={`text-left p-4 rounded-xl border transition-all duration-150 ${
+                    activeSection === 'meddec' && card.label !== 'Ready to Export'
+                      ? 'bg-indigo-500/15 border-indigo-500/40'
+                      : 'bg-slate-800/60 border-slate-700/50 hover:border-slate-600/60'
+                  }`}
+                >
+                  <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">{card.label}</p>
+                  <p className={`text-2xl font-bold ${card.color}`}>{card.value}</p>
+                  <p className="text-xs text-slate-600 mt-1">{card.helper}</p>
+                </button>
+              ))}
+            </div>
+          </div>
         )}
       </div>
 
@@ -167,12 +197,12 @@ export default function MedicDashboard({ sites, submissions, medDeclarations, me
         </div>
       )}
 
-      {pendingMedDecCount > 0 && (
+      {medDecActiveCount > 0 && (
         <div className="mb-5 bg-indigo-500/10 border border-indigo-500/20 text-indigo-300 text-sm px-4 py-3 rounded-xl flex items-center gap-2">
           <svg className="w-4 h-4 shrink-0 text-indigo-400" fill="currentColor" viewBox="0 0 20 20">
             <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
           </svg>
-          <span><strong>{pendingMedDecCount} medication declaration{pendingMedDecCount !== 1 ? 's' : ''}</strong> pending review on this site.</span>
+          <span><strong>{medDecActiveCount} medication declaration{medDecActiveCount !== 1 ? 's' : ''}</strong> active on this site, including {medDecInReviewCount} already in review.</span>
         </div>
       )}
 
@@ -194,8 +224,14 @@ export default function MedicDashboard({ sites, submissions, medDeclarations, me
 
       <div className="flex gap-2 mb-5 overflow-x-auto pb-1">
         {sites.map((site) => {
-          const siteNew = submissions.filter((s) => s.site_id === site.id && s.status === 'New' && !s.exported_at).length
-          const siteMedDecPending = medDecEnabled
+          const siteDeclarationActive = submissions.filter((s) =>
+            s.site_id === site.id &&
+            s.status !== 'Recalled' &&
+            !s.exported_at &&
+            !s.phi_purged_at &&
+            ACTIVE_STATUS_ORDER.includes(s.status)
+          ).length
+          const siteMedDecActive = medDecEnabled
             ? medDeclarations.filter((m) => m.site_id === site.id && !m.exported_at && !m.phi_purged_at && !MEDDEC_FINAL.includes(m.medic_review_status)).length
             : 0
           const isActive = activeTab === site.id
@@ -211,8 +247,8 @@ export default function MedicDashboard({ sites, submissions, medDeclarations, me
             >
               {site.name}
               {site.is_office && <span className="text-xs text-slate-600">(Office)</span>}
-              {siteNew > 0 && <span className="bg-cyan-600 text-white text-xs rounded-full px-1.5 py-0.5 font-semibold leading-none">{siteNew}</span>}
-              {siteMedDecPending > 0 && <span className="bg-indigo-600 text-white text-xs rounded-full px-1.5 py-0.5 font-semibold leading-none">{siteMedDecPending}</span>}
+              {siteDeclarationActive > 0 && <span className="bg-cyan-600 text-white text-xs rounded-full px-1.5 py-0.5 font-semibold leading-none">{siteDeclarationActive}</span>}
+              {siteMedDecActive > 0 && <span className="bg-indigo-600 text-white text-xs rounded-full px-1.5 py-0.5 font-semibold leading-none">{siteMedDecActive}</span>}
             </button>
           )
         })}
@@ -243,9 +279,9 @@ export default function MedicDashboard({ sites, submissions, medDeclarations, me
             }`}
           >
             Medication Declarations
-            {pendingMedDecCount > 0 && (
+            {medDecActiveCount > 0 && (
               <span className="bg-indigo-600 text-white text-xs rounded-full px-1.5 py-0.5 font-semibold leading-none">
-                {pendingMedDecCount}
+                {medDecActiveCount}
               </span>
             )}
           </button>

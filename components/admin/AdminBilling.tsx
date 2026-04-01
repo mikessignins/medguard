@@ -61,7 +61,7 @@ export default function AdminBilling({ submissions, medDeclarations }: Props) {
     <div>
       <div className="mb-8">
         <h1 className="text-xl font-bold text-slate-100">Billing Summary</h1>
-        <p className="text-sm text-slate-500 mt-0.5">All reviewed forms are billable — counts only ever increase and are unaffected by purging.</p>
+        <p className="text-sm text-slate-500 mt-0.5">Billable totals include all non-test emergency declarations except recalled forms, plus all non-test medication declarations. Purging never changes billing counts.</p>
       </div>
 
       {/* Hero stat cards */}

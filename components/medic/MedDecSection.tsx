@@ -27,7 +27,9 @@ export default function MedDecSection({ medDeclarations, siteId, exportsHref = '
   const reviewed = siteDecs.filter((m) => !m.exported_at && !m.phi_purged_at && finalStatuses.includes(m.medic_review_status))
   const exported = siteDecs.filter((m) => !!m.exported_at && !m.phi_purged_at)
   const purged = siteDecs.filter((m) => !!m.phi_purged_at)
-  const pendingCount = active.filter((m) => !m.medic_review_status || m.medic_review_status === 'Pending' || m.medic_review_status === 'In Review').length
+  const pendingCount = active.filter((m) => !m.medic_review_status || m.medic_review_status === 'Pending').length
+  const inReviewCount = active.filter((m) => m.medic_review_status === 'In Review').length
+  const activeCount = active.length
 
   if (siteDecs.length === 0) return null
 
@@ -35,13 +37,24 @@ export default function MedDecSection({ medDeclarations, siteId, exportsHref = '
     <div className="mt-10">
       <div className="flex items-center gap-3 mb-5">
         <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-widest whitespace-nowrap">Medication Declarations</h2>
-        {pendingCount > 0 && (
+        {activeCount > 0 && (
           <span className="text-xs bg-indigo-600 text-white px-2 py-0.5 rounded-full font-semibold shrink-0">
-            {pendingCount} pending
+            {activeCount} active
           </span>
         )}
         <div className="flex-1 h-px bg-slate-800" />
       </div>
+
+      {activeCount > 0 && (
+        <div className="mb-4 flex flex-wrap gap-2 text-xs">
+          <span className="rounded-full border border-violet-500/20 bg-violet-500/10 px-3 py-1 text-violet-300">
+            {pendingCount} pending
+          </span>
+          <span className="rounded-full border border-amber-500/20 bg-amber-500/10 px-3 py-1 text-amber-300">
+            {inReviewCount} in review
+          </span>
+        </div>
+      )}
 
       {active.length > 0 && (
         <div className="space-y-2 mb-6">
