@@ -41,24 +41,24 @@ export default function ModulesToggle({ businessId, initialEnabled }: Props) {
   }
 
   return (
-    <div className="bg-white rounded-xl border border-slate-200 p-5">
+    <div className="rounded-xl border border-[var(--border-md)] bg-[var(--bg-card)] p-5">
       <div className="flex items-center gap-2 mb-1">
-        <svg className="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg className="w-4 h-4 text-[var(--text-3)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h7" />
         </svg>
-        <h2 className="text-base font-semibold text-slate-700">Modules</h2>
+        <h2 className="text-base font-semibold text-[var(--text-1)]">Modules</h2>
       </div>
-      <p className="text-xs text-slate-500 mb-4">
+      <p className="text-xs text-[var(--text-2)] mb-4">
         Enable or disable features for this business. Workers will only see enabled modules on their dashboard.
       </p>
 
-      <div className="flex items-center justify-between py-3 border-t border-slate-100">
+      <div className="flex items-center justify-between py-3 border-t border-[var(--border)]">
         <div>
-          <p className="text-sm font-medium text-slate-700">Confidential Medication Declarations</p>
-          <p className="text-xs text-slate-500 mt-0.5">Workers can submit confidential medication information for medic review</p>
+          <p className="text-sm font-medium text-[var(--text-1)]">Confidential Medication Declarations</p>
+          <p className="text-xs text-[var(--text-2)] mt-0.5">Workers can submit confidential medication information for medic review</p>
         </div>
         <div className="flex items-center gap-3 ml-4 shrink-0">
-          {saving && <span className="text-xs text-slate-400">Saving…</span>}
+          {saving && <span className="text-xs text-[var(--text-3)]">Saving…</span>}
           {saved && !saving && <span className="text-xs text-emerald-600 font-medium">Saved</span>}
           {error && <span className="text-xs text-red-500">{error}</span>}
           <button

@@ -130,21 +130,21 @@ export default function SuperuserBilling({ businesses, submissions, medDeclarati
           <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">This Month</p>
           <p className="text-3xl font-bold text-cyan-400">{thisMonthTotal}</p>
           {hasMedDecs && (
-            <p className="text-xs text-slate-600 mt-1">{thisMonthSubs} decl · {thisMonthMeds} med dec</p>
+            <p className="text-xs text-[var(--text-3)] mt-1">{thisMonthSubs} decl · {thisMonthMeds} med dec</p>
           )}
         </div>
 
         <div className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-5">
           <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Emergency Declarations</p>
           <p className="text-3xl font-bold text-slate-100">{totalSubs}</p>
-          <p className="text-xs text-slate-600 mt-1">All time</p>
+          <p className="text-xs text-[var(--text-3)] mt-1">All time</p>
         </div>
 
         {hasMedDecs && (
           <div className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-5">
             <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Medication Declarations</p>
             <p className="text-3xl font-bold text-slate-100">{totalMeds}</p>
-            <p className="text-xs text-slate-600 mt-1">All time</p>
+            <p className="text-xs text-[var(--text-3)] mt-1">All time</p>
           </div>
         )}
 
@@ -156,7 +156,7 @@ export default function SuperuserBilling({ businesses, submissions, medDeclarati
       </div>
 
       {isEmpty ? (
-        <p className="text-center py-16 text-slate-600">No billable submissions yet.</p>
+        <p className="text-center py-16 text-[var(--text-3)]">No billable submissions yet.</p>
       ) : (
         <div className="space-y-6">
           {/* Monthly breakdown */}

@@ -54,29 +54,29 @@ export default async function BusinessDetailPage({ params }: { params: { id: str
   }, {} as Record<string, number>)
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <header className="bg-slate-800 text-white px-6 py-4 flex items-center gap-4 shadow">
-        <Link href="/superuser" className="text-slate-400 hover:text-white transition-colors">
+    <div className="min-h-screen bg-[var(--bg-base)]">
+      <header className="flex items-center gap-4 border-b border-[var(--border-md)] bg-[var(--bg-surface)] px-6 py-4 shadow-sm">
+        <Link href="/superuser" className="text-[var(--text-2)] transition-colors hover:text-[var(--text-1)]">
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
           </svg>
         </Link>
-        <span className="text-xl font-bold">MedPass</span>
-        <span className="text-slate-400 text-sm">|</span>
-        <span className="text-slate-300 text-sm">Superuser</span>
-        <span className="text-slate-500 text-sm">/</span>
-        <span className="text-slate-300 text-sm">{business.name}</span>
+        <span className="text-xl font-bold text-[var(--text-1)]">MedPass</span>
+        <span className="text-sm text-[var(--text-3)]">|</span>
+        <span className="text-sm text-[var(--text-2)]">Superuser</span>
+        <span className="text-sm text-[var(--text-3)]">/</span>
+        <span className="text-sm text-[var(--text-2)]">{business.name}</span>
       </header>
 
       <div className="max-w-4xl mx-auto p-6 space-y-6">
         {/* Business header */}
-        <div className="bg-white rounded-xl border border-slate-200 p-6">
+        <div className="rounded-xl border border-[var(--border-md)] bg-[var(--bg-card)] p-6">
           <div className="flex items-start justify-between">
             <div>
-              <h1 className="text-2xl font-bold text-slate-800">{business.name}</h1>
-              <p className="text-sm text-slate-500 mt-1">ID: {business.id}</p>
+              <h1 className="text-2xl font-bold text-[var(--text-1)]">{business.name}</h1>
+              <p className="mt-1 text-sm text-[var(--text-2)]">ID: {business.id}</p>
               {business.contact_email && (
-                <p className="text-sm text-slate-500">{business.contact_email}</p>
+                <p className="text-sm text-[var(--text-2)]">{business.contact_email}</p>
               )}
             </div>
             {business.is_suspended && (
@@ -87,7 +87,7 @@ export default async function BusinessDetailPage({ params }: { params: { id: str
           </div>
 
           {/* Stats row */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-6 pt-6 border-t border-slate-100">
+          <div className="mt-6 grid grid-cols-2 gap-4 border-t border-[var(--border)] pt-6 sm:grid-cols-4">
             {[
               { label: 'Total Declarations', value: subStats?.length || 0 },
               { label: 'New / Pending', value: (statusCounts['New'] || 0) + (statusCounts['In Review'] || 0) },
@@ -95,8 +95,8 @@ export default async function BusinessDetailPage({ params }: { params: { id: str
               { label: 'Requires Follow-up', value: statusCounts['Requires Follow-up'] || 0 },
             ].map(stat => (
               <div key={stat.label} className="text-center">
-                <p className="text-2xl font-bold text-slate-800">{stat.value}</p>
-                <p className="text-xs text-slate-500 mt-0.5">{stat.label}</p>
+                <p className="text-2xl font-bold text-[var(--text-1)]">{stat.value}</p>
+                <p className="mt-0.5 text-xs text-[var(--text-2)]">{stat.label}</p>
               </div>
             ))}
           </div>
@@ -133,17 +133,17 @@ export default async function BusinessDetailPage({ params }: { params: { id: str
 
         {/* Admins */}
         <div>
-          <h2 className="text-lg font-semibold text-slate-700 mb-3">
-            Admins <span className="text-slate-400 font-normal text-sm">({admins?.length || 0})</span>
+          <h2 className="mb-3 text-lg font-semibold text-[var(--text-1)]">
+            Admins <span className="text-sm font-normal text-[var(--text-3)]">({admins?.length || 0})</span>
           </h2>
-          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+          <div className="overflow-hidden rounded-xl border border-[var(--border-md)] bg-[var(--bg-card)]">
             {!admins || admins.length === 0 ? (
-              <p className="px-5 py-4 text-slate-400 text-sm italic">No admins.</p>
+              <p className="px-5 py-4 text-sm italic text-[var(--text-3)]">No admins.</p>
             ) : (
               admins.map((a, i) => (
-                <div key={a.id} className={`px-5 py-4 ${i > 0 ? 'border-t border-slate-100' : ''}`}>
-                  <p className="font-medium text-slate-800">{a.display_name}</p>
-                  <p className="text-sm text-slate-500">{a.email}</p>
+                <div key={a.id} className={`px-5 py-4 ${i > 0 ? 'border-t border-[var(--border)]' : ''}`}>
+                  <p className="font-medium text-[var(--text-1)]">{a.display_name}</p>
+                  <p className="text-sm text-[var(--text-2)]">{a.email}</p>
                 </div>
               ))
             )}
@@ -152,18 +152,18 @@ export default async function BusinessDetailPage({ params }: { params: { id: str
 
         {/* Medics */}
         <div>
-          <h2 className="text-lg font-semibold text-slate-700 mb-3">
-            Medics <span className="text-slate-400 font-normal text-sm">({medics?.length || 0})</span>
+          <h2 className="mb-3 text-lg font-semibold text-[var(--text-1)]">
+            Medics <span className="text-sm font-normal text-[var(--text-3)]">({medics?.length || 0})</span>
           </h2>
-          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+          <div className="overflow-hidden rounded-xl border border-[var(--border-md)] bg-[var(--bg-card)]">
             {!medics || medics.length === 0 ? (
-              <p className="px-5 py-4 text-slate-400 text-sm italic">No medics.</p>
+              <p className="px-5 py-4 text-sm italic text-[var(--text-3)]">No medics.</p>
             ) : (
               medics.map((m, i) => (
-                <div key={m.id} className={`px-5 py-4 flex items-center justify-between ${i > 0 ? 'border-t border-slate-100' : ''}`}>
+                <div key={m.id} className={`flex items-center justify-between px-5 py-4 ${i > 0 ? 'border-t border-[var(--border)]' : ''}`}>
                   <div>
                     <div className="flex items-center gap-2">
-                      <p className="font-medium text-slate-800">{m.display_name}</p>
+                      <p className="font-medium text-[var(--text-1)]">{m.display_name}</p>
                       {m.role === 'pending_medic' && (
                         <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full">Pending</span>
                       )}
@@ -171,9 +171,9 @@ export default async function BusinessDetailPage({ params }: { params: { id: str
                         <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">Contractor</span>
                       )}
                     </div>
-                    <p className="text-sm text-slate-500">{m.email}</p>
+                    <p className="text-sm text-[var(--text-2)]">{m.email}</p>
                     {m.contract_end_date && (
-                      <p className="text-xs text-slate-400 mt-0.5">
+                      <p className="mt-0.5 text-xs text-[var(--text-3)]">
                         Contract ends: {format(new Date(m.contract_end_date), 'dd MMM yyyy')}
                       </p>
                     )}
@@ -186,23 +186,23 @@ export default async function BusinessDetailPage({ params }: { params: { id: str
 
         {/* Sites */}
         <div>
-          <h2 className="text-lg font-semibold text-slate-700 mb-3">
-            Sites <span className="text-slate-400 font-normal text-sm">({sites?.length || 0})</span>
+          <h2 className="mb-3 text-lg font-semibold text-[var(--text-1)]">
+            Sites <span className="text-sm font-normal text-[var(--text-3)]">({sites?.length || 0})</span>
           </h2>
-          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+          <div className="overflow-hidden rounded-xl border border-[var(--border-md)] bg-[var(--bg-card)]">
             {!sites || sites.length === 0 ? (
-              <p className="px-5 py-4 text-slate-400 text-sm italic">No sites.</p>
+              <p className="px-5 py-4 text-sm italic text-[var(--text-3)]">No sites.</p>
             ) : (
               sites.map((s, i) => (
-                <div key={s.id} className={`px-5 py-4 ${i > 0 ? 'border-t border-slate-100' : ''}`}>
+                <div key={s.id} className={`px-5 py-4 ${i > 0 ? 'border-t border-[var(--border)]' : ''}`}>
                   <div className="flex items-center gap-2">
-                    <p className="font-medium text-slate-800">{s.name}</p>
+                    <p className="font-medium text-[var(--text-1)]">{s.name}</p>
                     {s.is_office && (
-                      <span className="text-xs bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full">Office</span>
+                      <span className="rounded-full bg-[var(--bg-surface)] px-2 py-0.5 text-xs text-[var(--text-2)]">Office</span>
                     )}
                   </div>
                   {s.latitude != null && s.longitude != null && (
-                    <p className="text-xs text-slate-400 mt-0.5">
+                    <p className="mt-0.5 text-xs text-[var(--text-3)]">
                       {s.latitude.toFixed(4)}, {s.longitude.toFixed(4)}
                     </p>
                   )}

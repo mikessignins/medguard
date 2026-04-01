@@ -46,29 +46,29 @@ export default function IsTestOverride({ initialSubmissions }: Props) {
   }
 
   return (
-    <div className="bg-white rounded-xl border border-slate-200 p-5">
+    <div className="rounded-xl border border-[var(--border-md)] bg-[var(--bg-card)] p-5">
       <div className="flex items-center gap-2 mb-1">
-        <svg className="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg className="w-4 h-4 text-[var(--text-3)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
             d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
         </svg>
-        <h2 className="text-base font-semibold text-slate-700">Mark Forms as Test</h2>
+        <h2 className="text-base font-semibold text-[var(--text-1)]">Mark Forms as Test</h2>
       </div>
-      <p className="text-xs text-slate-500 mb-4">
+      <p className="text-xs text-[var(--text-2)] mb-4">
         Forms currently awaiting review. Toggle the test flag to exclude a form from billing and block export.
         Once a form is reviewed by a medic this flag locks and cannot be changed.
       </p>
 
       {error && <p className="text-xs text-red-500 mb-3">{error}</p>}
 
-      <div className="divide-y divide-slate-100">
+      <div className="divide-y divide-[var(--border)]">
         {submissions.map(sub => (
           <div key={sub.id} className="flex items-center justify-between py-3">
             <div>
-              <p className="text-sm text-slate-700">
-                {sub.site_name ?? <span className="text-slate-400 italic">Unknown site</span>}
+              <p className="text-sm text-[var(--text-1)]">
+                {sub.site_name ?? <span className="text-[var(--text-3)] italic">Unknown site</span>}
               </p>
-              <p className="text-xs text-slate-400 mt-0.5">
+              <p className="text-xs text-[var(--text-3)] mt-0.5">
                 Submitted {format(new Date(sub.submitted_at), 'dd MMM yyyy, h:mm a')}
               </p>
             </div>

@@ -103,7 +103,7 @@ export default function FeedbackReview({ items: initialItems }: Props) {
       </div>
 
       {filtered.length === 0 ? (
-        <p className="text-center py-16 text-slate-600">No feedback with status &ldquo;{filterStatus}&rdquo;.</p>
+        <p className="text-center py-16 text-[var(--text-3)]">No feedback with status &ldquo;{filterStatus}&rdquo;.</p>
       ) : (
         <div className="space-y-3">
           {filtered.map(item => (
@@ -123,13 +123,13 @@ export default function FeedbackReview({ items: initialItems }: Props) {
                     </span>
                   </div>
                   <p className="text-sm text-slate-300 line-clamp-2">{item.message}</p>
-                  <p className="text-xs text-slate-600 mt-1.5">
+                  <p className="text-xs text-[var(--text-3)] mt-1.5">
                     {item.submitted_by_name ?? 'Unknown'} · {item.submitted_by_role} · {
                       (() => { try { return format(new Date(item.submitted_at), 'dd MMM yyyy, HH:mm') } catch { return item.submitted_at } })()
                     }
                   </p>
                 </div>
-                <svg className="w-4 h-4 shrink-0 text-slate-600 mt-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-4 h-4 shrink-0 text-[var(--text-3)] mt-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                 </svg>
               </div>
@@ -162,7 +162,7 @@ export default function FeedbackReview({ items: initialItems }: Props) {
                 <p className="text-sm text-slate-300">
                   {selected.submitted_by_name ?? 'Unknown'} · <span className="capitalize">{selected.submitted_by_role}</span>
                 </p>
-                <p className="text-xs text-slate-600 mt-0.5">
+                <p className="text-xs text-[var(--text-3)] mt-0.5">
                   {(() => { try { return format(new Date(selected.submitted_at), 'dd MMM yyyy, HH:mm') } catch { return selected.submitted_at } })()}
                 </p>
               </div>

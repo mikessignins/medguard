@@ -84,7 +84,7 @@ export default function SuperuserDashboard({ businesses: initialBusinesses }: Pr
             <tbody>
               {businesses.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="text-center py-12 text-slate-600">
+                  <td colSpan={9} className="text-center py-12 text-[var(--text-3)]">
                     No businesses yet.
                   </td>
                 </tr>
@@ -97,7 +97,7 @@ export default function SuperuserDashboard({ businesses: initialBusinesses }: Pr
                   >
                     <td className="px-5 py-3.5">
                       <p className="font-medium text-slate-100">{biz.name}</p>
-                      <p className="text-xs text-slate-600">{biz.id}</p>
+                      <p className="text-xs text-[var(--text-3)]">{biz.id}</p>
                     </td>
                     <td className="px-4 py-3.5 text-center text-slate-300">{biz.adminCount}</td>
                     <td className="px-4 py-3.5 text-center text-slate-300">{biz.medicCount}</td>

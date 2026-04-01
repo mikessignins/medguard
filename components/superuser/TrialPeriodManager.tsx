@@ -62,20 +62,20 @@ export default function TrialPeriodManager({ businessId, initialTrialUntil }: Pr
   }
 
   return (
-    <div className="bg-white rounded-xl border border-slate-200 p-5">
+    <div className="rounded-xl border border-[var(--border-md)] bg-[var(--bg-card)] p-5">
       <div className="flex items-center gap-2 mb-1">
-        <svg className="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg className="w-4 h-4 text-[var(--text-3)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
             d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
         </svg>
-        <h2 className="text-base font-semibold text-slate-700">Trial Period</h2>
+        <h2 className="text-base font-semibold text-[var(--text-1)]">Trial Period</h2>
         {isActive && (
           <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-medium ml-1">
             Active
           </span>
         )}
       </div>
-      <p className="text-xs text-slate-500 mb-4">
+      <p className="text-xs text-[var(--text-2)] mb-4">
         While a trial period is active, all new submissions are automatically tagged as test forms.
         Test forms are excluded from billing and cannot be exported.
       </p>
@@ -88,7 +88,7 @@ export default function TrialPeriodManager({ businessId, initialTrialUntil }: Pr
         <div className={`flex items-center justify-between px-3 py-2.5 rounded-lg mb-4 text-sm ${
           isActive
             ? 'bg-amber-50 border border-amber-200 text-amber-800'
-            : 'bg-slate-50 border border-slate-200 text-slate-500'
+            : 'bg-[var(--bg-surface)] border border-[var(--border)] text-[var(--text-2)]'
         }`}>
           <span>
             {isActive ? 'Trial active until' : 'Trial expired'}{' '}
@@ -111,33 +111,33 @@ export default function TrialPeriodManager({ businessId, initialTrialUntil }: Pr
       <div className="space-y-3">
         {/* Quick presets */}
         <div>
-          <p className="text-xs font-medium text-slate-500 mb-2">Quick set</p>
+          <p className="text-xs font-medium text-[var(--text-2)] mb-2">Quick set</p>
           <div className="flex gap-2">
             {PRESETS.map(p => (
               <button
                 key={p.label}
                 onClick={() => applyPreset(p.date())}
                 disabled={saving}
-                className="px-3 py-1.5 text-xs font-medium bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-colors disabled:opacity-50"
+                className="rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-1.5 text-xs font-medium text-[var(--text-1)] transition-colors hover:border-[var(--border-md)] disabled:opacity-50"
               >
                 {p.label}
               </button>
             ))}
             {saved && <span className="text-xs text-emerald-600 font-medium self-center">Saved</span>}
-            {saving && <span className="text-xs text-slate-400 self-center">Saving…</span>}
+            {saving && <span className="text-xs text-[var(--text-3)] self-center">Saving…</span>}
           </div>
         </div>
 
         {/* Custom date */}
         <div>
-          <p className="text-xs font-medium text-slate-500 mb-2">Custom end date</p>
+          <p className="text-xs font-medium text-[var(--text-2)] mb-2">Custom end date</p>
           <div className="flex gap-2">
             <input
               type="date"
               value={customDate}
               min={format(new Date(), 'yyyy-MM-dd')}
               onChange={e => setCustomDate(e.target.value)}
-              className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 text-slate-700 focus:outline-none focus:ring-2 focus:ring-cyan-400"
+              className="rounded-lg border border-[var(--border)] bg-[var(--bg-input)] px-3 py-1.5 text-sm text-[var(--text-1)] focus:outline-none focus:ring-2 focus:ring-cyan-400"
             />
             <button
               onClick={applyCustomDate}
