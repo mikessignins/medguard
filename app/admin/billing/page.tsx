@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import AdminBilling from '@/components/admin/AdminBilling'
-import { fetchBusinessBillableRecords } from '@/lib/billing'
+import { fetchBusinessMonthlyBillables } from '@/lib/billing'
 
 export default async function AdminBillingPage() {
   const supabase = await createClient()
@@ -16,7 +16,7 @@ export default async function AdminBillingPage() {
 
   if (!account || account.role !== 'admin') redirect('/')
 
-  const { submissions, medDeclarations } = await fetchBusinessBillableRecords(account.business_id)
+  const monthlyBillables = await fetchBusinessMonthlyBillables(account.business_id)
 
-  return <AdminBilling submissions={submissions} medDeclarations={medDeclarations} />
+  return <AdminBilling monthlyBillables={monthlyBillables} />
 }

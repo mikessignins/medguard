@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import SuperuserBilling from '@/components/superuser/SuperuserBilling'
-import { fetchAllBillableRecords } from '@/lib/billing'
+import { fetchAllBusinessMonthlyBillables } from '@/lib/billing'
 
 export default async function SuperuserBillingPage() {
   const supabase = await createClient()
@@ -16,13 +16,12 @@ export default async function SuperuserBillingPage() {
 
   if (!account || account.role !== 'superuser') redirect('/')
 
-  const { businesses, submissions, medDeclarations } = await fetchAllBillableRecords()
+  const { businesses, monthlyBillables } = await fetchAllBusinessMonthlyBillables()
 
   return (
     <SuperuserBilling
       businesses={businesses}
-      submissions={submissions}
-      medDeclarations={medDeclarations}
+      monthlyBillables={monthlyBillables}
     />
   )
 }

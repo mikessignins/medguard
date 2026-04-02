@@ -1,15 +1,9 @@
 import { createClient as createServiceClient, type SupabaseClient } from '@supabase/supabase-js'
 
-export interface BillableSubmissionRow {
+export interface MonthlyBillableRow {
   business_id: string
-  submitted_at: string
-  status: string
-}
-
-export interface BillableMedDecRow {
-  business_id: string
-  submitted_at: string
-  medic_review_status: string
+  bill_month: string
+  billable_forms: number
 }
 
 function createBillingServiceClient(): SupabaseClient {
@@ -19,59 +13,36 @@ function createBillingServiceClient(): SupabaseClient {
   )
 }
 
-export async function fetchBusinessBillableRecords(businessId: string) {
+export async function fetchBusinessMonthlyBillables(businessId: string) {
   const service = createBillingServiceClient()
 
-  const [{ data: submissions, error: submissionsError }, { data: medDeclarations, error: medDecError }] = await Promise.all([
-    service
-      .from('submissions')
-      .select('business_id, submitted_at, status')
-      .eq('business_id', businessId)
-      .neq('status', 'Recalled')
-      .eq('is_test', false)
-      .order('submitted_at', { ascending: false }),
-    service
-      .from('medication_declarations')
-      .select('business_id, submitted_at, medic_review_status')
-      .eq('business_id', businessId)
-      .eq('is_test', false)
-      .order('submitted_at', { ascending: false }),
-  ])
+  const { data: monthlyBillables, error } = await service
+    .from('business_monthly_billables')
+    .select('business_id, bill_month, billable_forms')
+    .eq('business_id', businessId)
+    .order('bill_month', { ascending: false })
 
-  if (submissionsError) throw submissionsError
-  if (medDecError) throw medDecError
+  if (error) throw error
 
-  return {
-    submissions: (submissions ?? []) as BillableSubmissionRow[],
-    medDeclarations: (medDeclarations ?? []) as BillableMedDecRow[],
-  }
+  return (monthlyBillables ?? []) as MonthlyBillableRow[]
 }
 
-export async function fetchAllBillableRecords() {
+export async function fetchAllBusinessMonthlyBillables() {
   const service = createBillingServiceClient()
 
-  const [{ data: businesses, error: businessesError }, { data: submissions, error: submissionsError }, { data: medDeclarations, error: medDecError }] = await Promise.all([
+  const [{ data: businesses, error: businessesError }, { data: monthlyBillables, error: monthlyBillablesError }] = await Promise.all([
     service.from('businesses').select('id, name').order('name'),
     service
-      .from('submissions')
-      .select('business_id, submitted_at, status')
-      .neq('status', 'Recalled')
-      .eq('is_test', false)
-      .order('submitted_at', { ascending: false }),
-    service
-      .from('medication_declarations')
-      .select('business_id, submitted_at, medic_review_status')
-      .eq('is_test', false)
-      .order('submitted_at', { ascending: false }),
+      .from('business_monthly_billables')
+      .select('business_id, bill_month, billable_forms')
+      .order('bill_month', { ascending: false }),
   ])
 
   if (businessesError) throw businessesError
-  if (submissionsError) throw submissionsError
-  if (medDecError) throw medDecError
+  if (monthlyBillablesError) throw monthlyBillablesError
 
   return {
     businesses: businesses ?? [],
-    submissions: (submissions ?? []) as BillableSubmissionRow[],
-    medDeclarations: (medDeclarations ?? []) as BillableMedDecRow[],
+    monthlyBillables: (monthlyBillables ?? []) as MonthlyBillableRow[],
   }
 }
