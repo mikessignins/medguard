@@ -92,6 +92,12 @@ export default async function SuperuserLayout({ children }: { children: React.Re
           </svg>
           <span className="text-xs">Billing</span>
         </Link>
+        <Link href="/superuser/reports" className="flex-1 flex flex-col items-center gap-1 py-3 text-slate-400">
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-6m3 6V7m3 10v-3m5 5H4a2 2 0 01-2-2V5a2 2 0 012-2h16a2 2 0 012 2v12a2 2 0 01-2 2z" />
+          </svg>
+          <span className="text-xs">Reports</span>
+        </Link>
         <Link href="/superuser/feedback" className="flex-1 flex flex-col items-center gap-1 py-3 text-slate-400 relative">
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />

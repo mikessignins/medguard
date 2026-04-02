@@ -196,3 +196,25 @@ export async function getAuthenticatedMedic() {
   if (!account || account.role !== 'medic') return null
   return { user, account }
 }
+
+export async function getAuthenticatedSuperuser() {
+  const cookieStore = await cookies()
+  const authClient = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll: () => cookieStore.getAll(),
+        setAll: (toSet) => {
+          try { toSet.forEach(({ name, value, options }) => cookieStore.set(name, value, options)) } catch {}
+        },
+      },
+    }
+  )
+  const { data: { user } } = await authClient.auth.getUser()
+  if (!user) return null
+  const { data: account } = await authClient
+    .from('user_accounts').select('role, display_name, business_id').eq('id', user.id).single()
+  if (!account || account.role !== 'superuser') return null
+  return { user, account, authClient }
+}

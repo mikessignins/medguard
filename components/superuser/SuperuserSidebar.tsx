@@ -23,6 +23,16 @@ const NAV_ITEMS: Omit<NavItem, 'badge'>[] = [
     ),
   },
   {
+    label: 'Reports',
+    href: '/superuser/reports',
+    exact: false,
+    icon: (
+      <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-6m3 6V7m3 10v-3m5 5H4a2 2 0 01-2-2V5a2 2 0 012-2h16a2 2 0 012 2v12a2 2 0 01-2 2z" />
+      </svg>
+    ),
+  },
+  {
     label: 'Purge Log',
     href: '/superuser/purge-log',
     exact: false,
