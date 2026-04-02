@@ -3,14 +3,17 @@
 -- Purpose: final role-path confidence before launch.
 
 -- 1) Quick RLS coverage: all core tables should have RLS on.
+--    Uses pg_class for compatibility (column name is relforcerowsecurity).
 select
-  schemaname,
-  tablename,
-  rowsecurity,
-  force_rowsecurity
-from pg_tables
-where schemaname = 'public'
-  and tablename in (
+  n.nspname as schemaname,
+  c.relname as tablename,
+  c.relrowsecurity as rowsecurity,
+  c.relforcerowsecurity as force_rowsecurity
+from pg_class c
+join pg_namespace n on n.oid = c.relnamespace
+where n.nspname = 'public'
+  and c.relkind = 'r'
+  and c.relname in (
     'businesses',
     'sites',
     'user_accounts',
@@ -20,7 +23,7 @@ where schemaname = 'public'
     'purge_audit_log',
     'module_submissions'
   )
-order by tablename;
+order by c.relname;
 
 -- 2) Policy inventory for core tables.
 select
