@@ -27,6 +27,13 @@ export async function updateSession(request: NextRequest) {
 
   const url = request.nextUrl.clone()
   const isPublicPath = url.pathname === '/login' || url.pathname === '/'
+  const isCronPath = url.pathname.startsWith('/api/cron/')
+
+  // Allow scheduled cron endpoints to authenticate themselves with CRON_SECRET
+  // instead of being redirected through the interactive login flow.
+  if (isCronPath) {
+    return supabaseResponse
+  }
 
   if (!user && !isPublicPath) {
     url.pathname = '/login'
