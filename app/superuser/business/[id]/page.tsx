@@ -11,6 +11,15 @@ import IsTestOverride from '@/components/superuser/IsTestOverride'
 import AdminManager from '@/components/superuser/AdminManager'
 import { CONFIDENTIAL_MEDICATION_MODULE_KEY } from '@/lib/modules'
 
+interface DeidentifiedConditionMetric {
+  metric_key: string
+  metric_label: string
+  affected_workers: number | null
+  cohort_workers: number | null
+  prevalence_percent: number | null
+  is_suppressed: boolean
+}
+
 export default async function BusinessDetailPage({ params }: { params: { id: string } }) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -37,7 +46,15 @@ export default async function BusinessDetailPage({ params }: { params: { id: str
 
   if (!business) notFound()
 
-  const [{ data: admins }, { data: medics }, { data: sites }, { data: subStats }, { data: newSubmissions }, { data: medModule }] = await Promise.all([
+  const [
+    { data: admins },
+    { data: medics },
+    { data: sites },
+    { data: subStats },
+    { data: newSubmissions },
+    { data: medModule },
+    { data: deidentifiedMetrics, error: deidentifiedMetricsError },
+  ] = await Promise.all([
     service.from('user_accounts').select('id, display_name, email, contract_end_date').eq('business_id', params.id).eq('role', 'admin'),
     service.from('user_accounts').select('id, display_name, email, role, site_ids, contract_end_date').eq('business_id', params.id).in('role', ['medic', 'pending_medic']),
     service.from('sites').select('id, name, is_office, latitude, longitude').eq('business_id', params.id),
@@ -54,12 +71,18 @@ export default async function BusinessDetailPage({ params }: { params: { id: str
       .eq('business_id', params.id)
       .eq('module_key', CONFIDENTIAL_MEDICATION_MODULE_KEY)
       .maybeSingle(),
+    service.rpc('get_business_deidentified_condition_prevalence', {
+      p_business_id: params.id,
+    }),
   ])
 
   const statusCounts = (subStats || []).reduce((acc, s) => {
     acc[s.status] = (acc[s.status] || 0) + 1
     return acc
   }, {} as Record<string, number>)
+
+  const analyticsRows: DeidentifiedConditionMetric[] = (deidentifiedMetrics || []) as DeidentifiedConditionMetric[]
+  const suppressed = analyticsRows.length > 0 && analyticsRows.every(row => row.is_suppressed)
 
   return (
     <div className="min-h-screen bg-[var(--bg-base)]">
@@ -142,6 +165,61 @@ export default async function BusinessDetailPage({ params }: { params: { id: str
         />
 
         <AdminManager businessId={business.id} initialAdmins={admins ?? []} />
+
+        {/* De-identified condition analytics (superuser-only) */}
+        <div>
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <h2 className="text-lg font-semibold text-[var(--text-1)]">De-identified Workforce Analytics</h2>
+            <span className="rounded-full bg-[var(--bg-surface)] px-2.5 py-1 text-xs text-[var(--text-2)]">
+              Superuser only
+            </span>
+          </div>
+          <div className="overflow-hidden rounded-xl border border-[var(--border-md)] bg-[var(--bg-card)]">
+            {deidentifiedMetricsError ? (
+              <p className="px-5 py-4 text-sm text-red-600">
+                Could not load analytics: {deidentifiedMetricsError.message}
+              </p>
+            ) : analyticsRows.length === 0 ? (
+              <p className="px-5 py-4 text-sm italic text-[var(--text-3)]">No analytics available yet.</p>
+            ) : (
+              <>
+                {suppressed && (
+                  <div className="border-b border-[var(--border)] bg-amber-500/10 px-5 py-3 text-xs text-amber-700 dark:text-amber-300">
+                    Metrics are currently suppressed because the worker cohort is below the minimum reporting threshold.
+                  </div>
+                )}
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-[var(--border)] bg-[var(--bg-surface)]">
+                        <th className="px-5 py-3 text-left font-medium text-[var(--text-2)]">Metric</th>
+                        <th className="px-4 py-3 text-center font-medium text-[var(--text-2)]">Affected</th>
+                        <th className="px-4 py-3 text-center font-medium text-[var(--text-2)]">Cohort</th>
+                        <th className="px-4 py-3 text-center font-medium text-[var(--text-2)]">Prevalence</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {analyticsRows.map((row, idx) => (
+                        <tr key={row.metric_key} className={idx > 0 ? 'border-t border-[var(--border)]' : ''}>
+                          <td className="px-5 py-3 text-[var(--text-1)]">{row.metric_label}</td>
+                          <td className="px-4 py-3 text-center text-[var(--text-2)]">
+                            {row.is_suppressed ? 'Suppressed' : row.affected_workers}
+                          </td>
+                          <td className="px-4 py-3 text-center text-[var(--text-2)]">
+                            {row.is_suppressed ? 'Suppressed' : row.cohort_workers}
+                          </td>
+                          <td className="px-4 py-3 text-center text-[var(--text-2)]">
+                            {row.is_suppressed ? 'Suppressed' : `${row.prevalence_percent ?? 0}%`}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
 
         {/* Medics */}
         <div>
