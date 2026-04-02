@@ -1,6 +1,9 @@
 begin;
 
-create or replace view public.business_monthly_billables as
+drop view if exists public.platform_metrics;
+drop view if exists public.business_monthly_billables;
+
+create view public.business_monthly_billables as
 with billable_forms as (
   select
     s.business_id,
@@ -27,7 +30,7 @@ group by bf.business_id, bf.bill_month;
 comment on view public.business_monthly_billables is
   'Monthly billable form counts per business. Billables include non-test emergency submissions excluding Recalled, and non-test medication declarations.';
 
-create or replace view public.platform_metrics as
+create view public.platform_metrics as
 with
 business_stats as (
   select
