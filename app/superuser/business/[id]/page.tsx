@@ -9,6 +9,7 @@ import LogoUpload from '@/components/superuser/LogoUpload'
 import TrialPeriodManager from '@/components/superuser/TrialPeriodManager'
 import IsTestOverride from '@/components/superuser/IsTestOverride'
 import AdminManager from '@/components/superuser/AdminManager'
+import { CONFIDENTIAL_MEDICATION_MODULE_KEY } from '@/lib/modules'
 
 export default async function BusinessDetailPage({ params }: { params: { id: string } }) {
   const supabase = await createClient()
@@ -36,7 +37,7 @@ export default async function BusinessDetailPage({ params }: { params: { id: str
 
   if (!business) notFound()
 
-  const [{ data: admins }, { data: medics }, { data: sites }, { data: subStats }, { data: newSubmissions }] = await Promise.all([
+  const [{ data: admins }, { data: medics }, { data: sites }, { data: subStats }, { data: newSubmissions }, { data: medModule }] = await Promise.all([
     service.from('user_accounts').select('id, display_name, email, contract_end_date').eq('business_id', params.id).eq('role', 'admin'),
     service.from('user_accounts').select('id, display_name, email, role, site_ids, contract_end_date').eq('business_id', params.id).in('role', ['medic', 'pending_medic']),
     service.from('sites').select('id, name, is_office, latitude, longitude').eq('business_id', params.id),
@@ -47,6 +48,12 @@ export default async function BusinessDetailPage({ params }: { params: { id: str
       .eq('business_id', params.id)
       .eq('status', 'New')
       .order('submitted_at', { ascending: false }),
+    service
+      .from('business_modules')
+      .select('enabled')
+      .eq('business_id', params.id)
+      .eq('module_key', CONFIDENTIAL_MEDICATION_MODULE_KEY)
+      .maybeSingle(),
   ])
 
   const statusCounts = (subStats || []).reduce((acc, s) => {
@@ -112,7 +119,7 @@ export default async function BusinessDetailPage({ params }: { params: { id: str
         {/* Modules */}
         <ModulesToggle
           businessId={business.id}
-          initialEnabled={business.confidential_med_dec_enabled ?? false}
+          initialEnabled={medModule?.enabled ?? false}
         />
 
         {/* Business Logo */}

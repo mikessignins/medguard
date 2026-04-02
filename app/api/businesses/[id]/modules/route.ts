@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
+import { CONFIDENTIAL_MEDICATION_MODULE_KEY } from '@/lib/modules'
 
 export async function PATCH(req: Request, { params }: { params: { id: string } }) {
   const supabase = await createClient()
@@ -27,11 +28,25 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   )
 
-  const { error } = await service
+  const nextEnabled = body.confidential_med_dec_enabled
+
+  const { error: moduleError } = await service
+    .from('business_modules')
+    .upsert({
+      business_id: params.id,
+      module_key: CONFIDENTIAL_MEDICATION_MODULE_KEY,
+      enabled: nextEnabled,
+      disabled_at: nextEnabled ? null : new Date().toISOString(),
+      config: {},
+    }, { onConflict: 'business_id,module_key' })
+
+  if (moduleError) return NextResponse.json({ error: moduleError.message }, { status: 500 })
+
+  const { error: legacyError } = await service
     .from('businesses')
-    .update({ confidential_med_dec_enabled: body.confidential_med_dec_enabled })
+    .update({ confidential_med_dec_enabled: nextEnabled })
     .eq('id', params.id)
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (legacyError) return NextResponse.json({ error: legacyError.message }, { status: 500 })
   return NextResponse.json({ ok: true })
 }
