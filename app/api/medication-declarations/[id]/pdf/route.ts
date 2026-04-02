@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import PDFDocument from 'pdfkit'
 import type { ScriptUpload } from '@/lib/types'
+import { resolveBusinessLogoUrl } from '@/lib/business-logo'
 import {
   streamToBuffer, sanitize, fmtDate, fmtDateTime, parseArray,
   pageHeader, pageFooter, sectionHeader, twoColTable,
@@ -46,7 +47,7 @@ async function generateMedDecPdf(id: string) {
 
   const [{ data: site }, { data: business }] = await Promise.all([
     supabase.from('sites').select('name').eq('id', raw.site_id).single(),
-    supabase.from('businesses').select('name, logo_url').eq('id', raw.business_id).single(),
+    supabase.from('businesses').select('name, logo_url, logo_url_light, logo_url_dark').eq('id', raw.business_id).single(),
   ])
 
   const siteName     = site?.name     || raw.site_id     || ''
@@ -54,9 +55,10 @@ async function generateMedDecPdf(id: string) {
 
   // Fetch business logo for PDF header
   let logoBuffer: Buffer | null = null
-  if (business?.logo_url) {
+  const businessLogoUrl = resolveBusinessLogoUrl(business, 'light')
+  if (businessLogoUrl) {
     try {
-      const logoRes = await fetch(business.logo_url)
+      const logoRes = await fetch(businessLogoUrl)
       if (logoRes.ok) logoBuffer = Buffer.from(await logoRes.arrayBuffer())
     } catch { /* continue without logo */ }
   }

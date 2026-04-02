@@ -5,6 +5,7 @@ import Image from 'next/image'
 import AdminSidebar from '@/components/admin/AdminSidebar'
 import SignOutButton from '@/components/SignOutButton'
 import ThemeToggle from '@/components/ThemeToggle'
+import BusinessThemeLogo from '@/components/BusinessThemeLogo'
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient()
@@ -21,7 +22,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
 
   const { data: business } = await supabase
     .from('businesses')
-    .select('logo_url, is_suspended')
+    .select('name, logo_url, logo_url_light, logo_url_dark, is_suspended')
     .eq('id', account.business_id)
     .single()
 
@@ -34,9 +35,13 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         {/* Logo */}
         <div className="px-5 py-4 border-b border-slate-800">
           <div className="flex items-center gap-3">
-            {business?.logo_url ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={business.logo_url} alt="Business logo" className="h-8 w-auto max-w-[80px] rounded object-contain" />
+            {business && (business.logo_url || business.logo_url_light || business.logo_url_dark) ? (
+              <BusinessThemeLogo
+                businessName={business.name ?? 'Business'}
+                logoUrl={business.logo_url}
+                logoUrlLight={business.logo_url_light}
+                logoUrlDark={business.logo_url_dark}
+              />
             ) : (
               <Image src="/medm8-icon.png" alt="MedPass" width={32} height={32} className="rounded-lg" />
             )}

@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server'
 
 const MAX_SIZE = 2 * 1024 * 1024 // 2 MB
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp']
+type LogoVariant = 'default' | 'light' | 'dark'
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   const supabase = await createClient()
@@ -22,6 +23,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
   const formData = await req.formData()
   const file = formData.get('logo') as File | null
+  const rawVariant = formData.get('variant')
+  const variant: LogoVariant = rawVariant === 'light' || rawVariant === 'dark' ? rawVariant : 'default'
   if (!file) return NextResponse.json({ error: 'No file provided' }, { status: 400 })
   if (!ALLOWED_TYPES.includes(file.type)) {
     return NextResponse.json({ error: 'Invalid file type. Use JPEG, PNG, or WebP.' }, { status: 400 })
@@ -32,7 +35,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
   const buffer = Buffer.from(await file.arrayBuffer())
   const ext = file.type === 'image/webp' ? 'webp' : file.type === 'image/png' ? 'png' : 'jpg'
-  const storagePath = `${params.id}.${ext}`
+  const baseName = variant === 'default' ? params.id : `${params.id}-${variant}`
+  const storagePath = `${baseName}.${ext}`
 
   const service = createServiceClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -42,7 +46,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   // Remove any existing logo files for this business
   const extensions = ['jpg', 'png', 'webp']
   await Promise.all(
-    extensions.map(e => service.storage.from('business-logos').remove([`${params.id}.${e}`]))
+    extensions.map(e => service.storage.from('business-logos').remove([`${baseName}.${e}`]))
   )
 
   const { error: uploadError } = await service.storage
@@ -54,14 +58,20 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   }
 
   const { data: urlData } = service.storage.from('business-logos').getPublicUrl(storagePath)
-  const logo_url = urlData.publicUrl
+  const publicUrl = urlData.publicUrl
+  const updatePayload =
+    variant === 'light'
+      ? { logo_url_light: publicUrl }
+      : variant === 'dark'
+        ? { logo_url_dark: publicUrl }
+        : { logo_url: publicUrl }
 
   const { error: dbError } = await service
     .from('businesses')
-    .update({ logo_url })
+    .update(updatePayload)
     .eq('id', params.id)
 
   if (dbError) return NextResponse.json({ error: dbError.message }, { status: 500 })
 
-  return NextResponse.json({ logo_url })
+  return NextResponse.json({ variant, url: publicUrl, ...updatePayload })
 }

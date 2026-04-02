@@ -1,20 +1,34 @@
 'use client'
+
 import { useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { resolveBusinessLogoUrl } from '@/lib/business-logo'
 
 interface Props {
   businessId: string
   currentLogoUrl?: string | null
+  currentLogoLightUrl?: string | null
+  currentLogoDarkUrl?: string | null
 }
 
-export default function LogoUpload({ businessId, currentLogoUrl }: Props) {
-  const [logoUrl, setLogoUrl] = useState(currentLogoUrl)
-  const [uploading, setUploading] = useState(false)
+type LogoVariant = 'light' | 'dark'
+
+export default function LogoUpload({
+  businessId,
+  currentLogoUrl,
+  currentLogoLightUrl,
+  currentLogoDarkUrl,
+}: Props) {
+  const [logoUrl] = useState(currentLogoUrl)
+  const [logoLightUrl, setLogoLightUrl] = useState(currentLogoLightUrl)
+  const [logoDarkUrl, setLogoDarkUrl] = useState(currentLogoDarkUrl)
+  const [uploadingVariant, setUploadingVariant] = useState<LogoVariant | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const fileInputRef = useRef<HTMLInputElement>(null)
+  const lightInputRef = useRef<HTMLInputElement>(null)
+  const darkInputRef = useRef<HTMLInputElement>(null)
   const router = useRouter()
 
-  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+  async function handleFileChange(variant: LogoVariant, e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
 
@@ -23,12 +37,13 @@ export default function LogoUpload({ businessId, currentLogoUrl }: Props) {
       return
     }
 
-    setUploading(true)
+    setUploadingVariant(variant)
     setError(null)
 
     try {
       const formData = new FormData()
       formData.append('logo', file)
+      formData.append('variant', variant)
 
       const res = await fetch(`/api/businesses/${businessId}/logo`, {
         method: 'POST',
@@ -39,73 +54,107 @@ export default function LogoUpload({ businessId, currentLogoUrl }: Props) {
       if (!res.ok) {
         setError(data.error || 'Upload failed')
       } else {
-        setLogoUrl(data.logo_url + `?t=${Date.now()}`)
+        const cacheBustedUrl = `${data.url}?t=${Date.now()}`
+        if (variant === 'light') setLogoLightUrl(cacheBustedUrl)
+        if (variant === 'dark') setLogoDarkUrl(cacheBustedUrl)
         router.refresh()
       }
     } catch {
       setError('Network error')
     } finally {
-      setUploading(false)
-      // Reset file input
-      if (fileInputRef.current) fileInputRef.current.value = ''
+      setUploadingVariant(null)
+      if (variant === 'light' && lightInputRef.current) lightInputRef.current.value = ''
+      if (variant === 'dark' && darkInputRef.current) darkInputRef.current.value = ''
     }
   }
 
+  const previewSets = [
+    {
+      variant: 'light' as const,
+      title: 'Light Theme Logo',
+      description: 'Shown in light mode on web and iOS.',
+      previewBg: 'bg-white',
+      previewText: 'text-slate-700',
+      previewUrl: logoLightUrl ?? resolveBusinessLogoUrl(
+        { logo_url: logoUrl, logo_url_light: logoLightUrl, logo_url_dark: logoDarkUrl },
+        'light',
+      ),
+    },
+    {
+      variant: 'dark' as const,
+      title: 'Dark Theme Logo',
+      description: 'Shown in dark mode on web and iOS.',
+      previewBg: 'bg-slate-950',
+      previewText: 'text-slate-300',
+      previewUrl: logoDarkUrl ?? resolveBusinessLogoUrl(
+        { logo_url: logoUrl, logo_url_light: logoLightUrl, logo_url_dark: logoDarkUrl },
+        'dark',
+      ),
+    },
+  ]
+
   return (
     <div className="rounded-xl border border-[var(--border-md)] bg-[var(--bg-card)] p-5">
-      <div className="flex items-center gap-2 mb-1">
-        <svg className="w-4 h-4 text-[var(--text-3)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <div className="mb-1 flex items-center gap-2">
+        <svg className="h-4 w-4 text-[var(--text-3)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
         </svg>
-        <h2 className="text-base font-semibold text-[var(--text-1)]">Business Logo</h2>
+        <h2 className="text-base font-semibold text-[var(--text-1)]">Business Logos</h2>
       </div>
-      <p className="text-xs text-[var(--text-2)] mb-4">
-        Displayed in the medic and admin sidebars. JPEG, PNG, or WebP. Max 2 MB.
+      <p className="mb-4 text-xs text-[var(--text-2)]">
+        Upload separate logos for light and dark mode. Each device will automatically choose the correct version for its current theme. JPEG, PNG, or WebP. Max 2 MB.
       </p>
 
-      <div className="flex items-center gap-4">
-        {logoUrl ? (
-          <div className="shrink-0">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={logoUrl}
-              alt="Business logo"
-              className="h-12 w-auto max-w-[120px] rounded border border-[var(--border)] object-contain"
-            />
-          </div>
-        ) : (
-          <div className="flex h-12 w-20 shrink-0 items-center justify-center rounded border border-dashed border-[var(--border-md)] bg-[var(--bg-surface)]">
-            <svg className="w-5 h-5 text-[var(--text-3)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-            </svg>
-          </div>
-        )}
+      <div className="grid gap-4 md:grid-cols-2">
+        {previewSets.map((item) => (
+          <div key={item.variant} className="rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] p-4">
+            <p className="text-sm font-semibold text-[var(--text-1)]">{item.title}</p>
+            <p className="mt-1 text-xs text-[var(--text-2)]">{item.description}</p>
 
-        <div>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/jpeg,image/png,image/webp"
-            onChange={handleFileChange}
-            className="hidden"
-            id={`logo-upload-${businessId}`}
-          />
-          <label
-            htmlFor={`logo-upload-${businessId}`}
-            className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium border cursor-pointer transition-colors ${
-              uploading
-                ? 'bg-[var(--bg-surface)] border-[var(--border)] text-[var(--text-3)] cursor-not-allowed'
-                : 'bg-[var(--bg-card)] border-[var(--border-md)] text-[var(--text-1)] hover:border-cyan-500/40 hover:bg-[var(--bg-surface)]'
-            }`}
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-            </svg>
-            {uploading ? 'Uploading…' : logoUrl ? 'Change Logo' : 'Upload Logo'}
-          </label>
-          {error && <p className="text-xs text-red-500 mt-1.5">{error}</p>}
-        </div>
+            <div className={`mt-4 flex min-h-[88px] items-center justify-center rounded-lg border border-[var(--border)] ${item.previewBg}`}>
+              {item.previewUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={item.previewUrl}
+                  alt={`${item.title} preview`}
+                  className="h-14 w-auto max-w-[160px] object-contain"
+                />
+              ) : (
+                <span className={`text-xs ${item.previewText}`}>No {item.variant} logo uploaded</span>
+              )}
+            </div>
+
+            <input
+              ref={item.variant === 'light' ? lightInputRef : darkInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              onChange={(e) => handleFileChange(item.variant, e)}
+              className="hidden"
+              id={`logo-upload-${businessId}-${item.variant}`}
+            />
+
+            <label
+              htmlFor={`logo-upload-${businessId}-${item.variant}`}
+              className={`mt-4 inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
+                uploadingVariant === item.variant
+                  ? 'cursor-not-allowed border-[var(--border)] bg-[var(--bg-surface)] text-[var(--text-3)]'
+                  : 'cursor-pointer border-[var(--border-md)] bg-[var(--bg-card)] text-[var(--text-1)] hover:border-cyan-500/40 hover:bg-[var(--bg-surface)]'
+              }`}
+            >
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+              </svg>
+              {uploadingVariant === item.variant
+                ? 'Uploading…'
+                : item.previewUrl
+                  ? `Change ${item.variant} logo`
+                  : `Upload ${item.variant} logo`}
+            </label>
+          </div>
+        ))}
       </div>
+
+      {error && <p className="mt-3 text-xs text-red-500">{error}</p>}
     </div>
   )
 }

@@ -118,6 +118,8 @@ export default async function BusinessDetailPage({ params }: { params: { id: str
         <LogoUpload
           businessId={business.id}
           currentLogoUrl={business.logo_url}
+          currentLogoLightUrl={business.logo_url_light}
+          currentLogoDarkUrl={business.logo_url_dark}
         />
 
         {/* Trial period — controls auto-tagging of new submissions as test forms */}

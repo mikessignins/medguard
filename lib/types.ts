@@ -40,6 +40,8 @@ export interface Business {
   reminder_interval_months?: number
   confidential_med_dec_enabled?: boolean
   logo_url?: string | null
+  logo_url_light?: string | null
+  logo_url_dark?: string | null
 }
 
 export type MedDecReviewStatus = 'Pending' | 'In Review' | 'Normal Duties' | 'Restricted Duties' | 'Unfit for Work'
