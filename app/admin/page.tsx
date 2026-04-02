@@ -33,6 +33,7 @@ export default async function AdminPage() {
   const businessId = account.business_id
   const now = new Date()
   const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
+  const currentMonthKey = firstOfMonth.slice(0, 10)
   // Forms unreviewed for more than 24 hours are a safety risk
   const staleThreshold = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString()
 
@@ -46,7 +47,7 @@ export default async function AdminPage() {
     { count: medicCount },
     { count: pendingCount },
     { count: siteCount },
-    { count: submissionsThisMonth },
+    { data: thisMonthBillingRow },
     { count: staleForms },
     { data: cronHealth },
   ] = await Promise.all([
@@ -55,10 +56,11 @@ export default async function AdminPage() {
     supabase.from('user_accounts').select('*', { count: 'exact', head: true }).eq('business_id', businessId).eq('role', 'pending_medic'),
     supabase.from('sites').select('*', { count: 'exact', head: true }).eq('business_id', businessId),
     service
-      .from('submissions')
-      .select('id', { count: 'exact', head: true })
+      .from('business_monthly_billables')
+      .select('billable_forms')
       .eq('business_id', businessId)
-      .gte('submitted_at', firstOfMonth),
+      .eq('bill_month', currentMonthKey)
+      .maybeSingle(),
     // Count forms stuck in New or In Review for > 24 hours (unexported, not recalled)
     service
       .from('submissions')
@@ -74,12 +76,14 @@ export default async function AdminPage() {
       .single(),
   ])
 
+  const submissionsThisMonth = Number(thisMonthBillingRow?.billable_forms ?? 0)
+
   const metrics = [
     { title: 'Workers', value: workerCount ?? 0, color: 'text-blue-400', alert: false },
     { title: 'Active Medics', value: medicCount ?? 0, color: 'text-emerald-400', alert: false },
     { title: 'Pending Medics', value: pendingCount ?? 0, color: 'text-amber-400', alert: false },
     { title: 'Sites', value: siteCount ?? 0, color: 'text-violet-400', alert: false },
-    { title: 'Declarations This Month', value: submissionsThisMonth ?? 0, color: 'text-cyan-400', alert: false },
+    { title: 'Declarations This Month', value: submissionsThisMonth, color: 'text-cyan-400', alert: false },
     { title: 'Unreviewed >24h', value: staleForms ?? 0, color: 'text-slate-400', alert: true },
   ]
 

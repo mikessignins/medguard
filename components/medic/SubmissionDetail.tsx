@@ -55,12 +55,21 @@ interface SafeSubmission {
   status: SubmissionStatus
   consent_given: boolean
   submitted_at: string | null
+  site_specific_answers: Record<string, string>
   exported_at: string | null
   phi_purged_at: string | null
   worker_snapshot: WorkerSnapshot | null
   decision: Decision | null
   scriptUploads: ScriptUpload[]
   comments: MedicComment[]
+}
+
+function formatEmergencyFieldLabel(key: string): string {
+  return key
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/\b\w/g, (ch) => ch.toUpperCase())
 }
 
 interface Props {
@@ -202,6 +211,8 @@ export default function SubmissionDetail({ submission, siteName, businessName, c
 
   const medications = hasSnapshot ? (ws.currentMedications || []) : []
   const hasFlaggedMeds = medications.some(m => FLAGGED_REVIEWS.includes(m?.reviewFlag ?? ''))
+  const extraEmergencyAnswers = Object.entries(submission.site_specific_answers ?? {})
+    .filter(([key, value]) => key.trim().length > 0 && String(value).trim().length > 0)
 
   const prevId = queueContext && queueContext.pos > 0 ? queueContext.ids[queueContext.pos - 1] : null
   const nextId = queueContext && queueContext.pos < queueContext.ids.length - 1 ? queueContext.ids[queueContext.pos + 1] : null
@@ -423,6 +434,15 @@ export default function SubmissionDetail({ submission, siteName, businessName, c
                   <InfoRow label="Other" value={ws.emergencyContactOther} />
                 )}
               </div>
+
+              {extraEmergencyAnswers.length > 0 && (
+                <div>
+                  <SectionHeader title="Additional Declaration Details" />
+                  {extraEmergencyAnswers.map(([key, value]) => (
+                    <InfoRow key={key} label={formatEmergencyFieldLabel(key)} value={value} />
+                  ))}
+                </div>
+              )}
 
               {/* Medical Information */}
               <div>

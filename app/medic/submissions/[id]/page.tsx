@@ -59,6 +59,20 @@ function parseComments(raw: unknown): MedicComment[] {
   }
 }
 
+function parseSiteSpecificAnswers(raw: unknown): Record<string, string> {
+  if (!raw) return {}
+  try {
+    const obj = typeof raw === 'string' ? JSON.parse(raw) : raw
+    if (typeof obj !== 'object' || obj === null) return {}
+    const entries = Object.entries(obj as Record<string, unknown>)
+      .map(([key, value]) => [String(key), value == null ? '' : String(value)] as const)
+      .filter(([key, value]) => key.trim().length > 0 && value.trim().length > 0)
+    return Object.fromEntries(entries)
+  } catch {
+    return {}
+  }
+}
+
 export default async function SubmissionPage({
   params,
   searchParams,
@@ -108,6 +122,7 @@ export default async function SubmissionPage({
     status: String(raw.status ?? 'New') as SubmissionStatus,
     consent_given: Boolean(raw.consent_given),
     submitted_at: raw.submitted_at ? String(raw.submitted_at) : null,
+    site_specific_answers: parseSiteSpecificAnswers(raw.site_specific_answers),
     exported_at: raw.exported_at ? String(raw.exported_at) : null,
     phi_purged_at: raw.phi_purged_at ? String(raw.phi_purged_at) : null,
     worker_snapshot: parseSnapshot(raw.worker_snapshot),
