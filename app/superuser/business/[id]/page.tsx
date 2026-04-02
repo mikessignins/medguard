@@ -8,6 +8,7 @@ import ModulesToggle from '@/components/superuser/ModulesToggle'
 import LogoUpload from '@/components/superuser/LogoUpload'
 import TrialPeriodManager from '@/components/superuser/TrialPeriodManager'
 import IsTestOverride from '@/components/superuser/IsTestOverride'
+import AdminManager from '@/components/superuser/AdminManager'
 
 export default async function BusinessDetailPage({ params }: { params: { id: string } }) {
   const supabase = await createClient()
@@ -133,24 +134,7 @@ export default async function BusinessDetailPage({ params }: { params: { id: str
           initialSubmissions={newSubmissions ?? []}
         />
 
-        {/* Admins */}
-        <div>
-          <h2 className="mb-3 text-lg font-semibold text-[var(--text-1)]">
-            Admins <span className="text-sm font-normal text-[var(--text-3)]">({admins?.length || 0})</span>
-          </h2>
-          <div className="overflow-hidden rounded-xl border border-[var(--border-md)] bg-[var(--bg-card)]">
-            {!admins || admins.length === 0 ? (
-              <p className="px-5 py-4 text-sm italic text-[var(--text-3)]">No admins.</p>
-            ) : (
-              admins.map((a, i) => (
-                <div key={a.id} className={`px-5 py-4 ${i > 0 ? 'border-t border-[var(--border)]' : ''}`}>
-                  <p className="font-medium text-[var(--text-1)]">{a.display_name}</p>
-                  <p className="text-sm text-[var(--text-2)]">{a.email}</p>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
+        <AdminManager businessId={business.id} initialAdmins={admins ?? []} />
 
         {/* Medics */}
         <div>
