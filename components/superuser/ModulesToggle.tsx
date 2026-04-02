@@ -22,7 +22,7 @@ export default function ModulesToggle({ businessId, initialEnabled }: Props) {
       const res = await fetch(`/api/businesses/${businessId}/modules`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ confidential_med_dec_enabled: next }),
+        body: JSON.stringify({ enabled: next }),
       })
       if (!res.ok) {
         const data = await res.json()

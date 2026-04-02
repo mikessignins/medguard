@@ -38,7 +38,6 @@ export interface Business {
   is_suspended?: boolean
   trial_until?: string | null
   reminder_interval_months?: number
-  confidential_med_dec_enabled?: boolean
   logo_url?: string | null
   logo_url_light?: string | null
   logo_url_dark?: string | null

@@ -19,7 +19,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   }
 
   const body = await req.json()
-  if (typeof body.confidential_med_dec_enabled !== 'boolean') {
+  if (typeof body.enabled !== 'boolean') {
     return NextResponse.json({ error: 'Invalid value' }, { status: 400 })
   }
 
@@ -28,7 +28,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   )
 
-  const nextEnabled = body.confidential_med_dec_enabled
+  const nextEnabled = body.enabled
 
   const { error: moduleError } = await service
     .from('business_modules')
@@ -42,11 +42,5 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
 
   if (moduleError) return NextResponse.json({ error: moduleError.message }, { status: 500 })
 
-  const { error: legacyError } = await service
-    .from('businesses')
-    .update({ confidential_med_dec_enabled: nextEnabled })
-    .eq('id', params.id)
-
-  if (legacyError) return NextResponse.json({ error: legacyError.message }, { status: 500 })
   return NextResponse.json({ ok: true })
 }
