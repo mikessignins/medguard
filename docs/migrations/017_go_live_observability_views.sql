@@ -2,7 +2,8 @@
 -- Go-live operational readiness helpers.
 -- Non-destructive: creates monitoring-only views.
 
-create or replace view public.business_current_month_billables as
+create or replace view public.business_current_month_billables
+with (security_invoker = true) as
 select
   bmb.business_id,
   b.name as business_name,
@@ -16,7 +17,8 @@ where bmb.bill_month = date_trunc('month', timezone('utc', now()))::date;
 comment on view public.business_current_month_billables is
   'Current UTC-month billable forms per business (single billing source: business_monthly_billables).';
 
-create or replace view public.purge_pipeline_health as
+create or replace view public.purge_pipeline_health
+with (security_invoker = true) as
 with emergency_backlog as (
   select
     count(*)::bigint as emergency_waiting_purge
