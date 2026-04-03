@@ -4,11 +4,19 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { format } from 'date-fns'
-import type { MedDecReviewStatus, MedicationDeclaration, Site, Submission, SubmissionStatus } from '@/lib/types'
+import type {
+  FatigueAssessment,
+  MedDecReviewStatus,
+  MedicationDeclaration,
+  Site,
+  Submission,
+  SubmissionStatus,
+} from '@/lib/types'
 
 const AUTO_PURGE_DAYS = 7
 const FINAL_SUBMISSION_STATUSES: SubmissionStatus[] = ['Approved', 'Requires Follow-up']
 const FINAL_MED_DEC_STATUSES: MedDecReviewStatus[] = ['Normal Duties', 'Restricted Duties', 'Unfit for Work']
+const FINAL_FATIGUE_STATUS = 'resolved'
 
 const SUBMISSION_STATUS_COLORS: Record<SubmissionStatus, string> = {
   'New': 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20',
@@ -82,6 +90,25 @@ function SitePicker({
   )
 }
 
+function formatFatigueDecision(decision: FatigueAssessment['review_payload']['fitForWorkDecision']) {
+  switch (decision) {
+    case 'fit_normal_duties':
+      return 'Fit for normal duties'
+    case 'fit_restricted_duties':
+      return 'Fit for restricted duties'
+    case 'not_fit_for_work':
+      return 'Not fit for work'
+    case 'sent_to_room':
+      return 'Sent to room'
+    case 'sent_home':
+      return 'Sent home'
+    case 'requires_escalation':
+      return 'Requires escalation'
+    default:
+      return 'Outcome recorded'
+  }
+}
+
 function SectionHeader({ title, subtitle }: { title: string; subtitle: string }) {
   return (
     <div>
@@ -95,18 +122,22 @@ interface Props {
   sites: Array<Pick<Site, 'id' | 'name' | 'is_office'>>
   submissions: MedicExportsSubmission[]
   medDeclarations: MedicExportsMedDec[]
+  fatigueAssessments: MedicExportsFatigue[]
   initialSite?: string
 }
 
-export default function MedicExportsDashboard({ sites, submissions, medDeclarations, initialSite }: Props) {
+export default function MedicExportsDashboard({ sites, submissions, medDeclarations, fatigueAssessments, initialSite }: Props) {
   const router = useRouter()
   const [activeTab, setActiveTab] = useState(initialSite || sites[0]?.id || '')
   const [selectedSubmissionIds, setSelectedSubmissionIds] = useState<Set<string>>(new Set())
   const [selectedMedDecIds, setSelectedMedDecIds] = useState<Set<string>>(new Set())
+  const [selectedFatigueIds, setSelectedFatigueIds] = useState<Set<string>>(new Set())
   const [submissionError, setSubmissionError] = useState('')
   const [medDecError, setMedDecError] = useState('')
+  const [fatigueError, setFatigueError] = useState('')
   const [purgingSubmissions, setPurgingSubmissions] = useState(false)
   const [purgingMedDecs, setPurgingMedDecs] = useState(false)
+  const [purgingFatigue, setPurgingFatigue] = useState(false)
 
   const siteSubmissions = submissions.filter((s) => s.site_id === activeTab && s.status !== 'Recalled')
   const readySubmissions = siteSubmissions.filter((s) => !s.exported_at && !s.phi_purged_at && FINAL_SUBMISSION_STATUSES.includes(s.status))
@@ -118,11 +149,17 @@ export default function MedicExportsDashboard({ sites, submissions, medDeclarati
   const exportedMedDecs = siteMedDecs.filter((m) => !!m.exported_at && !m.phi_purged_at)
   const purgedMedDecs = siteMedDecs.filter((m) => !!m.phi_purged_at)
 
+  const siteFatigue = fatigueAssessments.filter((item) => item.site_id === activeTab)
+  const readyFatigue = siteFatigue.filter((item) => !item.exported_at && !item.phi_purged_at && item.status === FINAL_FATIGUE_STATUS)
+  const exportedFatigue = siteFatigue.filter((item) => !!item.exported_at && !item.phi_purged_at)
+  const purgedFatigue = siteFatigue.filter((item) => !!item.phi_purged_at)
+
   const badgeCounts = Object.fromEntries(
     sites.map((site) => {
       const subCount = submissions.filter((s) => s.site_id === site.id && s.status !== 'Recalled' && (!s.phi_purged_at && (FINAL_SUBMISSION_STATUSES.includes(s.status) || !!s.exported_at) || !!s.phi_purged_at)).length
       const medCount = medDeclarations.filter((m) => m.site_id === site.id && (!m.phi_purged_at && (FINAL_MED_DEC_STATUSES.includes(m.medic_review_status) || !!m.exported_at) || !!m.phi_purged_at)).length
-      return [site.id, subCount + medCount]
+      const fatigueCount = fatigueAssessments.filter((item) => item.site_id === site.id && (!item.phi_purged_at && (item.status === FINAL_FATIGUE_STATUS || !!item.exported_at) || !!item.phi_purged_at)).length
+      return [site.id, subCount + medCount + fatigueCount]
     })
   )
 
@@ -132,6 +169,10 @@ export default function MedicExportsDashboard({ sites, submissions, medDeclarati
 
   function medDecHref(id: string) {
     return `/medic/med-declarations/${id}?view=exports&site=${activeTab}`
+  }
+
+  function fatigueHref(id: string) {
+    return `/medic/fatigue/${id}?view=exports&site=${activeTab}`
   }
 
   function toggleSelected(setter: React.Dispatch<React.SetStateAction<Set<string>>>, id: string) {
@@ -187,6 +228,30 @@ export default function MedicExportsDashboard({ sites, submissions, medDeclarati
       setMedDecError('Network error — please try again.')
     } finally {
       setPurgingMedDecs(false)
+    }
+  }
+
+  async function purgeFatigueAssessments() {
+    if (selectedFatigueIds.size === 0) return
+    setPurgingFatigue(true)
+    setFatigueError('')
+    try {
+      const res = await fetch('/api/fatigue-assessments/purge', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: Array.from(selectedFatigueIds) }),
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        setFatigueError(data.error || 'Purge failed')
+        return
+      }
+      setSelectedFatigueIds(new Set())
+      router.refresh()
+    } catch {
+      setFatigueError('Network error — please try again.')
+    } finally {
+      setPurgingFatigue(false)
     }
   }
 
@@ -357,6 +422,82 @@ export default function MedicExportsDashboard({ sites, submissions, medDeclarati
           </div>
         )}
       </div>
+
+      <div className="space-y-4">
+        <SectionHeader title="Fatigue Assessments" subtitle="Medic-reviewed fatigue outcomes can be exported into the business medical record and kept available until purged." />
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4"><p className="text-xs uppercase tracking-widest text-slate-500">Ready to Export</p><p className="mt-1 text-2xl font-bold text-violet-400">{readyFatigue.length}</p></div>
+          <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4"><p className="text-xs uppercase tracking-widest text-slate-500">Exported</p><p className="mt-1 text-2xl font-bold text-amber-400">{exportedFatigue.length}</p></div>
+          <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4"><p className="text-xs uppercase tracking-widest text-slate-500">Purged</p><p className="mt-1 text-2xl font-bold text-slate-400">{purgedFatigue.length}</p></div>
+        </div>
+
+        {readyFatigue.length > 0 && (
+          <div className="rounded-xl border border-slate-700/50 bg-slate-800/60 overflow-hidden">
+            <div className="px-4 py-3 border-b border-slate-700/50"><p className="text-xs font-semibold uppercase tracking-widest text-slate-500">Ready to Export</p></div>
+            {readyFatigue.map((item, i) => (
+              <Link key={item.id} href={fatigueHref(item.id)} className={`w-full text-left px-5 py-4 flex items-center justify-between hover:bg-slate-700/30 transition-colors ${i > 0 ? 'border-t border-slate-700/50' : ''}`}>
+                <div>
+                  <p className="font-semibold text-slate-100">{item.payload.workerAssessment.workerNameSnapshot || 'Unknown Worker'}</p>
+                  <p className="text-sm text-slate-500 mt-1">
+                    {fmtDate(item.submitted_at)} · {formatFatigueDecision(item.review_payload.fitForWorkDecision)}
+                  </p>
+                </div>
+                <span className="text-xs font-medium px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                  Reviewed
+                </span>
+              </Link>
+            ))}
+          </div>
+        )}
+
+        {exportedFatigue.length > 0 && (
+          <div className="space-y-3 rounded-xl border border-slate-700/50 bg-slate-800/60 p-4">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <p className="text-xs font-semibold uppercase tracking-widest text-slate-500">Exported and Available</p>
+              <div className="flex items-center gap-2">
+                <button onClick={() => setSelectedFatigueIds(selectedFatigueIds.size === exportedFatigue.length ? new Set() : new Set(exportedFatigue.map((item) => item.id)))} className="text-sm text-cyan-400 hover:underline">
+                  {selectedFatigueIds.size === exportedFatigue.length ? 'Deselect all' : 'Select all'}
+                </button>
+                {selectedFatigueIds.size > 0 && (
+                  <button onClick={purgeFatigueAssessments} disabled={purgingFatigue} className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50">
+                    {purgingFatigue ? 'Purging…' : `Purge selected (${selectedFatigueIds.size})`}
+                  </button>
+                )}
+              </div>
+            </div>
+            {fatigueError && <p className="text-sm text-red-400">{fatigueError}</p>}
+            <div className="rounded-xl border border-slate-700/50 overflow-hidden">
+              {exportedFatigue.map((item, i) => (
+                <div key={item.id} className={`flex items-center gap-3 px-4 py-4 ${i > 0 ? 'border-t border-slate-700/50' : ''}`}>
+                  <input type="checkbox" checked={selectedFatigueIds.has(item.id)} onChange={() => toggleSelected(setSelectedFatigueIds, item.id)} className="w-4 h-4 rounded border-slate-600 bg-slate-700 text-red-500 cursor-pointer" />
+                  <Link href={fatigueHref(item.id)} className="flex-1 text-left flex items-center justify-between hover:bg-slate-700/30 rounded-lg px-2 py-1 -mx-2 -my-1 transition-colors">
+                    <div>
+                      <p className="font-semibold text-slate-100">{item.payload.workerAssessment.workerNameSnapshot || 'Unknown Worker'}</p>
+                      <p className="text-sm text-slate-500 mt-1">{fmtDate(item.submitted_at)} · {formatFatigueDecision(item.review_payload.fitForWorkDecision)}</p>
+                    </div>
+                    {item.exported_at && <PurgeCountdown exportedAt={item.exported_at} />}
+                  </Link>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {purgedFatigue.length > 0 && (
+          <div className="rounded-xl border border-slate-800 bg-slate-900/60 overflow-hidden">
+            <div className="px-4 py-3 border-b border-slate-800"><p className="text-xs font-semibold uppercase tracking-widest text-slate-500">Purged History</p></div>
+            {purgedFatigue.map((item, i) => (
+              <Link key={item.id} href={fatigueHref(item.id)} className={`w-full text-left px-5 py-4 flex items-center justify-between hover:bg-slate-800 transition-colors ${i > 0 ? 'border-t border-slate-800' : ''}`}>
+                <div>
+                  <p className="font-semibold text-slate-400">PHI Purged</p>
+                  <p className="text-sm text-slate-600 mt-1">{fmtDate(item.submitted_at)}</p>
+                </div>
+                <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-slate-700 text-slate-500">Purged</span>
+              </Link>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   )
 }
@@ -368,4 +509,9 @@ type MedicExportsSubmission = Pick<
 type MedicExportsMedDec = Pick<
   MedicationDeclaration,
   'id' | 'business_id' | 'site_id' | 'worker_name' | 'submitted_at' | 'medic_review_status' | 'exported_at' | 'phi_purged_at' | 'medications'
+>
+
+type MedicExportsFatigue = Pick<
+  FatigueAssessment,
+  'id' | 'business_id' | 'site_id' | 'status' | 'payload' | 'review_payload' | 'submitted_at' | 'exported_at' | 'phi_purged_at'
 >

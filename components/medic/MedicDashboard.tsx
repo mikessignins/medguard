@@ -350,6 +350,11 @@ export default function MedicDashboard({
         .filter((item) => item.site_id === activeTab && item.status === 'resolved' && !item.phi_purged_at)
         .slice(0, 10)
     : []
+  const fatigueReadyToExport = fatigueEnabled
+    ? fatigueAssessments.filter(
+        (item) => item.site_id === activeTab && item.status === 'resolved' && !item.exported_at && !item.phi_purged_at,
+      ).length
+    : 0
   const fatigueAwaitingCount = activeFatigueAssessments.filter((item) => item.status === 'awaiting_medic_review').length
   const fatigueInReviewCount = activeFatigueAssessments.filter((item) => item.status === 'in_medic_review').length
   const fatigueHighRiskCount = activeFatigueAssessments.filter(
@@ -550,6 +555,7 @@ export default function MedicDashboard({
     { label: 'Awaiting Review', value: fatigueAwaitingCount, helper: 'Worker checks waiting for first medic review', tone: 'accent' as const },
     { label: 'In Review', value: fatigueInReviewCount, helper: 'Already opened by a medic', tone: 'warn' as const },
     { label: 'High Risk', value: fatigueHighRiskCount, helper: 'Immediate attention candidates', tone: 'danger' as const },
+    { label: 'Ready for Export', value: fatigueReadyToExport, helper: 'Reviewed outcomes waiting in exports', tone: 'success' as const, onClick: () => router.push(`/medic/exports?site=${activeTab}`) },
   ]
 
   return (
@@ -663,6 +669,7 @@ export default function MedicDashboard({
                     <p className="mt-1 text-sm text-[var(--medic-muted)]">
                       {[
                         item.review_payload.reviewedByName ? `Reviewed by ${item.review_payload.reviewedByName}` : null,
+                        !item.exported_at ? 'Ready for export' : 'Exported',
                         signals.length > 0 ? signals.join(' · ') : null,
                       ].filter(Boolean).join(' · ') || 'No additional follow-up flags recorded'}
                     </p>

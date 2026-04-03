@@ -31,6 +31,13 @@ const STATUS_STYLES = {
   resolved: 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20',
 } as const
 
+const EXPORT_RECOMMENDED_DECISIONS: FatigueReviewDecision[] = [
+  'not_fit_for_work',
+  'sent_to_room',
+  'sent_home',
+  'requires_escalation',
+]
+
 function fmtDateTime(value: string | null | undefined) {
   if (!value) return '—'
   try {
@@ -159,8 +166,11 @@ export default function FatigueDetail({ assessment, siteName, businessName, curr
   const [requiresHigherMedicalReview, setRequiresHigherMedicalReview] = useState(Boolean(assessment.review_payload.requiresHigherMedicalReview))
   const [requiresFollowUp, setRequiresFollowUp] = useState(Boolean(assessment.review_payload.requiresFollowUp))
   const [saving, setSaving] = useState(false)
+  const [exporting, setExporting] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState(false)
+  const [exportedAt, setExportedAt] = useState<string | null>(assessment.exported_at ?? null)
+  const [showExportPrompt, setShowExportPrompt] = useState(false)
 
   const prevId = queueContext && queueContext.pos > 0 ? queueContext.ids[queueContext.pos - 1] : null
   const nextId = queueContext && queueContext.pos < queueContext.ids.length - 1 ? queueContext.ids[queueContext.pos + 1] : null
@@ -170,7 +180,38 @@ export default function FatigueDetail({ assessment, siteName, businessName, curr
     return `/medic/fatigue/${targetId}?${encodeQueue(queueContext.ids, targetPos)}&site=${encodeURIComponent(assessment.site_id)}`
   }
 
-  async function handleSave() {
+  const exportRecommended = !!decision && EXPORT_RECOMMENDED_DECISIONS.includes(decision)
+
+  async function exportPdf() {
+    setExporting(true)
+    try {
+      const response = await fetch(`/api/fatigue-assessments/${assessment.id}/pdf`)
+      if (!response.ok) {
+        const text = await response.text().catch(() => '')
+        setError(text || 'Failed to export fatigue PDF.')
+        return false
+      }
+
+      const blob = await response.blob()
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      const disposition = response.headers.get('content-disposition') || ''
+      const match = disposition.match(/filename="([^"]+)"/)
+      link.href = url
+      link.download = match?.[1] || `Fatigue-${assessment.id}.pdf`
+      link.click()
+      URL.revokeObjectURL(url)
+      if (!exportedAt) setExportedAt(new Date().toISOString())
+      return true
+    } catch {
+      setError('Network error. Please try again.')
+      return false
+    } finally {
+      setExporting(false)
+    }
+  }
+
+  async function handleSave(exportAfterSave = false) {
     if (isReadOnly) {
       setError('This fatigue review is read-only.')
       return
@@ -210,7 +251,17 @@ export default function FatigueDetail({ assessment, siteName, businessName, curr
       }
 
       setSuccess(true)
-      router.refresh()
+      if (exportAfterSave) {
+        const exported = await exportPdf()
+        if (!exported) {
+          setError('The fatigue review was saved, but the export did not complete. Please try exporting again.')
+        }
+        router.refresh()
+      } else if (EXPORT_RECOMMENDED_DECISIONS.includes(decision) && !exportedAt) {
+        setShowExportPrompt(true)
+      } else {
+        router.refresh()
+      }
     } catch {
       setError('Network error. Please try again.')
     } finally {
@@ -364,6 +415,15 @@ export default function FatigueDetail({ assessment, siteName, businessName, curr
                 ))}
               </div>
 
+              {exportRecommended && !exportedAt && (
+                <div className="rounded-lg border border-amber-500/20 bg-amber-500/10 p-3">
+                  <p className="text-sm font-semibold text-amber-300">Export recommended</p>
+                  <p className="mt-1 text-xs text-amber-200/90">
+                    This outcome should usually be exported into the business medical record for follow-up, handover, and governance.
+                  </p>
+                </div>
+              )}
+
               {error && <p className="text-sm text-red-300">{error}</p>}
               {success && (
                 <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-3 text-sm text-emerald-200">
@@ -387,10 +447,27 @@ export default function FatigueDetail({ assessment, siteName, businessName, curr
                       : 'Comments and outcome are now read-only.'}
                   </p>
                 </div>
+              ) : exportRecommended && !exportedAt ? (
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <button
+                    onClick={() => handleSave(false)}
+                    disabled={saving || exporting}
+                    className="rounded-lg border border-slate-700 bg-slate-900/60 px-4 py-2.5 text-sm font-semibold text-slate-200 transition hover:border-slate-600 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {saving ? 'Saving...' : 'Complete without export'}
+                  </button>
+                  <button
+                    onClick={() => handleSave(true)}
+                    disabled={saving || exporting}
+                    className="rounded-lg bg-violet-500 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-400 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {saving || exporting ? 'Completing...' : 'Complete and export'}
+                  </button>
+                </div>
               ) : (
                 <button
-                  onClick={handleSave}
-                  disabled={saving}
+                  onClick={() => handleSave(false)}
+                  disabled={saving || exporting}
                   className="w-full rounded-lg bg-violet-500 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-400 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {saving ? 'Saving...' : 'Save fatigue review'}
@@ -415,6 +492,57 @@ export default function FatigueDetail({ assessment, siteName, businessName, curr
                 </div>
               )}
             </div>
+          </div>
+
+          {!isReadOnly && showExportPrompt && !exportedAt && (
+            <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 p-4">
+              <p className="text-sm font-semibold text-amber-300">Export recommended</p>
+              <p className="mt-1 text-sm text-amber-200/90">
+                This fatigue review has been completed. Would you like to export it into the business medical record now?
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button
+                  onClick={async () => {
+                    const exported = await exportPdf()
+                    if (exported) {
+                      setShowExportPrompt(false)
+                      router.refresh()
+                    }
+                  }}
+                  disabled={exporting}
+                  className="rounded-lg bg-violet-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-violet-400 disabled:opacity-60"
+                >
+                  {exporting ? 'Exporting...' : 'Export now'}
+                </button>
+                <button
+                  onClick={() => setShowExportPrompt(false)}
+                  className="rounded-lg border border-slate-700 bg-slate-900/60 px-4 py-2 text-sm font-medium text-slate-200 transition hover:border-slate-600"
+                >
+                  Not now
+                </button>
+              </div>
+            </div>
+          )}
+
+          <div className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-5">
+            <h2 className="text-xs font-semibold text-slate-500 uppercase tracking-widest mb-3">Export &amp; Audit</h2>
+            <div className="text-sm text-slate-400 space-y-1 mb-4">
+              {exportedAt ? (
+                <p>Exported: <span className="text-slate-300">{fmtDateTime(exportedAt)}</span></p>
+              ) : (
+                <p className="text-slate-500 italic">Not yet exported</p>
+              )}
+            </div>
+            <button
+              onClick={async () => {
+                const exported = await exportPdf()
+                if (exported) router.refresh()
+              }}
+              disabled={exporting}
+              className="w-full rounded-lg border border-slate-700 bg-slate-900/60 px-4 py-2.5 text-sm font-medium text-slate-200 transition hover:border-slate-600 disabled:opacity-60"
+            >
+              {exporting ? 'Generating...' : exportedAt ? 'Download PDF Again' : 'Export PDF'}
+            </button>
           </div>
         </div>
       </div>

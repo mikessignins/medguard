@@ -287,5 +287,6 @@ export interface FatigueAssessment {
   reviewed_at: string | null
   reviewed_by: string | null
   exported_at?: string | null
+  exported_by_name?: string | null
   phi_purged_at?: string | null
 }

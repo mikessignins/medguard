@@ -19,6 +19,7 @@ function parseFatigueAssessment(raw: Record<string, unknown>): FatigueAssessment
     reviewed_at: raw.reviewed_at ? String(raw.reviewed_at) : null,
     reviewed_by: raw.reviewed_by ? String(raw.reviewed_by) : null,
     exported_at: raw.exported_at ? String(raw.exported_at) : null,
+    exported_by_name: raw.exported_by_name ? String(raw.exported_by_name) : null,
     phi_purged_at: raw.phi_purged_at ? String(raw.phi_purged_at) : null,
   }
 }
