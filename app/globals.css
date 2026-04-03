@@ -13,6 +13,21 @@
   --text-1:     #f1f5f9;
   --text-2:     #94a3b8;
   --text-3:     #64748b;
+  --brand-primary: #5fbaae;
+  --brand-primary-strong: #7ed5ca;
+  --brand-primary-soft: rgba(95, 186, 174, 0.14);
+  --brand-primary-border: rgba(95, 186, 174, 0.28);
+  --medic-shell-bg: #0d1520;
+  --medic-sidebar-bg: linear-gradient(180deg, rgba(16, 27, 35, 0.98) 0%, rgba(17, 24, 39, 0.98) 100%);
+  --medic-panel: rgba(19, 28, 40, 0.82);
+  --medic-panel-solid: #17202d;
+  --medic-card: rgba(24, 34, 48, 0.88);
+  --medic-card-soft: rgba(17, 24, 39, 0.58);
+  --medic-border: rgba(148, 163, 184, 0.14);
+  --medic-text: #e8f3f0;
+  --medic-muted: #8ea7a2;
+  --medic-accent: var(--brand-primary);
+  --medic-accent-strong: var(--brand-primary-strong);
 }
 
 [data-theme="light"] {
@@ -25,6 +40,20 @@
   --text-1:     #0f172a;
   --text-2:     #475569;
   --text-3:     #64748b;
+  --brand-primary-strong: #3b9589;
+  --brand-primary-soft: rgba(95, 186, 174, 0.12);
+  --brand-primary-border: rgba(95, 186, 174, 0.24);
+  --medic-shell-bg: #edf4f2;
+  --medic-sidebar-bg: linear-gradient(180deg, #f7fcfb 0%, #eef7f4 100%);
+  --medic-panel: rgba(255, 255, 255, 0.9);
+  --medic-panel-solid: #ffffff;
+  --medic-card: rgba(255, 255, 255, 0.96);
+  --medic-card-soft: rgba(244, 250, 248, 0.9);
+  --medic-border: rgba(148, 163, 184, 0.2);
+  --medic-text: #14312f;
+  --medic-muted: #5f7873;
+  --medic-accent: var(--brand-primary);
+  --medic-accent-strong: var(--brand-primary-strong);
 }
 
 /* Apply to surfaces we can't easily migrate via component props */
@@ -230,7 +259,7 @@ body {
 
 @layer base {
   *:focus-visible {
-    outline: 2px solid #22D3EE;
+    outline: 2px solid var(--brand-primary);
     outline-offset: 2px;
   }
 }
@@ -259,6 +288,121 @@ body {
   }
   .data-card {
     @apply bg-slate-800/60 backdrop-blur-sm border border-slate-700/50 rounded-xl overflow-hidden;
+  }
+  .medic-shell {
+    background:
+      radial-gradient(circle at top right, rgba(95, 186, 174, 0.12), transparent 28%),
+      radial-gradient(circle at bottom left, rgba(95, 186, 174, 0.08), transparent 22%),
+      var(--medic-shell-bg);
+  }
+  .medic-sidebar {
+    background: var(--medic-sidebar-bg);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+  }
+  .medic-nav-link {
+    @apply flex items-start gap-3 rounded-2xl px-3 py-3 text-sm font-medium transition-all duration-150;
+    color: var(--medic-muted);
+  }
+  .medic-nav-link:hover {
+    background: var(--medic-card-soft);
+    color: var(--medic-text);
+  }
+  .medic-nav-link-active {
+    @apply flex items-start gap-3 rounded-2xl px-3 py-3 text-sm font-medium transition-all duration-150;
+    background: var(--brand-primary-soft);
+    border: 1px solid var(--brand-primary-border);
+    color: var(--medic-text);
+    box-shadow: 0 16px 34px rgba(16, 24, 39, 0.12);
+  }
+  .medic-rail-section-label {
+    @apply px-3 text-[11px] font-semibold uppercase tracking-[0.24em];
+    color: var(--medic-muted);
+  }
+  .medic-hero {
+    @apply flex flex-col gap-4 rounded-[28px] border p-6 lg:flex-row lg:items-end lg:justify-between;
+    background:
+      linear-gradient(135deg, rgba(95, 186, 174, 0.16) 0%, rgba(95, 186, 174, 0.05) 42%, transparent 100%),
+      var(--medic-panel);
+    border-color: var(--medic-border);
+    box-shadow: 0 20px 44px rgba(15, 23, 42, 0.12);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+  }
+  .medic-kicker {
+    @apply text-[11px] font-semibold uppercase tracking-[0.26em];
+    color: var(--medic-accent-strong);
+  }
+  .medic-summary-pill {
+    @apply inline-flex items-center rounded-full border px-4 py-2 text-sm font-medium;
+    background: var(--brand-primary-soft);
+    border-color: var(--brand-primary-border);
+    color: var(--medic-text);
+  }
+  .medic-site-pill {
+    @apply flex shrink-0 items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition-all duration-150;
+    background: var(--medic-card-soft);
+    border-color: var(--medic-border);
+    color: var(--medic-muted);
+  }
+  .medic-site-pill:hover {
+    color: var(--medic-text);
+    border-color: var(--brand-primary-border);
+  }
+  .medic-site-pill-active {
+    @apply flex shrink-0 items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition-all duration-150;
+    background: var(--brand-primary-soft);
+    border-color: var(--brand-primary-border);
+    color: var(--medic-text);
+  }
+  .medic-site-badge {
+    @apply rounded-full px-1.5 py-0.5 text-xs font-semibold leading-none text-white;
+    background: var(--medic-accent);
+  }
+  .medic-stat-card {
+    @apply rounded-[24px] border p-5 transition-all duration-150;
+    background: var(--medic-card);
+    border-color: var(--medic-border);
+    box-shadow: 0 16px 34px rgba(15, 23, 42, 0.08);
+  }
+  .medic-stat-card:hover {
+    transform: translateY(-1px);
+    border-color: var(--brand-primary-border);
+  }
+  .medic-inline-alert {
+    @apply flex flex-wrap items-center justify-between gap-3 rounded-2xl border px-4 py-3 text-sm;
+    background: var(--brand-primary-soft);
+    border-color: var(--brand-primary-border);
+    color: var(--medic-text);
+  }
+  .medic-filter-chip {
+    @apply rounded-full border px-3 py-1.5 text-sm font-medium transition-all duration-150;
+    background: var(--medic-card-soft);
+    border-color: var(--medic-border);
+    color: var(--medic-muted);
+  }
+  .medic-filter-chip-active {
+    @apply rounded-full border px-3 py-1.5 text-sm font-medium transition-all duration-150;
+    background: var(--brand-primary-soft);
+    border-color: var(--brand-primary-border);
+    color: var(--medic-text);
+  }
+  .medic-list-shell {
+    @apply overflow-hidden rounded-[24px] border;
+    background: var(--medic-card);
+    border-color: var(--medic-border);
+    box-shadow: 0 16px 34px rgba(15, 23, 42, 0.08);
+  }
+  .medic-list-row {
+    @apply flex items-center justify-between gap-4 px-5 py-4 transition-colors;
+  }
+  .medic-list-row:hover {
+    background: rgba(95, 186, 174, 0.06);
+  }
+  .medic-empty-state {
+    @apply rounded-[24px] border px-6 py-8 text-center;
+    background: var(--medic-card-soft);
+    border-color: var(--medic-border);
   }
 }
 

@@ -34,6 +34,7 @@ export interface ModuleRegistryEntry {
   description: string
   category: 'core' | 'optional' | 'custom'
   icon: string
+  medicHref?: string
   surfaces: ModuleSurface[]
   submissionBackend: ModuleSubmissionBackend
   supportsExport: boolean
@@ -61,6 +62,7 @@ export const MODULE_REGISTRY: Record<ModuleKey, ModuleRegistryEntry> = {
     description: 'Core worker declaration workflow for site attendance and emergency medical information.',
     category: 'core',
     icon: 'file-heart',
+    medicHref: '/medic/emergency',
     surfaces: ['worker_home', 'medic_queue', 'medic_exports', 'admin_reporting', 'superuser_config'],
     submissionBackend: 'legacy_emergency',
     supportsExport: true,
@@ -76,6 +78,7 @@ export const MODULE_REGISTRY: Record<ModuleKey, ModuleRegistryEntry> = {
     description: 'Workers can submit confidential medication information for medic review.',
     category: 'optional',
     icon: 'shield-plus',
+    medicHref: '/medic/medications',
     surfaces: ['worker_home', 'medic_queue', 'medic_exports', 'admin_reporting', 'superuser_config'],
     submissionBackend: 'legacy_medication',
     supportsExport: true,
@@ -91,6 +94,7 @@ export const MODULE_REGISTRY: Record<ModuleKey, ModuleRegistryEntry> = {
     description: 'Fatigue self-assessment on iOS with medic review queues on the web app.',
     category: 'custom',
     icon: 'moon-star',
+    medicHref: '/medic/fatigue',
     surfaces: ['worker_home', 'medic_queue', 'admin_reporting', 'superuser_config'],
     submissionBackend: 'module_engine',
     supportsExport: false,
@@ -106,6 +110,7 @@ export const MODULE_REGISTRY: Record<ModuleKey, ModuleRegistryEntry> = {
     description: 'Future enhanced fit-for-work workflow for customer-specific requirements.',
     category: 'custom',
     icon: 'clipboard-check',
+    medicHref: '/medic/fit-for-work-plus',
     surfaces: ['worker_home', 'medic_queue', 'admin_reporting', 'superuser_config'],
     submissionBackend: 'module_engine',
     supportsExport: false,
@@ -175,4 +180,8 @@ export function getModuleSurfaceLabel(surface: ModuleSurface) {
     case 'superuser_config':
       return 'Superuser config'
   }
+}
+
+export function getMedicModuleHref(moduleKey: ModuleKey) {
+  return MODULE_REGISTRY[moduleKey].medicHref ?? '/medic'
 }

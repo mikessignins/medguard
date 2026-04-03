@@ -38,15 +38,15 @@ export default function MedDecSection({ medDeclarations, siteId, exportsHref = '
   if (siteDecs.length === 0) return null
 
   return (
-    <div className="mt-10">
+    <div className="space-y-5">
       <div className="flex items-center gap-3 mb-5">
-        <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-widest whitespace-nowrap">Medication Declarations</h2>
+        <h2 className="text-sm font-semibold text-[var(--medic-muted)] uppercase tracking-[0.22em] whitespace-nowrap">Medication Declarations</h2>
         {activeCount > 0 && (
-          <span className="text-xs bg-indigo-600 text-white px-2 py-0.5 rounded-full font-semibold shrink-0">
+          <span className="text-xs bg-[var(--medic-accent)] text-white px-2 py-0.5 rounded-full font-semibold shrink-0">
             {activeCount} active
           </span>
         )}
-        <div className="flex-1 h-px bg-slate-800" />
+        <div className="flex-1 h-px bg-[var(--medic-border)]" />
       </div>
 
       {activeCount > 0 && (
@@ -68,14 +68,14 @@ export default function MedDecSection({ medDeclarations, siteId, exportsHref = '
               <Link
                 key={m.id}
                 href={`/medic/med-declarations/${m.id}?${encodeQueue(active.map((x) => x.id), idx)}`}
-                className="w-full text-left bg-slate-800/60 backdrop-blur-sm border border-slate-700/50 rounded-xl px-5 py-4 hover:border-slate-600 transition-colors flex items-center justify-between"
+                className="medic-list-row rounded-[24px] border bg-[var(--medic-card)] border-[var(--medic-border)] hover:border-[var(--brand-primary-border)]"
               >
                 <div>
                   <div className="flex items-center gap-2 mb-1">
-                    <p className="font-semibold text-slate-100">{m.worker_name || 'Unknown Worker'}</p>
+                    <p className="font-semibold text-[var(--medic-text)]">{m.worker_name || 'Unknown Worker'}</p>
                     {hasSideEffects && <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" title="Health flags" />}
                   </div>
-                  <p className="text-sm text-slate-500">
+                  <p className="text-sm text-[var(--medic-muted)]">
                     {m.medications?.length ?? 0} medication{(m.medications?.length ?? 0) !== 1 ? 's' : ''}
                     {' '}&middot;{' '}
                     {(() => { try { return format(new Date(m.submitted_at), 'dd MMM yyyy') } catch { return '' } })()}
@@ -91,17 +91,17 @@ export default function MedDecSection({ medDeclarations, siteId, exportsHref = '
       )}
 
       {(reviewed.length > 0 || exported.length > 0 || purged.length > 0) && (
-        <div className="rounded-xl border border-slate-800 bg-slate-900/50 px-4 py-4">
+        <div className="rounded-[24px] border border-[var(--medic-border)] bg-[var(--medic-card-soft)] px-4 py-4">
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <div>
-              <p className="text-sm font-semibold text-slate-200">Reviewed medication declarations have moved out of the active queue.</p>
-              <p className="text-sm text-slate-500 mt-1">
+              <p className="text-sm font-semibold text-[var(--medic-text)]">Reviewed medication declarations have moved out of the active queue.</p>
+              <p className="mt-1 text-sm text-[var(--medic-muted)]">
                 {reviewed.length} ready to export, {exported.length} exported, {purged.length} purged.
               </p>
             </div>
             <button
               onClick={() => router.push(exportsHref)}
-              className="px-4 py-2 rounded-lg bg-cyan-500/10 border border-cyan-500/20 text-cyan-300 hover:bg-cyan-500/15 transition-colors text-sm font-semibold"
+              className="rounded-full border border-[var(--brand-primary-border)] bg-[var(--brand-primary-soft)] px-4 py-2 text-sm font-semibold text-[var(--medic-text)] transition-colors hover:bg-[rgba(95,186,174,0.18)]"
             >
               Open exports
             </button>
@@ -110,7 +110,9 @@ export default function MedDecSection({ medDeclarations, siteId, exportsHref = '
       )}
 
       {active.length === 0 && reviewed.length === 0 && exported.length === 0 && purged.length === 0 && (
-        <p className="text-center py-8 text-slate-600">No medication declarations for this site.</p>
+        <div className="medic-empty-state py-8">
+          <p className="text-sm text-[var(--medic-muted)]">No medication declarations for this site.</p>
+        </div>
       )}
     </div>
   )

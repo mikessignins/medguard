@@ -71,14 +71,10 @@ function SitePicker({
           <button
             key={site.id}
             onClick={() => onChange(site.id)}
-            className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap border transition-all duration-150 shrink-0 ${
-              isActive
-                ? 'bg-cyan-500/10 border-cyan-500/30 text-cyan-400'
-                : 'bg-slate-800/60 border-slate-700/50 text-slate-400 hover:text-slate-200 hover:border-slate-600'
-            }`}
+            className={isActive ? 'medic-site-pill-active' : 'medic-site-pill'}
           >
             {site.name}
-            {count > 0 && <span className="bg-cyan-600 text-white text-xs rounded-full px-1.5 py-0.5 font-semibold leading-none">{count}</span>}
+            {count > 0 && <span className="medic-site-badge">{count}</span>}
           </button>
         )
       })}
@@ -205,11 +201,15 @@ export default function MedicExportsDashboard({ sites, submissions, medDeclarati
 
   return (
     <div className="space-y-6">
-      <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-5">
-        <h1 className="text-2xl font-bold text-slate-100">Exports &amp; Retention</h1>
-        <p className="mt-2 max-w-3xl text-sm text-slate-400">
+      <div className="medic-hero">
+        <div className="max-w-3xl">
+          <p className="medic-kicker">Exports &amp; Retention</p>
+          <h1 className="mt-2 text-3xl font-semibold tracking-tight text-[var(--medic-text)]">Reviewed forms, exports, and purge windows</h1>
+          <p className="mt-3 max-w-3xl text-sm leading-6 text-[var(--medic-muted)]">
           Reviewed declarations leave the active queue and live here. Once exported, PDFs stay available for {AUTO_PURGE_DAYS} days unless you purge them sooner.
-        </p>
+          </p>
+        </div>
+        <div className="medic-summary-pill">Retention window: {AUTO_PURGE_DAYS} days</div>
       </div>
 
       <SitePicker sites={sites} activeTab={activeTab} onChange={setActiveTab} badgeCounts={badgeCounts} />

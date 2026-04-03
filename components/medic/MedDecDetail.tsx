@@ -131,7 +131,7 @@ export default function MedDecDetail({ medDec, siteName, businessName, queueCont
       {/* Queue nav bar */}
       <div className="flex items-center justify-between mb-4 pb-4 border-b border-slate-700/50 gap-4 flex-wrap">
         <Link
-          href={backHref || `/medic?site=${medDec.site_id}`}
+          href={backHref || `/medic/medications?site=${medDec.site_id}`}
           className="flex items-center gap-1.5 text-sm text-slate-400 hover:text-slate-200 transition-colors"
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -398,7 +398,7 @@ export default function MedDecDetail({ medDec, siteName, businessName, queueCont
           )}
           {queueContext && !nextId && (
             <Link
-              href={backHref || `/medic?site=${medDec.site_id}`}
+              href={backHref || `/medic/medications?site=${medDec.site_id}`}
               className="flex items-center justify-center gap-2 w-full px-4 py-2.5 bg-slate-700/50 border border-slate-700 text-slate-300 hover:bg-slate-700 rounded-lg text-sm font-medium transition-colors"
             >
               ← Back to list

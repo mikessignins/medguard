@@ -89,7 +89,7 @@ export default async function MedDecPage({ params, searchParams }: { params: { i
   const queueContext = parseQueue(searchParams)
   const backHref = searchParams.view === 'exports'
     ? `/medic/exports${searchParams.site ? `?site=${encodeURIComponent(searchParams.site)}` : ''}`
-    : `/medic${raw.site_id ? `?site=${encodeURIComponent(String(raw.site_id))}` : ''}`
+    : `/medic/medications${raw.site_id ? `?site=${encodeURIComponent(String(raw.site_id))}` : ''}`
 
   return (
     <MedDecDetail

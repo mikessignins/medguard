@@ -76,7 +76,7 @@ export default async function MedicFatiguePage({
   ])
 
   const queueContext = parseQueue(searchParams)
-  const backHref = `/medic?site=${encodeURIComponent(searchParams.site || String(raw.site_id || ''))}`
+  const backHref = `/medic/fatigue?site=${encodeURIComponent(searchParams.site || String(raw.site_id || ''))}`
 
   return (
     <FatigueDetail

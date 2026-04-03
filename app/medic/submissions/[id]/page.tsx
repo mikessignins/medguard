@@ -134,7 +134,7 @@ export default async function SubmissionPage({
   const queueContext = parseQueue(searchParams)
   const backHref = searchParams.view === 'exports'
     ? `/medic/exports${searchParams.site ? `?site=${encodeURIComponent(searchParams.site)}` : ''}`
-    : `/medic${raw.site_id ? `?site=${encodeURIComponent(String(raw.site_id))}` : ''}`
+    : `/medic/emergency${raw.site_id ? `?site=${encodeURIComponent(String(raw.site_id))}` : ''}`
 
   return (
     <SubmissionDetail

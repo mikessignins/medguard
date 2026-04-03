@@ -101,6 +101,25 @@ function formatStatus(status: FatigueAssessment['status']) {
   }
 }
 
+function formatFatigueDecision(decision: FatigueAssessment['review_payload']['fitForWorkDecision']) {
+  switch (decision) {
+    case 'fit_normal_duties':
+      return 'Fit for normal duties'
+    case 'fit_restricted_duties':
+      return 'Fit for restricted duties'
+    case 'not_fit_for_work':
+      return 'Not fit for work'
+    case 'sent_to_room':
+      return 'Sent to room'
+    case 'sent_home':
+      return 'Sent home'
+    case 'requires_escalation':
+      return 'Requires escalation'
+    default:
+      return 'Outcome recorded'
+  }
+}
+
 function InfoRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="grid grid-cols-[160px_1fr] gap-3 py-2 border-b border-slate-800 last:border-0">
@@ -226,6 +245,26 @@ export default function FatigueDetail({ assessment, siteName, businessName, queu
         </div>
       </div>
 
+      <div className={`mb-4 rounded-xl border p-4 ${RISK_STYLES[summary.derivedRiskLevel]}`}>
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] opacity-80">Fatigue Risk Summary</p>
+            <h2 className="mt-1 text-lg font-bold">
+              {summary.derivedRiskLevel.toUpperCase()} RISK · Score {summary.fatigueScoreTotal}
+            </h2>
+            <p className="mt-1 text-sm opacity-90">
+              {summary.hasAnyHighRiskAnswer
+                ? 'At least one high-risk answer was recorded in this self-assessment.'
+                : 'The derived risk comes from the combined fatigue score and supporting factors.'}
+            </p>
+          </div>
+          <div className="rounded-lg border border-current/20 bg-black/10 px-3 py-2 text-sm">
+            <p className="font-semibold">{formatStatus(assessment.status)}</p>
+            <p className="opacity-80">Submitted {fmtDateTime(assessment.submitted_at)}</p>
+          </div>
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_340px] gap-4 items-start">
         <div className="space-y-4">
           <div className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-5">
@@ -312,7 +351,14 @@ export default function FatigueDetail({ assessment, siteName, businessName, queu
               </div>
 
               {error && <p className="text-sm text-red-300">{error}</p>}
-              {success && <p className="text-sm text-emerald-300">Fatigue review saved.</p>}
+              {success && (
+                <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-3 text-sm text-emerald-200">
+                  <p className="font-semibold">Fatigue review saved.</p>
+                  <p className="mt-1 text-emerald-300/90">
+                    This assessment now moves out of the active queue and into the recently reviewed list for the site.
+                  </p>
+                </div>
+              )}
 
               <button
                 onClick={handleSave}
@@ -321,6 +367,23 @@ export default function FatigueDetail({ assessment, siteName, businessName, queu
               >
                 {saving ? 'Saving...' : 'Save fatigue review'}
               </button>
+
+              {assessment.status === 'resolved' && (
+                <div className="rounded-lg border border-slate-700/60 bg-slate-900/30 px-3 py-3 text-sm text-slate-300">
+                  <p className="font-semibold text-slate-100">Current recorded outcome</p>
+                  <p className="mt-1">{formatFatigueDecision(assessment.review_payload.fitForWorkDecision)}</p>
+                  <p className="mt-1 text-slate-400">
+                    {[
+                      assessment.review_payload.supervisorNotified ? 'Supervisor notified' : null,
+                      assessment.review_payload.transportArranged ? 'Transport arranged' : null,
+                      assessment.review_payload.sentToRoom ? 'Sent to room' : null,
+                      assessment.review_payload.sentHome ? 'Sent home' : null,
+                      assessment.review_payload.requiresHigherMedicalReview ? 'Escalated for higher review' : null,
+                      assessment.review_payload.requiresFollowUp ? 'Follow-up required' : null,
+                    ].filter(Boolean).join(' · ') || 'No extra follow-up flags recorded'}
+                  </p>
+                </div>
+              )}
             </div>
           </div>
         </div>
