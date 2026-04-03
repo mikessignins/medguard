@@ -1,12 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { redirect } from 'next/navigation'
-import {
-  buildPsychosocialHazardMetrics,
-  getPsychosocialWorkflowKind,
-  type PsychosocialHazardMetric,
-} from '@/lib/psychosocial'
-import type { PsychosocialAssessment } from '@/lib/types'
+import type { PsychosocialHazardMetric } from '@/lib/psychosocial'
 
 interface SearchParams {
   business_id?: string
@@ -23,6 +18,17 @@ interface DeidentifiedConditionMetric {
   affected_workers: number | null
   cohort_workers: number | null
   prevalence_percent: number | null
+  is_suppressed: boolean
+}
+
+interface DeidentifiedPsychosocialSummary {
+  cohort_workers: number | null
+  total_submissions: number | null
+  wellbeing_pulse_count: number | null
+  support_check_in_count: number | null
+  post_incident_count: number | null
+  post_incident_follow_up_rate: number | null
+  post_incident_referral_rate: number | null
   is_suppressed: boolean
 }
 
@@ -81,69 +87,45 @@ export default async function SuperuserReportsPage({ searchParams }: { searchPar
       p_to: toDate ? `${toDate}T23:59:59Z` : null,
     })
 
-    let psychosocialQuery = service
-      .from('module_submissions')
-      .select('id, worker_id, site_id, submitted_at, payload, status, is_test, phi_purged_at')
-      .eq('business_id', selectedBusinessId)
-      .eq('module_key', 'psychosocial_health')
+    const psychosocialHazardsPromise = supabase.rpc(
+      'get_business_deidentified_psychosocial_hazard_report_filtered',
+      {
+        p_business_id: selectedBusinessId,
+        p_site_id: selectedSiteId === 'all' ? null : selectedSiteId,
+        p_from: fromDate ? `${fromDate}T00:00:00Z` : null,
+        p_to: toDate ? `${toDate}T23:59:59Z` : null,
+      },
+    )
+    const psychosocialSummaryPromise = supabase.rpc(
+      'get_business_deidentified_psychosocial_summary_filtered',
+      {
+        p_business_id: selectedBusinessId,
+        p_site_id: selectedSiteId === 'all' ? null : selectedSiteId,
+        p_from: fromDate ? `${fromDate}T00:00:00Z` : null,
+        p_to: toDate ? `${toDate}T23:59:59Z` : null,
+      },
+    )
 
-    if (selectedSiteId !== 'all') {
-      psychosocialQuery = psychosocialQuery.eq('site_id', selectedSiteId)
-    }
-    if (fromDate) {
-      psychosocialQuery = psychosocialQuery.gte('submitted_at', `${fromDate}T00:00:00Z`)
-    }
-    if (toDate) {
-      psychosocialQuery = psychosocialQuery.lte('submitted_at', `${toDate}T23:59:59Z`)
-    }
-
-    const [{ data, error }, { data: psychosocialRows, error: psychosocialRowsError }] = await Promise.all([
+    const [{ data, error }, { data: psychosocialHazards, error: psychosocialHazardsError }, { data: psychosocialSummaryRows, error: psychosocialSummaryError }] = await Promise.all([
       reportPromise,
-      psychosocialQuery.order('submitted_at', { ascending: false }),
+      psychosocialHazardsPromise,
+      psychosocialSummaryPromise,
     ])
 
     if (error) reportError = error.message
     metrics = (data || []) as DeidentifiedConditionMetric[]
 
-    if (psychosocialRowsError) {
-      psychosocialError = psychosocialRowsError.message
+    if (psychosocialHazardsError || psychosocialSummaryError) {
+      psychosocialError = psychosocialHazardsError?.message || psychosocialSummaryError?.message || 'Failed to load psychosocial reporting'
     } else {
-      const psychosocialAssessments = ((psychosocialRows || []) as Array<Record<string, unknown>>)
-        .filter((row) => !row.phi_purged_at && !row.is_test)
-        .map((row) => ({
-          id: String(row.id ?? ''),
-          business_id: selectedBusinessId,
-          site_id: String(row.site_id ?? ''),
-          worker_id: String(row.worker_id ?? ''),
-          module_key: 'psychosocial_health',
-          module_version: 1,
-          status: String(row.status ?? 'worker_only_complete') as PsychosocialAssessment['status'],
-          payload: row.payload as PsychosocialAssessment['payload'],
-          review_payload: (row.review_payload as PsychosocialAssessment['review_payload']) ?? {},
-          submitted_at: String(row.submitted_at ?? ''),
-          reviewed_at: null,
-          reviewed_by: null,
-        }))
-        .filter((entry) => getPsychosocialWorkflowKind(entry))
-
-      psychosocialSubmissionCount = psychosocialAssessments.length
-      psychosocialPulseCount = psychosocialAssessments.filter(
-        (entry) => getPsychosocialWorkflowKind(entry) === 'wellbeing_pulse',
-      ).length
-      psychosocialSupportCount = psychosocialAssessments.filter(
-        (entry) => getPsychosocialWorkflowKind(entry) === 'support_check_in',
-      ).length
-      const postIncidentCases = psychosocialAssessments.filter(
-        (entry) => getPsychosocialWorkflowKind(entry) === 'post_incident_psychological_welfare',
-      )
-      psychosocialPostIncidentCount = postIncidentCases.length
-      psychosocialPostIncidentFollowUpRate = postIncidentCases.length > 0
-        ? Number((((postIncidentCases.filter((entry) => Boolean(entry.review_payload.followUpScheduledAt || entry.payload.postIncidentWelfare?.followUpScheduledAt)).length) / postIncidentCases.length) * 100).toFixed(2))
-        : null
-      psychosocialPostIncidentReferralRate = postIncidentCases.length > 0
-        ? Number((((postIncidentCases.filter((entry) => Boolean(entry.review_payload.eapReferralOffered || entry.review_payload.externalPsychologyReferralOffered || entry.payload.postIncidentWelfare?.eapReferralOffered || entry.payload.postIncidentWelfare?.externalPsychologyReferralOffered)).length) / postIncidentCases.length) * 100).toFixed(2))
-        : null
-      psychosocialMetrics = buildPsychosocialHazardMetrics(psychosocialAssessments)
+      const summary = ((psychosocialSummaryRows || []) as DeidentifiedPsychosocialSummary[])[0] ?? null
+      psychosocialSubmissionCount = summary?.total_submissions ?? 0
+      psychosocialPulseCount = summary?.wellbeing_pulse_count ?? 0
+      psychosocialSupportCount = summary?.support_check_in_count ?? 0
+      psychosocialPostIncidentCount = summary?.post_incident_count ?? 0
+      psychosocialPostIncidentFollowUpRate = summary?.post_incident_follow_up_rate ?? null
+      psychosocialPostIncidentReferralRate = summary?.post_incident_referral_rate ?? null
+      psychosocialMetrics = (psychosocialHazards || []) as PsychosocialHazardMetric[]
     }
   }
 
@@ -370,22 +352,30 @@ export default async function SuperuserReportsPage({ searchParams }: { searchPar
                     </div>
                     <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] p-4">
                       <p className="text-xs font-semibold uppercase tracking-wide text-[var(--text-2)]">All submissions</p>
-                      <p className="mt-2 text-2xl font-semibold text-[var(--text-1)]">{psychosocialSubmissionCount}</p>
+                      <p className="mt-2 text-2xl font-semibold text-[var(--text-1)]">
+                        {psychosocialAllSuppressed ? 'Suppressed' : psychosocialSubmissionCount}
+                      </p>
                       <p className="mt-1 text-xs text-[var(--text-2)]">Combined psychosocial workflow volume</p>
                     </div>
                     <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] p-4">
                       <p className="text-xs font-semibold uppercase tracking-wide text-[var(--text-2)]">Wellbeing Pulse</p>
-                      <p className="mt-2 text-2xl font-semibold text-[var(--text-1)]">{psychosocialPulseCount}</p>
+                      <p className="mt-2 text-2xl font-semibold text-[var(--text-1)]">
+                        {psychosocialAllSuppressed ? 'Suppressed' : psychosocialPulseCount}
+                      </p>
                       <p className="mt-1 text-xs text-[var(--text-2)]">Metrics-only entries</p>
                     </div>
                     <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] p-4">
                       <p className="text-xs font-semibold uppercase tracking-wide text-[var(--text-2)]">Support Check-In</p>
-                      <p className="mt-2 text-2xl font-semibold text-[var(--text-1)]">{psychosocialSupportCount}</p>
+                      <p className="mt-2 text-2xl font-semibold text-[var(--text-1)]">
+                        {psychosocialAllSuppressed ? 'Suppressed' : psychosocialSupportCount}
+                      </p>
                       <p className="mt-1 text-xs text-[var(--text-2)]">Reviewable support requests</p>
                     </div>
                     <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] p-4">
                       <p className="text-xs font-semibold uppercase tracking-wide text-[var(--text-2)]">Post-Incident Welfare</p>
-                      <p className="mt-2 text-2xl font-semibold text-[var(--text-1)]">{psychosocialPostIncidentCount}</p>
+                      <p className="mt-2 text-2xl font-semibold text-[var(--text-1)]">
+                        {psychosocialAllSuppressed ? 'Suppressed' : psychosocialPostIncidentCount}
+                      </p>
                       <p className="mt-1 text-xs text-[var(--text-2)]">Medic-led post-incident cases</p>
                     </div>
                     {psychosocialHighlights.map((metric) => (
@@ -404,20 +394,22 @@ export default async function SuperuserReportsPage({ searchParams }: { searchPar
                   <section className="grid gap-3 md:grid-cols-3">
                     <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] p-4">
                       <p className="text-xs font-semibold uppercase tracking-wide text-[var(--text-2)]">Post-incident forms</p>
-                      <p className="mt-2 text-2xl font-semibold text-[var(--text-1)]">{psychosocialPostIncidentCount}</p>
+                      <p className="mt-2 text-2xl font-semibold text-[var(--text-1)]">
+                        {psychosocialAllSuppressed ? 'Suppressed' : psychosocialPostIncidentCount}
+                      </p>
                       <p className="mt-1 text-xs text-[var(--text-2)]">Count of post-incident welfare cases in the filter window.</p>
                     </div>
                     <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] p-4">
                       <p className="text-xs font-semibold uppercase tracking-wide text-[var(--text-2)]">Follow-up scheduled</p>
                       <p className="mt-2 text-2xl font-semibold text-[var(--text-1)]">
-                        {psychosocialPostIncidentCount === 0 ? '0%' : `${psychosocialPostIncidentFollowUpRate ?? 0}%`}
+                        {psychosocialAllSuppressed ? 'Suppressed' : (psychosocialPostIncidentCount === 0 ? '0%' : `${psychosocialPostIncidentFollowUpRate ?? 0}%`)}
                       </p>
                       <p className="mt-1 text-xs text-[var(--text-2)]">Share of post-incident cases with a recorded follow-up date.</p>
                     </div>
                     <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] p-4">
                       <p className="text-xs font-semibold uppercase tracking-wide text-[var(--text-2)]">Referral offered</p>
                       <p className="mt-2 text-2xl font-semibold text-[var(--text-1)]">
-                        {psychosocialPostIncidentCount === 0 ? '0%' : `${psychosocialPostIncidentReferralRate ?? 0}%`}
+                        {psychosocialAllSuppressed ? 'Suppressed' : (psychosocialPostIncidentCount === 0 ? '0%' : `${psychosocialPostIncidentReferralRate ?? 0}%`)}
                       </p>
                       <p className="mt-1 text-xs text-[var(--text-2)]">Share of post-incident cases offered EAP or external psychology referral.</p>
                     </div>
