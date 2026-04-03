@@ -3,7 +3,7 @@ import { createServerClient } from '@supabase/ssr'
 import { createClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
 import { hasMedicScopeAccess } from '@/lib/medic-scope'
-import type { PsychosocialReviewPayload } from '@/lib/types'
+import type { PsychosocialReviewEntry, PsychosocialReviewPayload } from '@/lib/types'
 
 export const runtime = 'nodejs'
 
@@ -105,6 +105,27 @@ export async function PATCH(
   }
 
   const now = new Date().toISOString()
+  const newReviewComment = typeof body.reviewComments === 'string' ? body.reviewComments.trim() : ''
+  const existingEntries = Array.isArray(existingReviewPayload?.reviewEntries)
+    ? (existingReviewPayload.reviewEntries as PsychosocialReviewEntry[])
+    : []
+  const nextEntries = newReviewComment
+    ? [
+        ...existingEntries,
+        {
+          id: crypto.randomUUID(),
+          createdAt: now,
+          createdByUserId: user.id,
+          createdByName: account.display_name,
+          actionLabel:
+            typeof body.supportActions === 'string' && body.supportActions.trim()
+              ? body.supportActions.trim()
+              : null,
+          note: newReviewComment,
+        },
+      ]
+    : existingEntries
+
   const reviewPayload = {
     ...(existingReviewPayload ?? {}),
     ...body,
@@ -117,6 +138,8 @@ export async function PATCH(
       nextStatus === 'awaiting_follow_up'
         ? true
         : body.followUpRequired ?? existingReviewPayload?.followUpRequired ?? false,
+    reviewEntries: nextEntries,
+    reviewComments: newReviewComment || existingReviewPayload?.reviewComments || null,
   }
 
   const { error } = await supabase

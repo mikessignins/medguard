@@ -18,7 +18,7 @@ import {
   PSYCHOSOCIAL_HAZARDS,
 } from '@/lib/psychosocial'
 import { encodeQueue } from '@/lib/queue-params'
-import type { PsychosocialAssessment } from '@/lib/types'
+import type { PsychosocialAssessment, PsychosocialReviewEntry } from '@/lib/types'
 
 const STATUS_STYLES = {
   worker_only_complete: 'bg-slate-500/10 text-slate-400 border border-slate-500/20',
@@ -88,6 +88,37 @@ function InfoRow({ label, value }: { label: string; value: string }) {
   )
 }
 
+function reviewHistory(assessment: PsychosocialAssessment) {
+  const entries = Array.isArray(assessment.review_payload.reviewEntries)
+    ? assessment.review_payload.reviewEntries
+    : []
+
+  if (entries.length > 0) return entries
+
+  if (assessment.review_payload.reviewComments?.trim()) {
+    return [{
+      id: 'legacy-review-comment',
+      createdAt: assessment.reviewed_at ?? assessment.submitted_at,
+      createdByUserId: assessment.reviewed_by ?? 'legacy',
+      createdByName: assessment.review_payload.reviewedByName ?? 'Previous reviewer',
+      actionLabel: assessment.review_payload.supportActions ?? null,
+      note: assessment.review_payload.reviewComments,
+    } satisfies PsychosocialReviewEntry]
+  }
+
+  return []
+}
+
+function formatScaleValue(kind: 'mood' | 'stress' | 'sleep', value: number) {
+  if (kind === 'mood') {
+    return ['Very low', 'Low', 'Mixed', 'Good', 'Very good'][Math.max(0, Math.min(4, value - 1))] + ` (${value}/5)`
+  }
+  if (kind === 'stress') {
+    return ['Very low', 'Low', 'Moderate', 'High', 'Very high'][Math.max(0, Math.min(4, value - 1))] + ` (${value}/5)`
+  }
+  return ['Very poor', 'Poor', 'Fair', 'Good', 'Very good'][Math.max(0, Math.min(4, value - 1))] + ` (${value}/5)`
+}
+
 interface Props {
   assessment: PsychosocialAssessment
   siteName: string
@@ -120,7 +151,7 @@ export default function PsychosocialDetail({
 
   const [outcomeSummary, setOutcomeSummary] = useState(assessment.review_payload.outcomeSummary ?? '')
   const [supportActions, setSupportActions] = useState(assessment.review_payload.supportActions ?? '')
-  const [reviewComments, setReviewComments] = useState(assessment.review_payload.reviewComments ?? '')
+  const [newReviewComment, setNewReviewComment] = useState('')
   const [followUpRequired, setFollowUpRequired] = useState(Boolean(assessment.review_payload.followUpRequired))
   const [triagePriority, setTriagePriority] = useState(assessment.review_payload.triagePriority ?? 'routine')
   const [assignedReviewPath, setAssignedReviewPath] = useState(assessment.review_payload.assignedReviewPath ?? 'medic')
@@ -136,6 +167,7 @@ export default function PsychosocialDetail({
   const [error, setError] = useState('')
   const [success, setSuccess] = useState(false)
   const [exportedAt, setExportedAt] = useState<string | null>(assessment.exported_at ?? null)
+  const history = reviewHistory(assessment)
 
   const hazardLabels = getPsychosocialHazardSignals(assessment)
     .map((key) => PSYCHOSOCIAL_HAZARDS.find((hazard) => hazard.key === key)?.label ?? key)
@@ -180,7 +212,7 @@ export default function PsychosocialDetail({
           outcomeSummary: outcomeSummary.trim(),
           supportActions: supportActions.trim() || null,
           followUpRequired: nextStatus === 'awaiting_follow_up' ? true : followUpRequired,
-          reviewComments: reviewComments.trim() || null,
+          reviewComments: newReviewComment.trim() || null,
         }),
       })
 
@@ -191,6 +223,7 @@ export default function PsychosocialDetail({
       }
 
       setSuccess(true)
+      setNewReviewComment('')
       router.refresh()
     } catch {
       setError('Network error. Please try again.')
@@ -280,7 +313,9 @@ export default function PsychosocialDetail({
               {worker ? (
                 <>
                   <InfoRow label="Context" value={formatPsychosocialContext(worker.submissionContext)} />
-                  <InfoRow label="Mood / Stress / Sleep" value={`${worker.moodRating}/5 · ${worker.stressRating}/5 · ${worker.sleepQualityOnRoster}/5`} />
+                  <InfoRow label="Mood" value={formatScaleValue('mood', worker.moodRating)} />
+                  <InfoRow label="Stress" value={formatScaleValue('stress', worker.stressRating)} />
+                  <InfoRow label="Sleep quality" value={formatScaleValue('sleep', worker.sleepQualityOnRoster)} />
                   <InfoRow label="Support requested" value={summary.requestedSupport ? 'Yes' : 'No'} />
                   <InfoRow label="Urgent contact today" value={worker.wouldLikeUrgentContactToday ? 'Yes' : 'No'} />
                   <InfoRow label="Unsafe at work today" value={worker.feelsUnsafeAtWorkToday ? 'Yes' : 'No'} />
@@ -340,7 +375,7 @@ export default function PsychosocialDetail({
         <div className="flex items-start justify-between gap-4">
           <div>
             <h2 className="text-xl font-semibold text-slate-100">Case review and follow-up</h2>
-            <p className="mt-2 text-sm text-slate-500">Record triage, contact outcome, referrals, and follow-up. You can either keep the case open for follow-up or resolve it now.</p>
+            <p className="mt-2 text-sm text-slate-500">Record triage, contact outcome, referrals, and follow-up. Saved comments are locked as part of the psychosocial audit trail.</p>
           </div>
           {isReadOnly && (
             <span className="rounded-full border border-slate-700 bg-slate-900 px-3 py-1 text-xs font-medium text-slate-300">
@@ -402,17 +437,40 @@ export default function PsychosocialDetail({
             />
           </label>
 
-          <label className="block">
-            <span className="mb-2 block text-sm font-medium text-slate-200">Review comments</span>
-            <textarea
-              value={reviewComments}
-              onChange={(event) => setReviewComments(event.target.value)}
-              rows={4}
-              readOnly={isReadOnly}
-              className="w-full rounded-2xl border border-slate-800 bg-slate-950 px-4 py-3 text-sm text-slate-100 outline-none transition focus:border-cyan-500/50"
-              placeholder="Additional internal notes or governance comments."
-            />
-          </label>
+          <div className="space-y-3">
+            <div>
+              <span className="mb-2 block text-sm font-medium text-slate-200">Saved review comments</span>
+              {history.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-slate-800 bg-slate-950 px-4 py-3 text-sm text-slate-500">
+                  No saved psychosocial review comments yet.
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {history.map((entry) => (
+                    <div key={entry.id} className="rounded-2xl border border-slate-800 bg-slate-950 px-4 py-3">
+                      <p className="text-sm font-medium text-slate-100">
+                        {[entry.actionLabel, entry.createdByName].filter(Boolean).join(' · ') || 'Review update'}
+                      </p>
+                      <p className="mt-1 text-xs text-slate-500">{fmtDateTime(entry.createdAt)}</p>
+                      <p className="mt-2 text-sm text-slate-300">{entry.note?.trim() || 'No comment recorded.'}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <label className="block">
+              <span className="mb-2 block text-sm font-medium text-slate-200">Add new review comment</span>
+              <textarea
+                value={newReviewComment}
+                onChange={(event) => setNewReviewComment(event.target.value)}
+                rows={4}
+                readOnly={isReadOnly}
+                className="w-full rounded-2xl border border-slate-800 bg-slate-950 px-4 py-3 text-sm text-slate-100 outline-none transition focus:border-cyan-500/50"
+                placeholder="Add a new psychosocial review note. Existing comments cannot be edited."
+              />
+            </label>
+          </div>
 
           <label className="inline-flex items-center gap-3 rounded-2xl border border-slate-800 bg-slate-950 px-4 py-3 text-sm text-slate-200">
             <input
@@ -456,7 +514,7 @@ export default function PsychosocialDetail({
           </div>
 
           {error && <p className="text-sm text-red-400">{error}</p>}
-          {success && <p className="text-sm text-emerald-300">Psychosocial case review saved.</p>}
+          {success && <p className="text-sm text-emerald-300">Psychosocial case updated.</p>}
           {exportedAt && <p className="text-sm text-slate-400">Exported {fmtDateTime(exportedAt)}</p>}
 
           <div className="flex items-center justify-end gap-3">
@@ -479,7 +537,7 @@ export default function PsychosocialDetail({
               disabled={saving || isReadOnly}
               className="rounded-xl bg-cyan-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-cyan-500 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {saving ? 'Saving...' : 'Save case review'}
+              {saving ? 'Updating...' : 'Update psychosocial case'}
             </button>
           </div>
         </div>

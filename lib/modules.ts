@@ -118,9 +118,9 @@ export const MODULE_REGISTRY: Record<ModuleKey, ModuleRegistryEntry> = {
     supportsExport: true,
     supportsPurge: true,
     isBillable: true,
-    readiness: 'foundation_ready',
-    canActivate: false,
-    statusNote: 'Pulse, support check-ins, and post-incident welfare are now taking shape under one umbrella module.',
+    readiness: 'live',
+    canActivate: true,
+    statusNote: 'Worker pulse and support flows, medic review, web export/purge, and de-identified superuser reporting are ready for pilot activation.',
   },
   fit_for_work_plus: {
     key: 'fit_for_work_plus',

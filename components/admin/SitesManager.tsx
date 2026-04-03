@@ -14,6 +14,7 @@ interface SiteForm {
   longitude: string
   is_office: boolean
   medic_phone: string
+  eap_phone: string
   eso_name: string
   safety_manager_name: string
   village_admin_name: string
@@ -25,6 +26,7 @@ const EMPTY_FORM: SiteForm = {
   longitude: '',
   is_office: false,
   medic_phone: '',
+  eap_phone: '',
   eso_name: '',
   safety_manager_name: '',
   village_admin_name: '',
@@ -37,6 +39,7 @@ function siteToForm(site: Site): SiteForm {
     longitude: site.longitude != null ? String(site.longitude) : '',
     is_office: site.is_office,
     medic_phone: site.medic_phone ?? '',
+    eap_phone: site.eap_phone ?? '',
     eso_name: site.eso_name ?? '',
     safety_manager_name: site.safety_manager_name ?? '',
     village_admin_name: site.village_admin_name ?? '',
@@ -92,6 +95,7 @@ export default function SitesManager({ sites: initialSites, businessId }: Props)
         longitude: form.longitude ? parseFloat(form.longitude) : null,
         is_office: form.is_office,
         medic_phone: nullIfEmpty(form.medic_phone),
+        eap_phone: nullIfEmpty(form.eap_phone),
         eso_name: nullIfEmpty(form.eso_name),
         safety_manager_name: nullIfEmpty(form.safety_manager_name),
         village_admin_name: nullIfEmpty(form.village_admin_name),
@@ -119,6 +123,7 @@ export default function SitesManager({ sites: initialSites, businessId }: Props)
         longitude: form.longitude ? parseFloat(form.longitude) : null,
         is_office: form.is_office,
         medic_phone: nullIfEmpty(form.medic_phone),
+        eap_phone: nullIfEmpty(form.eap_phone),
         eso_name: nullIfEmpty(form.eso_name),
         safety_manager_name: nullIfEmpty(form.safety_manager_name),
         village_admin_name: nullIfEmpty(form.village_admin_name),
@@ -187,10 +192,13 @@ export default function SitesManager({ sites: initialSites, businessId }: Props)
                       ? `${site.latitude.toFixed(4)}, ${site.longitude.toFixed(4)}`
                       : 'No coordinates'}
                   </p>
-                  {(site.medic_phone || site.eso_name || site.safety_manager_name || site.village_admin_name) && (
+                  {(site.medic_phone || site.eap_phone || site.eso_name || site.safety_manager_name || site.village_admin_name) && (
                     <div className="mt-2 grid grid-cols-2 gap-x-6 gap-y-1">
                       {site.medic_phone && (
                         <p className="text-xs text-slate-500"><span className="font-medium text-slate-400">Medic:</span> {site.medic_phone}</p>
+                      )}
+                      {site.eap_phone && (
+                        <p className="text-xs text-slate-500"><span className="font-medium text-slate-400">EAP:</span> {site.eap_phone}</p>
                       )}
                       {site.eso_name && (
                         <p className="text-xs text-slate-500"><span className="font-medium text-slate-400">ESO:</span> {site.eso_name}</p>
@@ -299,33 +307,43 @@ export default function SitesManager({ sites: initialSites, businessId }: Props)
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-400 mb-1">Emergency Services Officer (ESO)</label>
+                  <label className="block text-sm font-medium text-slate-400 mb-1">Employee Assistance Program (EAP) Number</label>
                   <input
-                    type="text"
+                    type="tel"
+                    value={form.eap_phone}
+                    onChange={e => setForm(f => ({ ...f, eap_phone: e.target.value }))}
+                    className="w-full px-4 py-2.5 bg-slate-800/60 border border-slate-700 rounded-lg focus:outline-none focus:border-cyan-500 text-sm text-slate-100 placeholder-slate-500"
+                    placeholder="e.g. 1800 123 456"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-400 mb-1">Emergency Services Officer (ESO) Number</label>
+                  <input
+                    type="tel"
                     value={form.eso_name}
                     onChange={e => setForm(f => ({ ...f, eso_name: e.target.value }))}
                     className="w-full px-4 py-2.5 bg-slate-800/60 border border-slate-700 rounded-lg focus:outline-none focus:border-cyan-500 text-sm text-slate-100 placeholder-slate-500"
-                    placeholder="Full name"
+                    placeholder="e.g. 0400 987 654"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-400 mb-1">Site Safety Manager</label>
+                  <label className="block text-sm font-medium text-slate-400 mb-1">Site Safety Manager Number</label>
                   <input
-                    type="text"
+                    type="tel"
                     value={form.safety_manager_name}
                     onChange={e => setForm(f => ({ ...f, safety_manager_name: e.target.value }))}
                     className="w-full px-4 py-2.5 bg-slate-800/60 border border-slate-700 rounded-lg focus:outline-none focus:border-cyan-500 text-sm text-slate-100 placeholder-slate-500"
-                    placeholder="Full name"
+                    placeholder="e.g. 0400 555 111"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-400 mb-1">Village Admin</label>
+                  <label className="block text-sm font-medium text-slate-400 mb-1">Village Admin Number</label>
                   <input
-                    type="text"
+                    type="tel"
                     value={form.village_admin_name}
                     onChange={e => setForm(f => ({ ...f, village_admin_name: e.target.value }))}
                     className="w-full px-4 py-2.5 bg-slate-800/60 border border-slate-700 rounded-lg focus:outline-none focus:border-cyan-500 text-sm text-slate-100 placeholder-slate-500"
-                    placeholder="Full name"
+                    placeholder="e.g. 0400 222 333"
                   />
                 </div>
               </div>

@@ -91,6 +91,7 @@ export interface Site {
   longitude: number | null
   is_office: boolean
   medic_phone: string | null
+  eap_phone: string | null
   eso_name: string | null
   safety_manager_name: string | null
   village_admin_name: string | null
@@ -385,6 +386,7 @@ export interface PsychosocialWorkerPulsePayload {
   workflowKind: PsychosocialWorkflowKind
   submissionContext: PsychosocialPulseContext
   workerNameSnapshot: string
+  workerMobileSnapshot?: string | null
   jobRole: string
   workgroup?: string | null
   rosterPattern?: string | null
@@ -410,6 +412,15 @@ export interface PsychosocialWorkerPulsePayload {
   wouldLikeUrgentContactToday: boolean
   feelsUnsafeAtWorkToday: boolean
   workerComments?: string | null
+}
+
+export interface PsychosocialReviewEntry {
+  id: string
+  createdAt: string
+  createdByUserId: string
+  createdByName: string
+  actionLabel?: string | null
+  note?: string | null
 }
 
 export interface PsychosocialWorkerScoreSummary {
@@ -463,6 +474,7 @@ export interface PsychosocialReviewPayload {
   supportActions?: string | null
   followUpRequired?: boolean | null
   reviewComments?: string | null
+  reviewEntries?: PsychosocialReviewEntry[] | null
 }
 
 export interface PsychosocialAssessment {
