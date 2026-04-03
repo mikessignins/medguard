@@ -135,7 +135,7 @@ async function generatePdf(id: string) {
 
   // ── PAGE 1 ──────────────────────────────────────────────────────────────────
   doc.addPage()
-  pageHeader(doc, logoBuffer)
+  pageHeader(doc, logoBuffer, 'EMERGENCY MEDICAL INFORMATION FORM', { businessName })
 
   // Title
   doc.font(F_BOLD).fontSize(18).fillColor('#000')
@@ -157,12 +157,13 @@ async function generatePdf(id: string) {
   // PERSONAL DETAILS
   sectionHeader(doc, 'PERSONAL DETAILS')
   twoColTable(doc, [
-    ['FULL NAME',    ws?.fullName || '—',       'DATE OF BIRTH', ws?.dateOfBirth ? ws.dateOfBirth.slice(0, 10) : '—'],
-    ['EMAIL',        ws?.emailAddress || '—',   'MOBILE',        ws?.mobileNumber || '—'],
-    ['COMPANY',      ws?.company || businessName || '—', 'DEPARTMENT', ws?.department || '—'],
-    ['SUPERVISOR',   ws?.supervisor || '—',     'SITE LOCATION', ws?.siteLocation || siteName || '—'],
-    ['EMPLOYEE ID',  ws?.employeeId || '—',     'CONTRACTOR',    ws?.isContractor ? 'Yes' : 'No'],
-    ['HEIGHT',       ws?.heightCm ? `${ws.heightCm} cm` : '—', 'WEIGHT', ws?.weightKg ? `${ws.weightKg} kg` : '—'],
+    ['FULL NAME', ws?.fullName || '—', 'DATE OF BIRTH', ws?.dateOfBirth ? fmtDate(ws.dateOfBirth) : '—'],
+    ['EMAIL', ws?.emailAddress || '—', 'MOBILE', ws?.mobileNumber || '—'],
+    ['EMPLOYER / COMPANY', ws?.company || businessName || '—', 'WORKGROUP / DEPARTMENT', ws?.department || '—'],
+    ['JOB ROLE', raw.role || '—', 'SUPERVISOR', ws?.supervisor || '—'],
+    ['SITE', ws?.siteLocation || siteName || '—', 'SHIFT / ROSTER', raw.shift_type || '—'],
+    ['EMPLOYEE / CONTRACTOR ID', ws?.employeeId || '—', 'CONTRACTOR', ws?.isContractor ? 'Yes' : 'No'],
+    ['HEIGHT', ws?.heightCm ? `${ws.heightCm} cm` : '—', 'WEIGHT', ws?.weightKg ? `${ws.weightKg} kg` : '—'],
   ])
 
   // EMERGENCY CONTACT
@@ -236,7 +237,7 @@ async function generatePdf(id: string) {
 
   // ── PAGE 2 ──────────────────────────────────────────────────────────────────
   doc.addPage()
-  pageHeader(doc, logoBuffer)
+  pageHeader(doc, logoBuffer, 'EMERGENCY MEDICAL INFORMATION FORM', { businessName })
 
   sectionHeader(doc, 'MEDICAL HISTORY (CONTINUED)')
 
@@ -332,21 +333,24 @@ async function generatePdf(id: string) {
   ])
 
   // MEDIC REVIEW
-  sectionHeader(doc, 'MEDIC REVIEW — MedPass Web')
+  sectionHeader(doc, 'MEDIC REVIEW — MEDPASS WEB')
   twoColTable(doc, [
     ['SITE',       siteName,                     'BUSINESS',  businessName],
     ['VISIT DATE', fmtDate(raw.visit_date),      'SHIFT',     raw.shift_type || '—'],
     ['STATUS',     raw.status || '—',            'EXPORTED',  fmtDateTime(raw.exported_at || new Date().toISOString())],
     ...(decision ? [
-      ['DECISION', decision.outcome, 'DECIDED', fmtDateTime(decision.decided_at)] as [string, string, string, string],
+      ['DECISION', decision.outcome, 'REVIEWED', fmtDateTime(decision.decided_at)] as [string, string, string, string],
     ] : []),
   ])
   if (decision?.note) {
     const noteY = doc.y
-    doc.rect(MARGIN, noteY, CONTENT_W, 18).stroke(BORDER)
-    doc.font(F_BOLD).fontSize(8).text('Note: ', MARGIN + 5, noteY + 5, { continued: true })
-    doc.font(F_REGULAR).fontSize(8.5).text(decision.note)
-    doc.y = noteY + 18
+    const noteH = 26
+    doc.rect(MARGIN, noteY, CONTENT_W, noteH).fillAndStroke('#FDF2F2', BORDER)
+    doc.fillColor(ACCENT).font(F_BOLD).fontSize(7.5)
+      .text('FOLLOW-UP NOTE', MARGIN + 5, noteY + 5, { width: CONTENT_W - 10, lineBreak: false })
+    doc.fillColor('#000').font(F_REGULAR).fontSize(8.5)
+      .text(decision.note, MARGIN + 5, noteY + 13, { width: CONTENT_W - 10 })
+    doc.y = noteY + noteH
   }
 
   pageFooter(doc, 2, totalPages)
@@ -354,7 +358,7 @@ async function generatePdf(id: string) {
   // ── PAGE 3 — PRESCRIPTION SCRIPTS (optional) ─────────────────────────────
   if (scriptImages.length > 0) {
     doc.addPage()
-    pageHeader(doc, logoBuffer)
+    pageHeader(doc, logoBuffer, 'EMERGENCY MEDICAL INFORMATION FORM', { businessName })
     sectionHeader(doc, 'PRESCRIPTION SCRIPTS')
 
     doc.font(F_REGULAR).fontSize(8).fillColor(MUTED)

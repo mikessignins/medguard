@@ -40,7 +40,7 @@ select
   'psychosocial_health',
   false,
   jsonb_build_object(
-    'workflow', 'worker_anytime_pulse_with_review_escalation',
+    'workflow', 'dual_track_metrics_and_support',
     'bill_on', 'review_complete_if_enabled',
     'supports_worker_start', true,
     'supports_medic_review', true,
@@ -50,8 +50,12 @@ select
     'reminder_enabled', true,
     'cadence', 'fortnightly',
     'interval_days', null,
-    'escalation_contact_mode', 'medic_or_welfare_queue',
-    'high_risk_auto_queue', true,
+    'supports_deidentified_pulse', true,
+    'supports_support_checkin', true,
+    'supports_post_incident_welfare', true,
+    'support_checkin_review_queue', 'medic_or_welfare_queue',
+    'post_incident_review_queue', 'medic_led_welfare_queue',
+    'pulse_directs_into_support_checkin', true,
     'critical_risk_immediate_guidance', true,
     'default_export_retention_days', 7
   ),
@@ -84,9 +88,9 @@ values (
   $json$
   {
     "moduleKey": "psychosocial_health",
-    "title": "Wellbeing Pulse",
+    "title": "Psychosocial Support Check-In",
     "stage": "worker_self_check_in",
-    "workflowType": "wellbeing_pulse",
+    "workflowType": "psychosocial_support_checkin",
     "sections": [
       {
         "key": "worker_context",
@@ -101,7 +105,7 @@ values (
       },
       {
         "key": "core_pulse",
-        "title": "Wellbeing Pulse",
+        "title": "Support Check-In",
         "fields": [
           { "key": "mood_rating", "type": "scale", "required": true, "min": 1, "max": 5, "labelMin": "Very low", "labelMax": "Very good" },
           { "key": "stress_rating", "type": "scale", "required": true, "min": 1, "max": 5, "labelMin": "Very low", "labelMax": "Very high" },
@@ -118,7 +122,8 @@ values (
           { "key": "exposed_to_distressing_or_traumatic_event", "type": "boolean", "required": true },
           { "key": "concern_about_roster_or_fatigue_pressure", "type": "boolean", "required": true },
           { "key": "concern_about_monitoring_or_surveillance_pressure", "type": "boolean", "required": true },
-          { "key": "would_like_support_contact", "type": "enum", "required": true, "options": ["no", "maybe", "yes"] },
+          { "key": "worker_requests_follow_up", "type": "boolean", "required": true },
+          { "key": "preferred_contact_path", "type": "enum", "required": true, "options": ["medic", "welfare_or_counsellor", "either", "not_sure"] },
           { "key": "worker_comments", "type": "textarea", "required": false }
         ]
       },
@@ -186,16 +191,16 @@ values (
   $json$::jsonb,
   $json$
   {
-    "workerStage": {
-      "initialStatus": "worker_only_complete",
+      "workerStage": {
+      "initialStatus": "awaiting_medic_review",
       "riskOutcomes": {
         "low": {
-          "status": "worker_only_complete",
-          "queueReview": false
+          "status": "awaiting_medic_review",
+          "queueReview": true
         },
         "moderate": {
-          "status": "review_recommended",
-          "queueReviewIfConfigEnabled": true
+          "status": "awaiting_medic_review",
+          "queueReview": true
         },
         "high": {
           "status": "awaiting_medic_review",
@@ -228,19 +233,20 @@ values (
     },
     "billing": {
       "billOn": "review_complete_if_enabled",
-      "nonBillableStatuses": [
-        "worker_only_complete",
-        "review_recommended"
-      ]
+      "nonBillableStatuses": []
     },
     "export": {
       "enabled": true,
       "onlyReviewedCases": true,
       "purgeRetentionDays": 7
+    },
+    "deidentifiedReporting": {
+      "includePulseWorkflow": true,
+      "includeSupportCheckInWorkflow": true
     }
   }
   $json$::jsonb,
-  'psychosocial_wellbeing_pulse_v1',
+  'psychosocial_support_checkin_v1',
   'active'
 )
 on conflict (module_key, version) do update

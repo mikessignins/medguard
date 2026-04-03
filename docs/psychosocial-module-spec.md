@@ -6,7 +6,7 @@ Create a reusable MedGuard module for psychosocial risk and mental wellbeing wor
 
 - allows workers to submit a check-in anytime
 - supports business-configured reminder schedules
-- escalates higher-risk responses into an operational review path
+- separates de-identified reporting check-ins from worker-identifiable support requests
 - gives superusers de-identified, business-ready psychosocial hazard reporting
 - preserves stronger privacy and governance controls than a generic survey tool
 
@@ -23,26 +23,28 @@ This should be implemented on the module engine foundation rather than as a one-
 
 ## Recommended Shape
 
-Treat this as one umbrella module with three linked workflows:
+Treat this as one umbrella module with four linked workflows:
 
 1. `Wellbeing Pulse`
-2. `Post-Incident Psychological Welfare`
-3. `FIFO Psychological Risk Assessment`
+2. `Psychosocial Support Check-In`
+3. `Post-Incident Psychological Welfare`
+4. `FIFO Psychological Risk Assessment`
 
 This keeps business reporting, privacy rules, export logic, and governance consistent while still allowing different operational paths.
 
 ## Recommended Build Order
 
-### Phase 1: Wellbeing Pulse
+### Phase 1: Wellbeing Pulse + Psychosocial Support Check-In
 
-Build this first.
+Build these together, but as separate privacy tracks.
 
 Why:
 
 - lowest operational friction
 - strongest adoption potential
 - best first source of de-identified psychosocial metrics
-- safest first workflow because it is triage-oriented rather than diagnostic
+- clearer worker trust boundary between reporting and help-seeking
+- safest first workflow because it separates metrics from case management
 
 ### Phase 2: Post-Incident Psychological Welfare
 
@@ -68,14 +70,16 @@ Why:
 
 ### Not a diagnostic tool
 
-`Wellbeing Pulse` should be framed as a psychosocial risk and support check-in, not a psychiatric diagnosis.
+`Wellbeing Pulse` should be framed as a psychosocial risk check-in for de-identified reporting, not a psychiatric diagnosis.
+
+`Psychosocial Support Check-In` should be framed as a worker-initiated request for review or contact, not a diagnostic tool.
 
 ### Worker autonomy + business cadence
 
-Workers should be able to submit a psychosocial check-in:
+Workers should be able to submit:
 
-- anytime they want
-- when prompted by a scheduled reminder configured by the business
+- a `Wellbeing Pulse` anytime and when prompted by scheduled business cadence
+- a `Psychosocial Support Check-In` anytime they want contact, help, or review
 
 ### De-identified reporting by psychosocial domain
 
@@ -100,7 +104,7 @@ The worker should see:
 - a supportive tone
 - plain-language confidentiality explanation
 - clear statement that the pulse is not a diagnosis
-- clear explanation of when a medic or support contact may follow up
+- clear explanation that this pulse is used for grouped, de-identified reporting rather than individual review by default
 
 ## Reminder / Scheduling Model
 
@@ -120,14 +124,16 @@ Recommended config fields in `business_modules.config`:
 - `interval_days`
 - `allow_anytime_submission`
 - `reminder_enabled`
-- `escalation_contact_mode`
-- `high_risk_auto_queue`
+- `supports_deidentified_pulse`
+- `supports_support_checkin`
 
 Recommended defaults:
 
 - `allow_anytime_submission = true`
 - `reminder_enabled = true`
 - `cadence = fortnightly`
+- `supports_deidentified_pulse = true`
+- `supports_support_checkin = true`
 
 ## Worker Pulse Form
 
@@ -181,6 +187,50 @@ Use only if clinically/governance-approved for the first release:
 - `feels_unsafe_at_work_today`
 
 These should not attempt to diagnose. They should only act as escalation triggers.
+
+If a worker wants individual follow-up, the pulse should direct them into the separate `Psychosocial Support Check-In` workflow rather than silently opening an identifiable review case from the reporting pulse alone.
+
+## Workflow 2: Psychosocial Support Check-In
+
+This is the identifiable, worker-to-medic or worker-to-welfare pathway.
+
+### Worker Experience
+
+Workers can:
+
+- open it anytime from the dashboard
+- use it when they want contact, advice, or support
+- be directed into it after a de-identified pulse if they ask for follow-up
+
+The worker should see:
+
+- a clear statement that this path is reviewed by a medic or welfare contact
+- reassurance that it still contributes to grouped de-identified reporting as well
+- explanation that they are deliberately requesting or allowing individual follow-up
+
+### Support Check-In Fields
+
+The support check-in can reuse most of the psychosocial hazard questions from the pulse, but it should also capture:
+
+- `worker_requests_follow_up`
+- `preferred_contact_path`
+- `contact_is_urgent_today`
+- `feels_unsafe_at_work_today`
+- `free_text_support_concern`
+
+Recommended `preferred_contact_path` values:
+
+- `medic`
+- `welfare_or_counsellor`
+- `either`
+- `not_sure`
+
+### Support Check-In Behaviour
+
+- all submissions enter a reviewable queue
+- higher-risk responses increase urgency
+- all responses still contribute to de-identified hazard reporting
+- only the review workflow and export path remain worker-identifiable
 
 ## Recognised Hazard Mapping
 
@@ -438,6 +488,8 @@ The detailed report should still preserve the individual hazard breakdown undern
 
 ## Escalation Logic
 
+### Wellbeing Pulse
+
 ### Low
 
 - stays as worker history item
@@ -447,21 +499,29 @@ The detailed report should still preserve the individual hazard breakdown undern
 ### Moderate
 
 - worker receives supportive advice
-- may create a `review recommended` queue item depending on business setting
+- worker can be invited to open a `Psychosocial Support Check-In`
 - included in de-identified reporting
 
 ### High
 
-- creates medic / welfare review queue item
 - stronger worker guidance shown immediately
-- may notify configured support path depending on policy
+- worker can be directed into a `Psychosocial Support Check-In`
+- still counted in de-identified reporting
 
 ### Critical
 
 Only include this category if governance approves explicit same-day welfare escalation logic.
 
-- urgent follow-up flag
+- urgent worker guidance
+- direct worker into the support check-in flow
 - cannot rely on passive dashboard review
+
+### Psychosocial Support Check-In
+
+- all submissions create a reviewable queue item
+- higher-risk responses increase urgency
+- all submissions still contribute to de-identified psychosocial reporting
+- only the reviewed case path remains worker-identifiable
 
 ## Suggested Risk Outputs
 
@@ -480,7 +540,7 @@ Recommended risk values:
 - `high`
 - `critical`
 
-## Workflow 2: Post-Incident Psychological Welfare
+## Workflow 3: Post-Incident Psychological Welfare
 
 This should be medic-led and activated after a traumatic or clinically significant event.
 
@@ -513,7 +573,7 @@ Recommended `event_type` values:
 - `distressing_behavioural_incident`
 - `other`
 
-## Workflow 3: FIFO Psychological Risk Assessment
+## Workflow 4: FIFO Psychological Risk Assessment
 
 This is the higher-sensitivity workflow.
 
@@ -558,8 +618,13 @@ Recommended structure:
 
 ### Wellbeing Pulse
 
-- low / moderate worker-only pulses: not exported by default
-- reviewed high-risk pulses: exportable if a medic or welfare review occurs
+- pulse responses are not exported as individual worker forms
+- pulse data is used for de-identified reporting only
+
+### Psychosocial Support Check-In
+
+- reviewed support check-ins are exportable if they form part of an actioned case
+- support check-ins still contribute to grouped de-identified reporting
 
 ### Post-Incident Psychological Welfare
 
@@ -597,7 +662,7 @@ Superuser reports should be:
 
 2. `Support Signals`
 - percent requesting counsellor or medic contact
-- percent indicating willingness to speak to support services
+- percent opening support check-ins
 
 3. `Roster / FIFO Pressure`
 - fatigue / sleep pressure signals
@@ -615,8 +680,8 @@ Superuser reports should be:
 - `% reporting interpersonal conflict`
 - `% reporting psychosocial safety concerns`
 - `% indicating isolation or FIFO strain`
-- `% requesting support contact`
-- `% needing clinician / welfare review`
+- `% opening support check-ins`
+- `% support check-ins needing clinician / welfare review`
 
 ## Privacy / Governance Boundaries
 
@@ -631,9 +696,9 @@ Superuser reports should be:
 Build first:
 
 1. `Wellbeing Pulse`
-2. business-configured reminder cadence
-3. worker-anytime submission
-4. risk-level escalation
+2. `Psychosocial Support Check-In`
+3. business-configured reminder cadence
+4. worker-anytime submission
 5. superuser de-identified domain reporting
 
 Then add:

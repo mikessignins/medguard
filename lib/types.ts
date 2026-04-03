@@ -290,3 +290,196 @@ export interface FatigueAssessment {
   exported_by_name?: string | null
   phi_purged_at?: string | null
 }
+
+export type PsychosocialWorkflowKind =
+  | 'wellbeing_pulse'
+  | 'support_check_in'
+  | 'post_incident_psychological_welfare'
+
+export type PsychosocialPulseContext =
+  | 'scheduled_check_in'
+  | 'self_initiated_check_in'
+  | 'post_shift_concern'
+  | 'manager_or_peer_prompted'
+  | 'post_incident_follow_up'
+
+export type PsychosocialFrequencyOption =
+  | 'not_at_all'
+  | 'a_little'
+  | 'sometimes'
+  | 'often'
+  | 'very_often'
+
+export type PsychosocialControlOption =
+  | 'always'
+  | 'mostly'
+  | 'sometimes'
+  | 'rarely'
+  | 'never'
+
+export type PsychosocialSupportContactOption = 'no' | 'maybe' | 'yes'
+
+export type PsychosocialRiskLevel = 'low' | 'moderate' | 'high' | 'critical'
+
+export type PsychosocialAssessmentStatus =
+  | 'worker_only_complete'
+  | 'review_recommended'
+  | 'awaiting_medic_review'
+  | 'in_medic_review'
+  | 'awaiting_follow_up'
+  | 'resolved'
+
+export type PsychosocialReviewPriority = 'routine' | 'priority' | 'urgent'
+
+export type PsychosocialAssignedReviewPath =
+  | 'medic'
+  | 'welfare_or_counsellor'
+  | 'either'
+  | 'external_provider'
+
+export type PsychosocialContactOutcome =
+  | 'not_contacted_yet'
+  | 'contact_attempted'
+  | 'contact_completed'
+  | 'worker_declined'
+  | 'referred'
+  | 'monitor_only'
+
+export type PsychosocialCaseClosureReason =
+  | 'support_provided'
+  | 'monitoring_complete'
+  | 'referred_to_eap'
+  | 'referred_to_external_psychology'
+  | 'worker_declined_support'
+  | 'other'
+
+export type PsychosocialPostIncidentEventType =
+  | 'witnessed_serious_injury'
+  | 'witnessed_death'
+  | 'involved_in_cpr'
+  | 'personally_injured'
+  | 'serious_near_miss'
+  | 'distressing_behavioural_incident'
+  | 'other'
+
+export type PsychosocialHazardKey =
+  | 'high_job_demands'
+  | 'low_job_demands'
+  | 'low_job_control'
+  | 'poor_support'
+  | 'lack_of_role_clarity'
+  | 'poor_organisational_change_management'
+  | 'poor_organisational_justice'
+  | 'low_reward_and_recognition'
+  | 'job_insecurity'
+  | 'violence_and_aggression'
+  | 'bullying'
+  | 'harassment_including_sexual_harassment'
+  | 'remote_or_isolated_work'
+  | 'poor_physical_environment'
+  | 'traumatic_events_or_material'
+  | 'fatigue'
+  | 'intrusive_surveillance'
+
+export interface PsychosocialWorkerPulsePayload {
+  workflowKind: PsychosocialWorkflowKind
+  submissionContext: PsychosocialPulseContext
+  workerNameSnapshot: string
+  jobRole: string
+  workgroup?: string | null
+  rosterPattern?: string | null
+  isFIFO: boolean
+  moodRating: number
+  stressRating: number
+  sleepQualityOnRoster: number
+  feelingOverwhelmedByWorkDemands: PsychosocialFrequencyOption
+  feelingUnderUsedOrDisengaged: PsychosocialFrequencyOption
+  feelingAbleToControlWork: PsychosocialControlOption
+  feelingSupportedBySupervisorOrTeam: PsychosocialControlOption
+  roleAndExpectationsAreClear: PsychosocialControlOption
+  concernAboutUnfairTreatmentOrPoorCommunication: boolean
+  recentInterpersonalConflictOrInappropriateBehaviour: boolean
+  feelingIsolatedDueToRemoteOrFIFOWork: boolean
+  physicalEnvironmentAffectingWellbeing: boolean
+  exposedToDistressingOrTraumaticEvent: boolean
+  concernAboutRosterOrFatiguePressure: boolean
+  concernAboutMonitoringOrSurveillancePressure: boolean
+  wouldLikeSupportContact: PsychosocialSupportContactOption
+  comfortableSpeakingToMedic: boolean
+  comfortableSpeakingToCounsellor: boolean
+  wouldLikeUrgentContactToday: boolean
+  feelsUnsafeAtWorkToday: boolean
+  workerComments?: string | null
+}
+
+export interface PsychosocialWorkerScoreSummary {
+  derivedPulseRiskLevel: PsychosocialRiskLevel
+  domainSignalCounts: Partial<Record<PsychosocialHazardKey, number>>
+  requestedSupport: boolean
+  requiresReview: boolean
+  requiresUrgentFollowUp: boolean
+}
+
+export interface PsychosocialPostIncidentPayload {
+  linkedIncidentOrCaseId?: string | null
+  workerId?: string | null
+  workerNameSnapshot: string
+  jobRole?: string | null
+  eventType: PsychosocialPostIncidentEventType
+  eventDateTime: string
+  natureOfExposure: string
+  initialDefusingOffered: boolean
+  normalReactionsExplained: boolean
+  supportPersonContacted: boolean
+  eapReferralOffered: boolean
+  externalPsychologyReferralOffered: boolean
+  followUpScheduledAt?: string | null
+  confidentialityAcknowledged: boolean
+  reviewNotes?: string | null
+}
+
+export interface PsychosocialModulePayload {
+  workerPulse?: PsychosocialWorkerPulsePayload
+  postIncidentWelfare?: PsychosocialPostIncidentPayload
+  scoreSummary: PsychosocialWorkerScoreSummary
+}
+
+export interface PsychosocialReviewPayload {
+  reviewStartedAt?: string | null
+  reviewedByUserId?: string | null
+  reviewedByName?: string | null
+  triagePriority?: PsychosocialReviewPriority | null
+  assignedReviewPath?: PsychosocialAssignedReviewPath | null
+  caseOwnerName?: string | null
+  caseOwnerUserId?: string | null
+  contactOutcome?: PsychosocialContactOutcome | null
+  supportPersonContacted?: boolean | null
+  eapReferralOffered?: boolean | null
+  externalPsychologyReferralOffered?: boolean | null
+  followUpScheduledAt?: string | null
+  nextCheckInAt?: string | null
+  closureReason?: PsychosocialCaseClosureReason | null
+  outcomeSummary?: string | null
+  supportActions?: string | null
+  followUpRequired?: boolean | null
+  reviewComments?: string | null
+}
+
+export interface PsychosocialAssessment {
+  id: string
+  business_id: string
+  site_id: string
+  worker_id: string
+  module_key: 'psychosocial_health'
+  module_version: number
+  status: PsychosocialAssessmentStatus
+  payload: PsychosocialModulePayload
+  review_payload: PsychosocialReviewPayload
+  submitted_at: string
+  reviewed_at: string | null
+  reviewed_by: string | null
+  exported_at?: string | null
+  exported_by_name?: string | null
+  phi_purged_at?: string | null
+  is_test?: boolean | null
+}

@@ -4,19 +4,27 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { format } from 'date-fns'
+import {
+  formatPsychosocialWorkflowKind,
+  getPsychosocialWorkerName,
+  getPsychosocialWorkflowKind,
+} from '@/lib/psychosocial'
 import type {
   FatigueAssessment,
   MedDecReviewStatus,
   MedicationDeclaration,
+  PsychosocialAssessment,
   Site,
   Submission,
   SubmissionStatus,
 } from '@/lib/types'
+import { formatPsychosocialRiskLevel } from '@/lib/psychosocial'
 
 const AUTO_PURGE_DAYS = 7
 const FINAL_SUBMISSION_STATUSES: SubmissionStatus[] = ['Approved', 'Requires Follow-up']
 const FINAL_MED_DEC_STATUSES: MedDecReviewStatus[] = ['Normal Duties', 'Restricted Duties', 'Unfit for Work']
 const FINAL_FATIGUE_STATUS = 'resolved'
+const FINAL_PSYCHOSOCIAL_STATUS = 'resolved'
 
 const SUBMISSION_STATUS_COLORS: Record<SubmissionStatus, string> = {
   'New': 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20',
@@ -123,10 +131,11 @@ interface Props {
   submissions: MedicExportsSubmission[]
   medDeclarations: MedicExportsMedDec[]
   fatigueAssessments: MedicExportsFatigue[]
+  psychosocialAssessments: MedicExportsPsychosocial[]
   initialSite?: string
 }
 
-export default function MedicExportsDashboard({ sites, submissions, medDeclarations, fatigueAssessments, initialSite }: Props) {
+export default function MedicExportsDashboard({ sites, submissions, medDeclarations, fatigueAssessments, psychosocialAssessments, initialSite }: Props) {
   const router = useRouter()
   const [activeTab, setActiveTab] = useState(initialSite || sites[0]?.id || '')
   const [selectedSubmissionIds, setSelectedSubmissionIds] = useState<Set<string>>(new Set())
@@ -135,9 +144,12 @@ export default function MedicExportsDashboard({ sites, submissions, medDeclarati
   const [submissionError, setSubmissionError] = useState('')
   const [medDecError, setMedDecError] = useState('')
   const [fatigueError, setFatigueError] = useState('')
+  const [psychosocialError, setPsychosocialError] = useState('')
   const [purgingSubmissions, setPurgingSubmissions] = useState(false)
   const [purgingMedDecs, setPurgingMedDecs] = useState(false)
   const [purgingFatigue, setPurgingFatigue] = useState(false)
+  const [selectedPsychosocialIds, setSelectedPsychosocialIds] = useState<Set<string>>(new Set())
+  const [purgingPsychosocial, setPurgingPsychosocial] = useState(false)
 
   const siteSubmissions = submissions.filter((s) => s.site_id === activeTab && s.status !== 'Recalled')
   const readySubmissions = siteSubmissions.filter((s) => !s.exported_at && !s.phi_purged_at && FINAL_SUBMISSION_STATUSES.includes(s.status))
@@ -154,12 +166,23 @@ export default function MedicExportsDashboard({ sites, submissions, medDeclarati
   const exportedFatigue = siteFatigue.filter((item) => !!item.exported_at && !item.phi_purged_at)
   const purgedFatigue = siteFatigue.filter((item) => !!item.phi_purged_at)
 
+  const sitePsychosocial = psychosocialAssessments.filter(
+    (item) =>
+      item.site_id === activeTab
+      && ['support_check_in', 'post_incident_psychological_welfare'].includes(getPsychosocialWorkflowKind(item) ?? '')
+      && !item.is_test,
+  )
+  const readyPsychosocial = sitePsychosocial.filter((item) => !item.exported_at && !item.phi_purged_at && item.status === FINAL_PSYCHOSOCIAL_STATUS)
+  const exportedPsychosocial = sitePsychosocial.filter((item) => !!item.exported_at && !item.phi_purged_at)
+  const purgedPsychosocial = sitePsychosocial.filter((item) => !!item.phi_purged_at)
+
   const badgeCounts = Object.fromEntries(
     sites.map((site) => {
       const subCount = submissions.filter((s) => s.site_id === site.id && s.status !== 'Recalled' && (!s.phi_purged_at && (FINAL_SUBMISSION_STATUSES.includes(s.status) || !!s.exported_at) || !!s.phi_purged_at)).length
       const medCount = medDeclarations.filter((m) => m.site_id === site.id && (!m.phi_purged_at && (FINAL_MED_DEC_STATUSES.includes(m.medic_review_status) || !!m.exported_at) || !!m.phi_purged_at)).length
       const fatigueCount = fatigueAssessments.filter((item) => item.site_id === site.id && (!item.phi_purged_at && (item.status === FINAL_FATIGUE_STATUS || !!item.exported_at) || !!item.phi_purged_at)).length
-      return [site.id, subCount + medCount + fatigueCount]
+      const psychosocialCount = psychosocialAssessments.filter((item) => item.site_id === site.id && (!item.phi_purged_at && (item.status === FINAL_PSYCHOSOCIAL_STATUS || !!item.exported_at) || !!item.phi_purged_at)).length
+      return [site.id, subCount + medCount + fatigueCount + psychosocialCount]
     })
   )
 
@@ -173,6 +196,10 @@ export default function MedicExportsDashboard({ sites, submissions, medDeclarati
 
   function fatigueHref(id: string) {
     return `/medic/fatigue/${id}?view=exports&site=${activeTab}`
+  }
+
+  function psychosocialHref(id: string) {
+    return `/medic/psychosocial/${id}?view=exports&site=${activeTab}`
   }
 
   function toggleSelected(setter: React.Dispatch<React.SetStateAction<Set<string>>>, id: string) {
@@ -252,6 +279,30 @@ export default function MedicExportsDashboard({ sites, submissions, medDeclarati
       setFatigueError('Network error — please try again.')
     } finally {
       setPurgingFatigue(false)
+    }
+  }
+
+  async function purgePsychosocialAssessments() {
+    if (selectedPsychosocialIds.size === 0) return
+    setPurgingPsychosocial(true)
+    setPsychosocialError('')
+    try {
+      const res = await fetch('/api/psychosocial-assessments/purge', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: Array.from(selectedPsychosocialIds) }),
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        setPsychosocialError(data.error || 'Purge failed')
+        return
+      }
+      setSelectedPsychosocialIds(new Set())
+      router.refresh()
+    } catch {
+      setPsychosocialError('Network error — please try again.')
+    } finally {
+      setPurgingPsychosocial(false)
     }
   }
 
@@ -424,6 +475,82 @@ export default function MedicExportsDashboard({ sites, submissions, medDeclarati
       </div>
 
       <div className="space-y-4">
+        <SectionHeader title="Psychosocial Cases" subtitle="Reviewed psychosocial support and post-incident welfare cases can be exported into the record and retained until purged. Wellbeing pulses are excluded." />
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4"><p className="text-xs uppercase tracking-widest text-slate-500">Ready to Export</p><p className="mt-1 text-2xl font-bold text-violet-400">{readyPsychosocial.length}</p></div>
+          <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4"><p className="text-xs uppercase tracking-widest text-slate-500">Exported</p><p className="mt-1 text-2xl font-bold text-amber-400">{exportedPsychosocial.length}</p></div>
+          <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4"><p className="text-xs uppercase tracking-widest text-slate-500">Purged</p><p className="mt-1 text-2xl font-bold text-slate-400">{purgedPsychosocial.length}</p></div>
+        </div>
+
+        {readyPsychosocial.length > 0 && (
+          <div className="rounded-xl border border-slate-700/50 bg-slate-800/60 overflow-hidden">
+            <div className="px-4 py-3 border-b border-slate-700/50"><p className="text-xs font-semibold uppercase tracking-widest text-slate-500">Ready to Export</p></div>
+            {readyPsychosocial.map((item, i) => (
+              <Link key={item.id} href={psychosocialHref(item.id)} className={`w-full text-left px-5 py-4 flex items-center justify-between hover:bg-slate-700/30 transition-colors ${i > 0 ? 'border-t border-slate-700/50' : ''}`}>
+                <div>
+                  <p className="font-semibold text-slate-100">{getPsychosocialWorkerName(item)}</p>
+                  <p className="text-sm text-slate-500 mt-1">
+                    {fmtDate(item.submitted_at)} · {formatPsychosocialWorkflowKind(getPsychosocialWorkflowKind(item) || 'support_check_in')} · {formatPsychosocialRiskLevel(item.payload.scoreSummary.derivedPulseRiskLevel)} risk
+                  </p>
+                </div>
+                <span className="text-xs font-medium px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                  Reviewed
+                </span>
+              </Link>
+            ))}
+          </div>
+        )}
+
+        {exportedPsychosocial.length > 0 && (
+          <div className="space-y-3 rounded-xl border border-slate-700/50 bg-slate-800/60 p-4">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <p className="text-xs font-semibold uppercase tracking-widest text-slate-500">Exported and Available</p>
+              <div className="flex items-center gap-2">
+                <button onClick={() => setSelectedPsychosocialIds(selectedPsychosocialIds.size === exportedPsychosocial.length ? new Set() : new Set(exportedPsychosocial.map((item) => item.id)))} className="text-sm text-cyan-400 hover:underline">
+                  {selectedPsychosocialIds.size === exportedPsychosocial.length ? 'Deselect all' : 'Select all'}
+                </button>
+                {selectedPsychosocialIds.size > 0 && (
+                  <button onClick={purgePsychosocialAssessments} disabled={purgingPsychosocial} className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50">
+                    {purgingPsychosocial ? 'Purging…' : `Purge selected (${selectedPsychosocialIds.size})`}
+                  </button>
+                )}
+              </div>
+            </div>
+            {psychosocialError && <p className="text-sm text-red-400">{psychosocialError}</p>}
+            <div className="rounded-xl border border-slate-700/50 overflow-hidden">
+              {exportedPsychosocial.map((item, i) => (
+                <div key={item.id} className={`flex items-center gap-3 px-4 py-4 ${i > 0 ? 'border-t border-slate-700/50' : ''}`}>
+                  <input type="checkbox" checked={selectedPsychosocialIds.has(item.id)} onChange={() => toggleSelected(setSelectedPsychosocialIds, item.id)} className="w-4 h-4 rounded border-slate-600 bg-slate-700 text-red-500 cursor-pointer" />
+                  <Link href={psychosocialHref(item.id)} className="flex-1 text-left flex items-center justify-between hover:bg-slate-700/30 rounded-lg px-2 py-1 -mx-2 -my-1 transition-colors">
+                    <div>
+                      <p className="font-semibold text-slate-100">{getPsychosocialWorkerName(item)}</p>
+                      <p className="text-sm text-slate-500 mt-1">{fmtDate(item.submitted_at)} · {formatPsychosocialWorkflowKind(getPsychosocialWorkflowKind(item) || 'support_check_in')} · {formatPsychosocialRiskLevel(item.payload.scoreSummary.derivedPulseRiskLevel)} risk</p>
+                    </div>
+                    {item.exported_at && <PurgeCountdown exportedAt={item.exported_at} />}
+                  </Link>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {purgedPsychosocial.length > 0 && (
+          <div className="rounded-xl border border-slate-800 bg-slate-900/60 overflow-hidden">
+            <div className="px-4 py-3 border-b border-slate-800"><p className="text-xs font-semibold uppercase tracking-widest text-slate-500">Purged History</p></div>
+            {purgedPsychosocial.map((item, i) => (
+              <Link key={item.id} href={psychosocialHref(item.id)} className={`w-full text-left px-5 py-4 flex items-center justify-between hover:bg-slate-800 transition-colors ${i > 0 ? 'border-t border-slate-800' : ''}`}>
+                <div>
+                  <p className="font-semibold text-slate-400">PHI Purged</p>
+                  <p className="text-sm text-slate-600 mt-1">{fmtDate(item.submitted_at)}</p>
+                </div>
+                <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-slate-700 text-slate-500">Purged</span>
+              </Link>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="space-y-4">
         <SectionHeader title="Fatigue Assessments" subtitle="Medic-reviewed fatigue outcomes can be exported into the business medical record and kept available until purged." />
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4"><p className="text-xs uppercase tracking-widest text-slate-500">Ready to Export</p><p className="mt-1 text-2xl font-bold text-violet-400">{readyFatigue.length}</p></div>
@@ -514,4 +641,9 @@ type MedicExportsMedDec = Pick<
 type MedicExportsFatigue = Pick<
   FatigueAssessment,
   'id' | 'business_id' | 'site_id' | 'status' | 'payload' | 'review_payload' | 'submitted_at' | 'exported_at' | 'phi_purged_at'
+>
+
+type MedicExportsPsychosocial = Pick<
+  PsychosocialAssessment,
+  'id' | 'business_id' | 'site_id' | 'status' | 'payload' | 'review_payload' | 'submitted_at' | 'exported_at' | 'phi_purged_at' | 'is_test'
 >

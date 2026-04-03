@@ -1,0 +1,104 @@
+import { redirect } from 'next/navigation'
+import PsychosocialDashboard from '@/components/medic/PsychosocialDashboard'
+import {
+  getConfiguredBusinessModules,
+  PSYCHOSOCIAL_HEALTH_MODULE_KEY,
+  type BusinessModule,
+} from '@/lib/modules'
+import { createClient } from '@/lib/supabase/server'
+import type { PsychosocialAssessment } from '@/lib/types'
+
+function parsePsychosocialAssessment(raw: Record<string, unknown>): PsychosocialAssessment {
+  return {
+    id: String(raw.id ?? ''),
+    business_id: String(raw.business_id ?? ''),
+    site_id: String(raw.site_id ?? ''),
+    worker_id: String(raw.worker_id ?? ''),
+    module_key: 'psychosocial_health',
+    module_version: Number(raw.module_version ?? 1),
+    status: String(raw.status ?? 'awaiting_medic_review') as PsychosocialAssessment['status'],
+    payload: raw.payload as PsychosocialAssessment['payload'],
+    review_payload: (raw.review_payload as PsychosocialAssessment['review_payload']) ?? {},
+    submitted_at: String(raw.submitted_at ?? ''),
+    reviewed_at: raw.reviewed_at ? String(raw.reviewed_at) : null,
+    reviewed_by: raw.reviewed_by ? String(raw.reviewed_by) : null,
+    exported_at: raw.exported_at ? String(raw.exported_at) : null,
+    exported_by_name: raw.exported_by_name ? String(raw.exported_by_name) : null,
+    phi_purged_at: raw.phi_purged_at ? String(raw.phi_purged_at) : null,
+    is_test: typeof raw.is_test === 'boolean' ? raw.is_test : null,
+  }
+}
+
+export default async function MedicPsychosocialDashboardPage({
+  searchParams,
+}: {
+  searchParams: { site?: string }
+}) {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) redirect('/login')
+
+  const { data: account } = await supabase
+    .from('user_accounts')
+    .select('role, business_id, site_ids, contract_end_date')
+    .eq('id', user.id)
+    .single()
+
+  if (!account || account.role !== 'medic') redirect('/')
+  if (account.contract_end_date && new Date(account.contract_end_date) < new Date()) redirect('/expired')
+
+  const siteIds: string[] = account.site_ids || []
+
+  const [{ data: sites }, { data: businessModules }] = await Promise.all([
+    supabase.from('sites').select('id,name,is_office').in('id', siteIds.length ? siteIds : ['__none__']),
+    supabase
+      .from('business_modules')
+      .select('module_key, enabled')
+      .eq('business_id', account.business_id),
+  ])
+
+  const configuredModules = getConfiguredBusinessModules((businessModules ?? []) as BusinessModule[], {
+    surface: 'medic_queue',
+  })
+  const psychosocialEnabled = configuredModules.some(
+    (module) => module.key === PSYCHOSOCIAL_HEALTH_MODULE_KEY && module.enabled,
+  )
+
+  let supportCheckIns: PsychosocialAssessment[] = []
+  let pulseCount = 0
+
+  if (psychosocialEnabled && siteIds.length > 0) {
+    const { data } = await supabase
+      .from('module_submissions')
+      .select('*')
+      .eq('module_key', PSYCHOSOCIAL_HEALTH_MODULE_KEY)
+      .in('site_id', siteIds)
+      .order('submitted_at', { ascending: false })
+
+    const entries = ((data as Record<string, unknown>[] | null) ?? []).map(parsePsychosocialAssessment)
+    supportCheckIns = entries.filter(
+      (entry) => {
+        const workflowKind = entry.payload?.workerPulse?.workflowKind
+          ?? (entry.payload?.postIncidentWelfare ? 'post_incident_psychological_welfare' : null)
+        return ['support_check_in', 'post_incident_psychological_welfare'].includes(workflowKind ?? '')
+          && !entry.phi_purged_at
+          && !entry.is_test
+      },
+    )
+    pulseCount = entries.filter(
+      (entry) => entry.payload?.workerPulse?.workflowKind === 'wellbeing_pulse' && !entry.is_test,
+    ).length
+  }
+
+  return (
+    <PsychosocialDashboard
+      sites={sites ?? []}
+      supportCheckIns={supportCheckIns}
+      pulseCount={pulseCount}
+      initialSite={searchParams?.site}
+    />
+  )
+}

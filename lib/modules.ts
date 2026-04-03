@@ -109,7 +109,7 @@ export const MODULE_REGISTRY: Record<ModuleKey, ModuleRegistryEntry> = {
   psychosocial_health: {
     key: 'psychosocial_health',
     title: 'Psychosocial Health & Wellbeing',
-    description: 'Scheduled or worker-initiated wellbeing pulse with recognised psychosocial hazard reporting.',
+    description: 'Umbrella psychosocial module for wellbeing pulse reporting, support check-ins, and post-incident welfare cases.',
     category: 'custom',
     icon: 'brain',
     medicHref: '/medic/psychosocial',
@@ -120,7 +120,7 @@ export const MODULE_REGISTRY: Record<ModuleKey, ModuleRegistryEntry> = {
     isBillable: true,
     readiness: 'foundation_ready',
     canActivate: false,
-    statusNote: 'Schema and reporting foundation are seeded. Worker and review flows are not live yet.',
+    statusNote: 'Pulse, support check-ins, and post-incident welfare are now taking shape under one umbrella module.',
   },
   fit_for_work_plus: {
     key: 'fit_for_work_plus',

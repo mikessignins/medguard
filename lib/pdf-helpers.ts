@@ -77,28 +77,43 @@ export function pageHeader(
   doc: PDFKit.PDFDocument,
   logoBuffer?: Buffer | null,
   title = 'EMERGENCY MEDICAL INFORMATION FORM',
+  options?: { businessName?: string | null }
 ) {
   const y = doc.y
-  doc.font(F_BOLD).fontSize(8).fillColor('#000')
-    .text(title, MARGIN, y, { width: CONTENT_W - 60, lineBreak: false })
+  const headerH = 30
+  doc.save()
+  doc.rect(MARGIN, y, CONTENT_W, headerH).fill('#1A2332')
+
+  doc.font(F_BOLD).fontSize(9).fillColor('#FFFFFF')
+    .text(title, MARGIN + 10, y + 10, { width: CONTENT_W - 140, lineBreak: false })
 
   if (logoBuffer) {
     try {
-      doc.image(logoBuffer, MARGIN + CONTENT_W - 50, y - 1, { height: 14, fit: [50, 14] })
+      doc.image(logoBuffer, MARGIN + CONTENT_W - 96, y + 4, {
+        fit: [86, 22],
+        align: 'right',
+        valign: 'center',
+      })
     } catch {
-      doc.font(F_BOLD).fontSize(8).fillColor('#0891B2')
-        .text('MedPass', MARGIN + CONTENT_W - 50, y, { width: 50, align: 'right', lineBreak: false })
+      doc.font(F_BOLD).fontSize(8).fillColor('#FFFFFF')
+        .text(options?.businessName || 'MedPass', MARGIN + CONTENT_W - 120, y + 10, {
+          width: 110,
+          align: 'right',
+          lineBreak: false,
+        })
     }
   } else {
-    doc.font(F_BOLD).fontSize(8).fillColor('#0891B2')
-      .text('MedPass', MARGIN + CONTENT_W - 50, y, { width: 50, align: 'right', lineBreak: false })
+    doc.font(F_BOLD).fontSize(8).fillColor('#FFFFFF')
+      .text(options?.businessName || 'MedPass', MARGIN + CONTENT_W - 120, y + 10, {
+        width: 110,
+        align: 'right',
+        lineBreak: false,
+      })
   }
 
+  doc.restore()
   doc.fillColor('#000')
-  const lineY = y + 14
-  doc.moveTo(MARGIN, lineY).lineTo(MARGIN + CONTENT_W, lineY).lineWidth(1.5).strokeColor('#000').stroke()
-  doc.strokeColor('#000').lineWidth(1)
-  doc.y = lineY + 6
+  doc.y = y + headerH + 8
 }
 
 export function pageFooter(doc: PDFKit.PDFDocument, page: number, total: number) {

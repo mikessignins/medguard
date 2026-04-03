@@ -183,10 +183,83 @@ export async function GET(request: Request) {
     fatiguePurged = fatigueTargets.length
   }
 
+  // ── Psychosocial Support Check-Ins ──────────────────────────────────────────
+  const { data: psychosocialTargets, error: psychosocialFetchError } = await supabase
+    .from('module_submissions')
+    .select('id, business_id, site_id, payload, review_payload, exported_at, exported_by_name, module_key, reviewed_at')
+    .eq('module_key', 'psychosocial_health')
+    .lt('exported_at', cutoff)
+    .is('phi_purged_at', null)
+
+  if (psychosocialFetchError) {
+    return NextResponse.json({ error: psychosocialFetchError.message }, { status: 500 })
+  }
+
+  const psychosocialSupportTargets = (psychosocialTargets ?? []).filter(
+    (entry) => {
+      const workflowKind = entry.payload?.workerPulse?.workflowKind
+        ?? (entry.payload?.postIncidentWelfare ? 'post_incident_psychological_welfare' : null)
+      return ['support_check_in', 'post_incident_psychological_welfare'].includes(workflowKind ?? '')
+    },
+  )
+
+  let psychosocialPurged = 0
+  if (psychosocialSupportTargets.length > 0) {
+    const psychosocialAuditRows = psychosocialSupportTargets.map((entry) => {
+      const payload =
+        typeof entry.payload === 'object' && entry.payload
+          ? (entry.payload as Record<string, unknown>)
+          : null
+      const workerPulse =
+        payload?.workerPulse && typeof payload.workerPulse === 'object'
+          ? (payload.workerPulse as Record<string, unknown>)
+          : null
+      const reviewPayload =
+        typeof entry.review_payload === 'object' && entry.review_payload
+          ? (entry.review_payload as Record<string, unknown>)
+          : null
+
+      return {
+        submission_id: entry.id,
+        worker_name: (workerPulse?.workerNameSnapshot as string) ?? null,
+        worker_dob: null,
+        site_id: entry.site_id ?? null,
+        site_name: null,
+        business_id: entry.business_id,
+        medic_user_id: null,
+        medic_name: 'Auto-purge (system)',
+        purged_at: purgedAt,
+        form_type: entry.payload?.postIncidentWelfare ? 'psychosocial_post_incident_welfare' : 'psychosocial_support_checkin',
+        exported_at: entry.exported_at ?? null,
+        exported_by_name: entry.exported_by_name ?? null,
+        approved_by_name: (reviewPayload?.reviewedByName as string) ?? null,
+        approved_at: entry.reviewed_at ?? null,
+      }
+    })
+
+    await supabase.from('purge_audit_log').insert(psychosocialAuditRows)
+
+    const { error: psychosocialUpdateError } = await supabase
+      .from('module_submissions')
+      .update({
+        phi_purged_at: purgedAt,
+        payload: {},
+        review_payload: {},
+      })
+      .eq('module_key', 'psychosocial_health')
+      .in('id', psychosocialSupportTargets.map((row) => row.id))
+
+    if (psychosocialUpdateError) {
+      return NextResponse.json({ error: psychosocialUpdateError.message }, { status: 500 })
+    }
+    psychosocialPurged = psychosocialSupportTargets.length
+  }
+
   const result = {
     submissions_purged: subsPurged,
     med_declarations_purged: medsPurged,
     fatigue_assessments_purged: fatiguePurged,
+    psychosocial_support_checkins_purged: psychosocialPurged,
   }
 
   // Record successful run so admin dashboard can detect silent cron failures
