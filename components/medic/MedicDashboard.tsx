@@ -609,6 +609,11 @@ export default function MedicDashboard({
                     <p className="mt-1 text-xs text-[var(--medic-muted)]">
                       Submitted {formatTimestamp(item.submitted_at)}
                     </p>
+                    {item.review_payload.reviewedByName && (
+                      <p className="mt-1 text-xs text-[var(--medic-muted)]">
+                        Reviewer {item.review_payload.reviewedByName}
+                      </p>
+                    )}
                   </div>
                   <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ${FATIGUE_STATUS_STYLES[item.status]}`}>
                     {formatFatigueStatus(item.status)}
@@ -656,7 +661,10 @@ export default function MedicDashboard({
                       </span>
                     </div>
                     <p className="mt-1 text-sm text-[var(--medic-muted)]">
-                      {signals.length > 0 ? signals.join(' · ') : 'No additional follow-up flags recorded'}
+                      {[
+                        item.review_payload.reviewedByName ? `Reviewed by ${item.review_payload.reviewedByName}` : null,
+                        signals.length > 0 ? signals.join(' · ') : null,
+                      ].filter(Boolean).join(' · ') || 'No additional follow-up flags recorded'}
                     </p>
                     <p className="mt-1 text-xs text-[var(--medic-muted)]">Reviewed {formatTimestamp(item.reviewed_at || item.submitted_at)}</p>
                   </div>

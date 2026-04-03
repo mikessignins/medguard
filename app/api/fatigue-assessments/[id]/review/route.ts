@@ -65,7 +65,7 @@ export async function PATCH(
 
   const { data: current } = await supabase
     .from('module_submissions')
-    .select('id, business_id, site_id, status, review_payload')
+    .select('id, business_id, site_id, status, review_payload, reviewed_by')
     .eq('id', params.id)
     .eq('module_key', 'fatigue_assessment')
     .single()
@@ -75,11 +75,34 @@ export async function PATCH(
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
+  const existingReviewPayload =
+    typeof current.review_payload === 'object' && current.review_payload
+      ? (current.review_payload as Record<string, unknown>)
+      : null
+  const lockedReviewerId =
+    typeof existingReviewPayload?.reviewedByUserId === 'string'
+      ? String(existingReviewPayload.reviewedByUserId)
+      : (current.reviewed_by ? String(current.reviewed_by) : null)
+
+  if (current.status === 'resolved') {
+    return NextResponse.json(
+      { error: 'This fatigue review has already been finalised and can no longer be changed.' },
+      { status: 409 },
+    )
+  }
+
+  if (current.status === 'in_medic_review' && lockedReviewerId && lockedReviewerId !== user.id) {
+    return NextResponse.json(
+      { error: 'Another medic has already claimed this fatigue review.' },
+      { status: 409 },
+    )
+  }
+
   const now = new Date().toISOString()
   const reviewPayload = {
-    ...(typeof current.review_payload === 'object' && current.review_payload ? current.review_payload : {}),
+    ...(existingReviewPayload ?? {}),
     ...body,
-    reviewStartedAt: (current.review_payload as Record<string, unknown> | null)?.reviewStartedAt ?? now,
+    reviewStartedAt: existingReviewPayload?.reviewStartedAt ?? now,
     reviewedByUserId: user.id,
     reviewedByName: account.display_name,
   }

@@ -119,7 +119,75 @@ export async function GET(request: Request) {
     medsPurged = medTargets.length
   }
 
-  const result = { submissions_purged: subsPurged, med_declarations_purged: medsPurged }
+  // ── Fatigue Module Submissions ───────────────────────────────────────────────
+  const { data: fatigueTargets, error: fatigueFetchError } = await supabase
+    .from('module_submissions')
+    .select('id, business_id, site_id, payload, review_payload, exported_at, exported_by_name, module_key, reviewed_at')
+    .eq('module_key', 'fatigue_assessment')
+    .lt('exported_at', cutoff)
+    .is('phi_purged_at', null)
+
+  if (fatigueFetchError) {
+    return NextResponse.json({ error: fatigueFetchError.message }, { status: 500 })
+  }
+
+  let fatiguePurged = 0
+  if (fatigueTargets && fatigueTargets.length > 0) {
+    const fatigueAuditRows = fatigueTargets.map((entry) => {
+      const payload =
+        typeof entry.payload === 'object' && entry.payload
+          ? (entry.payload as Record<string, unknown>)
+          : null
+      const workerAssessment =
+        payload?.workerAssessment && typeof payload.workerAssessment === 'object'
+          ? (payload.workerAssessment as Record<string, unknown>)
+          : null
+      const reviewPayload =
+        typeof entry.review_payload === 'object' && entry.review_payload
+          ? (entry.review_payload as Record<string, unknown>)
+          : null
+
+      return {
+        submission_id: entry.id,
+        worker_name: (workerAssessment?.workerNameSnapshot as string) ?? null,
+        worker_dob: null,
+        site_id: entry.site_id ?? null,
+        site_name: null,
+        business_id: entry.business_id,
+        medic_user_id: null,
+        medic_name: 'Auto-purge (system)',
+        purged_at: purgedAt,
+        form_type: 'fatigue_assessment',
+        exported_at: entry.exported_at ?? null,
+        exported_by_name: entry.exported_by_name ?? null,
+        approved_by_name: (reviewPayload?.reviewedByName as string) ?? null,
+        approved_at: entry.reviewed_at ?? null,
+      }
+    })
+
+    await supabase.from('purge_audit_log').insert(fatigueAuditRows)
+
+    const { error: fatigueUpdateError } = await supabase
+      .from('module_submissions')
+      .update({
+        phi_purged_at: purgedAt,
+        payload: {},
+        review_payload: {},
+      })
+      .eq('module_key', 'fatigue_assessment')
+      .in('id', fatigueTargets.map((row) => row.id))
+
+    if (fatigueUpdateError) {
+      return NextResponse.json({ error: fatigueUpdateError.message }, { status: 500 })
+    }
+    fatiguePurged = fatigueTargets.length
+  }
+
+  const result = {
+    submissions_purged: subsPurged,
+    med_declarations_purged: medsPurged,
+    fatigue_assessments_purged: fatiguePurged,
+  }
 
   // Record successful run so admin dashboard can detect silent cron failures
   await supabase.from('cron_health_log').upsert(

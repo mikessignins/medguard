@@ -133,14 +133,20 @@ interface Props {
   assessment: FatigueAssessment
   siteName: string
   businessName: string
+  currentUserId: string
   queueContext: { ids: string[]; pos: number } | null
   backHref: string
 }
 
-export default function FatigueDetail({ assessment, siteName, businessName, queueContext, backHref }: Props) {
+export default function FatigueDetail({ assessment, siteName, businessName, currentUserId, queueContext, backHref }: Props) {
   const router = useRouter()
   const worker = assessment.payload.workerAssessment
   const summary = assessment.payload.workerScoreSummary
+  const reviewerName = assessment.review_payload.reviewedByName?.trim() || null
+  const reviewerUserId = assessment.review_payload.reviewedByUserId ?? assessment.reviewed_by ?? null
+  const isReadOnly =
+    assessment.status === 'resolved' ||
+    (assessment.status === 'in_medic_review' && reviewerUserId != null && reviewerUserId !== currentUserId)
 
   const [decision, setDecision] = useState<FatigueReviewDecision | ''>(assessment.review_payload.fitForWorkDecision ?? '')
   const [restrictions, setRestrictions] = useState(assessment.review_payload.restrictions ?? '')
@@ -165,6 +171,11 @@ export default function FatigueDetail({ assessment, siteName, businessName, queu
   }
 
   async function handleSave() {
+    if (isReadOnly) {
+      setError('This fatigue review is read-only.')
+      return
+    }
+
     if (!decision) {
       setError('Please select a fatigue review outcome before saving.')
       return
@@ -258,12 +269,13 @@ export default function FatigueDetail({ assessment, siteName, businessName, queu
                 : 'The derived risk comes from the combined fatigue score and supporting factors.'}
             </p>
           </div>
-          <div className="rounded-lg border border-current/20 bg-black/10 px-3 py-2 text-sm">
-            <p className="font-semibold">{formatStatus(assessment.status)}</p>
-            <p className="opacity-80">Submitted {fmtDateTime(assessment.submitted_at)}</p>
-          </div>
+        <div className="rounded-lg border border-current/20 bg-black/10 px-3 py-2 text-sm">
+          <p className="font-semibold">{formatStatus(assessment.status)}</p>
+          <p className="opacity-80">Submitted {fmtDateTime(assessment.submitted_at)}</p>
+          {reviewerName && <p className="opacity-80">Reviewer {reviewerName}</p>}
         </div>
       </div>
+    </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_340px] gap-4 items-start">
         <div className="space-y-4">
@@ -305,7 +317,8 @@ export default function FatigueDetail({ assessment, siteName, businessName, queu
                 <select
                   value={decision}
                   onChange={(event) => setDecision(event.target.value as FatigueReviewDecision)}
-                  className="w-full rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 outline-none focus:border-violet-500"
+                  disabled={isReadOnly}
+                  className="w-full rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 outline-none focus:border-violet-500 disabled:opacity-60"
                 >
                   <option value="">Select outcome</option>
                   {DECISIONS.map((item) => (
@@ -316,17 +329,17 @@ export default function FatigueDetail({ assessment, siteName, businessName, queu
 
               <label className="block">
                 <span className="mb-2 block text-sm font-medium text-slate-300">Restrictions</span>
-                <textarea value={restrictions} onChange={(event) => setRestrictions(event.target.value)} rows={3} className="w-full rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 outline-none focus:border-violet-500" />
+                <textarea value={restrictions} onChange={(event) => setRestrictions(event.target.value)} rows={3} disabled={isReadOnly} className="w-full rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 outline-none focus:border-violet-500 disabled:opacity-60" />
               </label>
 
               <label className="block">
                 <span className="mb-2 block text-sm font-medium text-slate-300">Handover notes</span>
-                <textarea value={handoverNotes} onChange={(event) => setHandoverNotes(event.target.value)} rows={3} className="w-full rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 outline-none focus:border-violet-500" />
+                <textarea value={handoverNotes} onChange={(event) => setHandoverNotes(event.target.value)} rows={3} disabled={isReadOnly} className="w-full rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 outline-none focus:border-violet-500 disabled:opacity-60" />
               </label>
 
               <label className="block">
                 <span className="mb-2 block text-sm font-medium text-slate-300">Comments</span>
-                <textarea value={comments} onChange={(event) => setComments(event.target.value)} rows={4} className="w-full rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 outline-none focus:border-violet-500" />
+                <textarea value={comments} onChange={(event) => setComments(event.target.value)} rows={4} disabled={isReadOnly} className="w-full rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 outline-none focus:border-violet-500 disabled:opacity-60" />
               </label>
 
               <div className="space-y-2 rounded-lg border border-slate-700/60 bg-slate-900/30 p-3">
@@ -342,8 +355,9 @@ export default function FatigueDetail({ assessment, siteName, businessName, queu
                     <input
                       type="checkbox"
                       checked={value as boolean}
+                      disabled={isReadOnly}
                       onChange={(event) => (setter as (value: boolean) => void)(event.target.checked)}
-                      className="h-4 w-4 rounded border-slate-600 bg-slate-900 text-violet-500 focus:ring-violet-500"
+                      className="h-4 w-4 rounded border-slate-600 bg-slate-900 text-violet-500 focus:ring-violet-500 disabled:opacity-60"
                     />
                     <span>{label as string}</span>
                   </label>
@@ -360,18 +374,34 @@ export default function FatigueDetail({ assessment, siteName, businessName, queu
                 </div>
               )}
 
-              <button
-                onClick={handleSave}
-                disabled={saving}
-                className="w-full rounded-lg bg-violet-500 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-400 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {saving ? 'Saving...' : 'Save fatigue review'}
-              </button>
+              {isReadOnly ? (
+                <div className="rounded-lg border border-slate-700/60 bg-slate-900/30 px-3 py-3 text-sm text-slate-300">
+                  <p className="font-semibold text-slate-100">
+                    {assessment.status === 'resolved'
+                      ? 'This fatigue review has been finalised.'
+                      : 'Another medic has already claimed this fatigue review.'}
+                  </p>
+                  <p className="mt-1 text-slate-400">
+                    {reviewerName
+                      ? `Reviewer: ${reviewerName}. Comments and outcome are now read-only.`
+                      : 'Comments and outcome are now read-only.'}
+                  </p>
+                </div>
+              ) : (
+                <button
+                  onClick={handleSave}
+                  disabled={saving}
+                  className="w-full rounded-lg bg-violet-500 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-400 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {saving ? 'Saving...' : 'Save fatigue review'}
+                </button>
+              )}
 
               {assessment.status === 'resolved' && (
                 <div className="rounded-lg border border-slate-700/60 bg-slate-900/30 px-3 py-3 text-sm text-slate-300">
                   <p className="font-semibold text-slate-100">Current recorded outcome</p>
                   <p className="mt-1">{formatFatigueDecision(assessment.review_payload.fitForWorkDecision)}</p>
+                  {reviewerName && <p className="mt-1 text-slate-400">Reviewed by {reviewerName}</p>}
                   <p className="mt-1 text-slate-400">
                     {[
                       assessment.review_payload.supervisorNotified ? 'Supervisor notified' : null,

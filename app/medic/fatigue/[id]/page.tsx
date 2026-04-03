@@ -83,6 +83,7 @@ export default async function MedicFatiguePage({
       assessment={parseFatigueAssessment(raw)}
       siteName={site?.name || String(raw.site_id)}
       businessName={business?.name || String(raw.business_id)}
+      currentUserId={user.id}
       queueContext={queueContext}
       backHref={backHref}
     />
