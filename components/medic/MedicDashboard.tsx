@@ -4,7 +4,15 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { format } from 'date-fns'
 import { createClient } from '@/lib/supabase/client'
-import type { Site, Submission, SubmissionStatus, MedicationDeclaration } from '@/lib/types'
+import type {
+  Site,
+  Submission,
+  SubmissionStatus,
+  MedicationDeclaration,
+  FatigueAssessment,
+  FatigueRiskLevel,
+  FatigueAssessmentQueueStatus,
+} from '@/lib/types'
 import MedDecSection from '@/components/medic/MedDecSection'
 import { computeRiskChips, type RiskChip } from '@/lib/risk-chips'
 import { encodeQueue } from '@/lib/queue-params'
@@ -51,20 +59,78 @@ type MedicDashboardMedDec = Pick<
   'id' | 'business_id' | 'site_id' | 'worker_name' | 'submitted_at' | 'medic_review_status' | 'exported_at' | 'phi_purged_at' | 'medications' | 'has_recent_injury_or_illness' | 'has_side_effects'
 >
 
+type MedicDashboardFatigue = FatigueAssessment
+
 type FilterType = 'All' | 'New' | 'In Review'
+type ActiveSection = 'declarations' | 'meddec' | 'fatigue'
 
 interface Props {
   sites: Array<Pick<Site, 'id' | 'name' | 'is_office'>>
   submissions: MedicDashboardSubmission[]
   medDeclarations: MedicDashboardMedDec[]
+  fatigueAssessments: MedicDashboardFatigue[]
   medDecEnabled: boolean
+  fatigueEnabled: boolean
   initialSite?: string
 }
 
-export default function MedicDashboard({ sites, submissions, medDeclarations, medDecEnabled, initialSite }: Props) {
+const FATIGUE_ACTIVE_STATUSES: FatigueAssessmentQueueStatus[] = ['awaiting_medic_review', 'in_medic_review']
+
+const FATIGUE_STATUS_STYLES: Record<FatigueAssessmentQueueStatus, string> = {
+  worker_only_complete: 'bg-slate-500/10 text-slate-400 border border-slate-500/20',
+  awaiting_medic_review: 'bg-violet-500/10 text-violet-300 border border-violet-500/20',
+  in_medic_review: 'bg-amber-500/10 text-amber-400 border border-amber-500/20',
+  resolved: 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20',
+}
+
+const FATIGUE_RISK_STYLES: Record<FatigueRiskLevel, string> = {
+  low: 'bg-emerald-500/10 border-emerald-500/20 text-emerald-300',
+  medium: 'bg-amber-500/10 border-amber-500/20 text-amber-300',
+  high: 'bg-red-500/10 border-red-500/20 text-red-300',
+}
+
+function formatFatigueStatus(status: FatigueAssessmentQueueStatus) {
+  switch (status) {
+    case 'worker_only_complete':
+      return 'Worker Only'
+    case 'awaiting_medic_review':
+      return 'Awaiting Review'
+    case 'in_medic_review':
+      return 'In Review'
+    case 'resolved':
+      return 'Resolved'
+  }
+}
+
+function formatFatigueContext(context: MedicDashboardFatigue['payload']['workerAssessment']['assessmentContext']) {
+  switch (context) {
+    case 'pre_shift':
+      return 'Pre-shift'
+    case 'during_shift':
+      return 'During shift'
+    case 'post_shift':
+      return 'Post-shift'
+    case 'journey_management':
+      return 'Journey management'
+    case 'peer_or_supervisor_concern':
+      return 'Peer or supervisor concern'
+    case 'other':
+      return 'Other'
+  }
+}
+
+export default function MedicDashboard({
+  sites,
+  submissions,
+  medDeclarations,
+  fatigueAssessments,
+  medDecEnabled,
+  fatigueEnabled,
+  initialSite,
+}: Props) {
   const [activeTab, setActiveTab] = useState(initialSite || sites[0]?.id || '')
   const [filter, setFilter] = useState<FilterType>('All')
-  const [activeSection, setActiveSection] = useState<'declarations' | 'meddec'>('declarations')
+  const [activeSection, setActiveSection] = useState<ActiveSection>('declarations')
   const router = useRouter()
 
   useEffect(() => {
@@ -90,6 +156,14 @@ export default function MedicDashboard({ sites, submissions, medDeclarations, me
         const row = payload.new as { site_id?: string }
         if (siteIds.includes(row.site_id ?? '')) router.refresh()
       })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'module_submissions' }, (payload) => {
+        const row = payload.new as { site_id?: string; module_key?: string }
+        if (row.module_key === 'fatigue_assessment' && siteIds.includes(row.site_id ?? '')) router.refresh()
+      })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'module_submissions' }, (payload) => {
+        const row = payload.new as { site_id?: string; module_key?: string }
+        if (row.module_key === 'fatigue_assessment' && siteIds.includes(row.site_id ?? '')) router.refresh()
+      })
       .subscribe()
 
     return () => {
@@ -110,6 +184,12 @@ export default function MedicDashboard({ sites, submissions, medDeclarations, me
   const medDecPendingCount = activeMedDecs.filter((m) => !m.medic_review_status || m.medic_review_status === 'Pending').length
   const medDecInReviewCount = activeMedDecs.filter((m) => m.medic_review_status === 'In Review').length
   const medDecActiveCount = activeMedDecs.length
+  const activeFatigueAssessments = fatigueEnabled
+    ? fatigueAssessments.filter((item) => item.site_id === activeTab && !item.exported_at && !item.phi_purged_at && FATIGUE_ACTIVE_STATUSES.includes(item.status))
+    : []
+  const fatigueAwaitingCount = activeFatigueAssessments.filter((item) => item.status === 'awaiting_medic_review').length
+  const fatigueInReviewCount = activeFatigueAssessments.filter((item) => item.status === 'in_medic_review').length
+  const fatigueActiveCount = activeFatigueAssessments.length
   const readyToExportCount = approvedCount + followUpCount
   const readyMedDecCount = medDecEnabled
     ? medDeclarations.filter((m) => m.site_id === activeTab && !m.exported_at && !m.phi_purged_at && MEDDEC_FINAL.includes(m.medic_review_status)).length
@@ -144,6 +224,11 @@ export default function MedicDashboard({ sites, submissions, medDeclarations, me
     { label: 'Pending', value: medDecPendingCount, color: 'text-violet-400', active: 'bg-violet-500/15 border-violet-500/40', helper: 'Not yet opened' },
     { label: 'In Review', value: medDecInReviewCount, color: 'text-amber-400', active: 'bg-amber-500/15 border-amber-500/40', helper: 'Already opened by a medic' },
     { label: 'Ready to Export', value: readyMedDecCount, color: 'text-emerald-400', active: 'bg-emerald-500/15 border-emerald-500/40', helper: 'Moved to exports after final decision' },
+  ] as const
+
+  const fatigueCards = [
+    { label: 'Awaiting Review', value: fatigueAwaitingCount, color: 'text-violet-300', helper: 'Worker fatigue checks needing first review' },
+    { label: 'In Review', value: fatigueInReviewCount, color: 'text-amber-400', helper: 'Already opened by a medic' },
   ] as const
 
   return (
@@ -217,6 +302,15 @@ export default function MedicDashboard({ sites, submissions, medDeclarations, me
         </div>
       )}
 
+      {fatigueActiveCount > 0 && (
+        <div className="mb-5 bg-violet-500/10 border border-violet-500/20 text-violet-200 text-sm px-4 py-3 rounded-xl flex items-center gap-2">
+          <svg className="w-4 h-4 shrink-0 text-violet-300" fill="currentColor" viewBox="0 0 20 20">
+            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm.75-12a.75.75 0 00-1.5 0v4.19l-1.72 1.72a.75.75 0 101.06 1.06l1.94-1.94A.75.75 0 0010.75 10V6z" clipRule="evenodd" />
+          </svg>
+          <span><strong>{fatigueActiveCount} fatigue assessment{fatigueActiveCount !== 1 ? 's' : ''}</strong> active on this site, including {fatigueInReviewCount} already in review.</span>
+        </div>
+      )}
+
       {(readyToExportCount > 0 || readyMedDecCount > 0) && (
         <div className="mb-5 rounded-xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
           <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -245,6 +339,9 @@ export default function MedicDashboard({ sites, submissions, medDeclarations, me
           const siteMedDecActive = medDecEnabled
             ? medDeclarations.filter((m) => m.site_id === site.id && !m.exported_at && !m.phi_purged_at && !MEDDEC_FINAL.includes(m.medic_review_status)).length
             : 0
+          const siteFatigueActive = fatigueEnabled
+            ? fatigueAssessments.filter((item) => item.site_id === site.id && !item.exported_at && !item.phi_purged_at && FATIGUE_ACTIVE_STATUSES.includes(item.status)).length
+            : 0
           const isActive = activeTab === site.id
           return (
             <button
@@ -260,12 +357,13 @@ export default function MedicDashboard({ sites, submissions, medDeclarations, me
               {site.is_office && <span className="text-xs text-slate-600">(Office)</span>}
               {siteDeclarationActive > 0 && <span className="bg-cyan-600 text-white text-xs rounded-full px-1.5 py-0.5 font-semibold leading-none">{siteDeclarationActive}</span>}
               {siteMedDecActive > 0 && <span className="bg-indigo-600 text-white text-xs rounded-full px-1.5 py-0.5 font-semibold leading-none">{siteMedDecActive}</span>}
+              {siteFatigueActive > 0 && <span className="bg-violet-600 text-white text-xs rounded-full px-1.5 py-0.5 font-semibold leading-none">{siteFatigueActive}</span>}
             </button>
           )
         })}
       </div>
 
-      {medDecEnabled ? (
+      {medDecEnabled || fatigueEnabled ? (
         <div role="tablist" className="flex border-b border-slate-800 mb-5">
           <button
             role="tab"
@@ -279,23 +377,44 @@ export default function MedicDashboard({ sites, submissions, medDeclarations, me
           >
             Medical Information
           </button>
-          <button
-            role="tab"
-            aria-selected={activeSection === 'meddec'}
-            onClick={() => setActiveSection('meddec')}
-            className={`px-5 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors flex items-center gap-2 ${
-              activeSection === 'meddec'
-                ? 'border-indigo-500 text-indigo-400'
-                : 'border-transparent text-slate-500 hover:text-slate-300'
-            }`}
-          >
-            Medication Declarations
-            {medDecActiveCount > 0 && (
-              <span className="bg-indigo-600 text-white text-xs rounded-full px-1.5 py-0.5 font-semibold leading-none">
-                {medDecActiveCount}
-              </span>
-            )}
-          </button>
+          {medDecEnabled && (
+            <button
+              role="tab"
+              aria-selected={activeSection === 'meddec'}
+              onClick={() => setActiveSection('meddec')}
+              className={`px-5 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors flex items-center gap-2 ${
+                activeSection === 'meddec'
+                  ? 'border-indigo-500 text-indigo-400'
+                  : 'border-transparent text-slate-500 hover:text-slate-300'
+              }`}
+            >
+              Medication Declarations
+              {medDecActiveCount > 0 && (
+                <span className="bg-indigo-600 text-white text-xs rounded-full px-1.5 py-0.5 font-semibold leading-none">
+                  {medDecActiveCount}
+                </span>
+              )}
+            </button>
+          )}
+          {fatigueEnabled && (
+            <button
+              role="tab"
+              aria-selected={activeSection === 'fatigue'}
+              onClick={() => setActiveSection('fatigue')}
+              className={`px-5 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors flex items-center gap-2 ${
+                activeSection === 'fatigue'
+                  ? 'border-violet-500 text-violet-300'
+                  : 'border-transparent text-slate-500 hover:text-slate-300'
+              }`}
+            >
+              Fatigue Assessments
+              {fatigueActiveCount > 0 && (
+                <span className="bg-violet-600 text-white text-xs rounded-full px-1.5 py-0.5 font-semibold leading-none">
+                  {fatigueActiveCount}
+                </span>
+              )}
+            </button>
+          )}
         </div>
       ) : (
         <div className="flex items-center gap-3 mb-4">
@@ -360,6 +479,69 @@ export default function MedicDashboard({ sites, submissions, medDeclarations, me
           siteId={activeTab}
           exportsHref={`/medic/exports?site=${activeTab}`}
         />
+      )}
+
+      {activeSection === 'fatigue' && (
+        <div className="space-y-6">
+          <div>
+            <p className="text-xs uppercase tracking-widest text-slate-500 mb-2">Fatigue Assessments</p>
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              {fatigueCards.map((card) => (
+                <button
+                  key={card.label}
+                  onClick={() => setActiveSection('fatigue')}
+                  className="text-left rounded-xl border bg-slate-800/60 border-slate-700/50 px-4 py-4"
+                >
+                  <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">{card.label}</p>
+                  <p className={`text-2xl font-bold ${card.color}`}>{card.value}</p>
+                  <p className="text-xs text-slate-600 mt-1">{card.helper}</p>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {activeFatigueAssessments.length === 0 ? (
+            <p className="text-center py-12 text-slate-600">No active fatigue assessments for this site.</p>
+          ) : (
+            <div className="bg-slate-800/60 backdrop-blur-sm border border-slate-700/50 rounded-xl overflow-hidden">
+              {activeFatigueAssessments.map((item, index) => {
+                const queueIds = activeFatigueAssessments.map((entry) => entry.id)
+                const pos = queueIds.indexOf(item.id)
+                const worker = item.payload.workerAssessment
+                const summary = item.payload.workerScoreSummary
+                return (
+                  <Link
+                    key={item.id}
+                    href={`/medic/fatigue/${item.id}?${encodeQueue(queueIds, pos)}&site=${encodeURIComponent(activeTab)}`}
+                    className={`block px-5 py-4 hover:bg-slate-700/30 transition-colors ${index > 0 ? 'border-t border-slate-700/50' : ''}`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="font-semibold text-slate-100">{worker.workerNameSnapshot || 'Unknown Worker'}</p>
+                          <span className="text-sm text-slate-500">{worker.jobRole || 'Unknown role'}</span>
+                          <span className={`rounded-full border px-2 py-0.5 text-xs font-medium ${FATIGUE_RISK_STYLES[summary.derivedRiskLevel]}`}>
+                            {summary.derivedRiskLevel.toUpperCase()} RISK
+                          </span>
+                        </div>
+                        <p className="mt-1 text-sm text-slate-500">
+                          {formatFatigueContext(worker.assessmentContext)} · Score {summary.fatigueScoreTotal}
+                          {worker.rosterPattern ? ` · ${worker.rosterPattern}` : ''}
+                        </p>
+                        <p className="mt-1 text-xs text-slate-600">
+                          Submitted {(() => { try { return format(new Date(item.submitted_at), 'dd MMM yyyy · HH:mm') } catch { return 'Unknown time' } })()}
+                        </p>
+                      </div>
+                      <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ${FATIGUE_STATUS_STYLES[item.status]}`}>
+                        {formatFatigueStatus(item.status)}
+                      </span>
+                    </div>
+                  </Link>
+                )
+              })}
+            </div>
+          )}
+        </div>
       )}
     </div>
   )

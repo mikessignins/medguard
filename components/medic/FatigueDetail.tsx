@@ -1,0 +1,330 @@
+'use client'
+
+import { useState } from 'react'
+import Link from 'next/link'
+import { useRouter } from 'next/navigation'
+import type {
+  FatigueAssessment,
+  FatigueReviewDecision,
+} from '@/lib/types'
+import { encodeQueue } from '@/lib/queue-params'
+
+const DECISIONS: Array<{ value: FatigueReviewDecision; label: string }> = [
+  { value: 'fit_normal_duties', label: 'Fit for normal duties' },
+  { value: 'fit_restricted_duties', label: 'Fit for restricted duties' },
+  { value: 'not_fit_for_work', label: 'Not fit for work' },
+  { value: 'sent_to_room', label: 'Sent to room' },
+  { value: 'sent_home', label: 'Sent home' },
+  { value: 'requires_escalation', label: 'Requires escalation' },
+]
+
+const RISK_STYLES = {
+  low: 'bg-emerald-500/10 border-emerald-500/20 text-emerald-300',
+  medium: 'bg-amber-500/10 border-amber-500/20 text-amber-300',
+  high: 'bg-red-500/10 border-red-500/20 text-red-300',
+} as const
+
+const STATUS_STYLES = {
+  worker_only_complete: 'bg-slate-500/10 text-slate-400 border border-slate-500/20',
+  awaiting_medic_review: 'bg-violet-500/10 text-violet-300 border border-violet-500/20',
+  in_medic_review: 'bg-amber-500/10 text-amber-400 border border-amber-500/20',
+  resolved: 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20',
+} as const
+
+function fmtDateTime(value: string | null | undefined) {
+  if (!value) return '—'
+  try {
+    const date = new Date(value)
+    if (Number.isNaN(date.getTime())) return '—'
+    return date.toLocaleDateString('en-AU', { day: '2-digit', month: 'short', year: 'numeric' }) +
+      ' ' + date.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })
+  } catch {
+    return '—'
+  }
+}
+
+function formatAssessmentContext(value: FatigueAssessment['payload']['workerAssessment']['assessmentContext']) {
+  switch (value) {
+    case 'pre_shift':
+      return 'Pre-shift'
+    case 'during_shift':
+      return 'During shift'
+    case 'post_shift':
+      return 'Post-shift'
+    case 'journey_management':
+      return 'Journey management'
+    case 'peer_or_supervisor_concern':
+      return 'Peer or supervisor concern'
+    case 'other':
+      return 'Other'
+  }
+}
+
+function formatAlertness(value: FatigueAssessment['payload']['workerAssessment']['alertnessRating']) {
+  switch (value) {
+    case 'a_active_alert_wide_awake':
+      return 'A. Active, alert, wide awake'
+    case 'b_functioning_well_not_peak':
+      return 'B. Functioning well, but not at peak'
+    case 'c_ok_but_not_fully_alert':
+      return 'C. OK, but not fully alert'
+    case 'd_groggy_hard_to_concentrate':
+      return 'D. Groggy, hard to concentrate'
+    case 'e_sleepy_would_like_to_lie_down':
+      return 'E. Sleepy, would like to lie down'
+  }
+}
+
+function formatAlcoholBand(value: FatigueAssessment['payload']['workerAssessment']['alcoholBeforeSleepBand']) {
+  switch (value) {
+    case 'none':
+      return 'None'
+    case 'one_to_two':
+      return '1 to 2 standard drinks'
+    case 'three_to_four':
+      return '3 to 4 standard drinks'
+    case 'five_or_more':
+      return '5 or more standard drinks'
+  }
+}
+
+function formatStatus(status: FatigueAssessment['status']) {
+  switch (status) {
+    case 'worker_only_complete':
+      return 'Worker Only'
+    case 'awaiting_medic_review':
+      return 'Awaiting Review'
+    case 'in_medic_review':
+      return 'In Review'
+    case 'resolved':
+      return 'Resolved'
+  }
+}
+
+function InfoRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="grid grid-cols-[160px_1fr] gap-3 py-2 border-b border-slate-800 last:border-0">
+      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</p>
+      <p className="text-sm text-slate-100">{value}</p>
+    </div>
+  )
+}
+
+interface Props {
+  assessment: FatigueAssessment
+  siteName: string
+  businessName: string
+  queueContext: { ids: string[]; pos: number } | null
+  backHref: string
+}
+
+export default function FatigueDetail({ assessment, siteName, businessName, queueContext, backHref }: Props) {
+  const router = useRouter()
+  const worker = assessment.payload.workerAssessment
+  const summary = assessment.payload.workerScoreSummary
+
+  const [decision, setDecision] = useState<FatigueReviewDecision | ''>(assessment.review_payload.fitForWorkDecision ?? '')
+  const [restrictions, setRestrictions] = useState(assessment.review_payload.restrictions ?? '')
+  const [handoverNotes, setHandoverNotes] = useState(assessment.review_payload.handoverNotes ?? '')
+  const [comments, setComments] = useState(assessment.review_payload.medicOrEsoComments ?? '')
+  const [supervisorNotified, setSupervisorNotified] = useState(Boolean(assessment.review_payload.supervisorNotified))
+  const [transportArranged, setTransportArranged] = useState(Boolean(assessment.review_payload.transportArranged))
+  const [sentToRoom, setSentToRoom] = useState(Boolean(assessment.review_payload.sentToRoom))
+  const [sentHome, setSentHome] = useState(Boolean(assessment.review_payload.sentHome))
+  const [requiresHigherMedicalReview, setRequiresHigherMedicalReview] = useState(Boolean(assessment.review_payload.requiresHigherMedicalReview))
+  const [requiresFollowUp, setRequiresFollowUp] = useState(Boolean(assessment.review_payload.requiresFollowUp))
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+  const [success, setSuccess] = useState(false)
+
+  const prevId = queueContext && queueContext.pos > 0 ? queueContext.ids[queueContext.pos - 1] : null
+  const nextId = queueContext && queueContext.pos < queueContext.ids.length - 1 ? queueContext.ids[queueContext.pos + 1] : null
+
+  function queueLink(targetId: string, targetPos: number) {
+    if (!queueContext) return `/medic/fatigue/${targetId}`
+    return `/medic/fatigue/${targetId}?${encodeQueue(queueContext.ids, targetPos)}&site=${encodeURIComponent(assessment.site_id)}`
+  }
+
+  async function handleSave() {
+    if (!decision) {
+      setError('Please select a fatigue review outcome before saving.')
+      return
+    }
+
+    setSaving(true)
+    setError('')
+    setSuccess(false)
+
+    try {
+      const response = await fetch(`/api/fatigue-assessments/${assessment.id}/review`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fitForWorkDecision: decision,
+          restrictions: restrictions.trim() || null,
+          supervisorNotified,
+          handoverNotes: handoverNotes.trim() || null,
+          transportArranged,
+          sentToRoom,
+          sentHome,
+          requiresHigherMedicalReview,
+          requiresFollowUp,
+          medicOrEsoComments: comments.trim() || null,
+        }),
+      })
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}))
+        setError(data.error || 'Failed to save fatigue review.')
+        return
+      }
+
+      setSuccess(true)
+      router.refresh()
+    } catch {
+      setError('Network error. Please try again.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-4 pb-4 border-b border-slate-700/50 gap-4 flex-wrap">
+        <Link href={backHref} className="flex items-center gap-1.5 text-sm text-slate-400 hover:text-slate-200 transition-colors">
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+          </svg>
+          Back to Fatigue Queue
+        </Link>
+        {queueContext && (
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-slate-500">{queueContext.pos + 1} of {queueContext.ids.length} pending</span>
+            <div className="flex items-center gap-1">
+              {prevId ? <Link href={queueLink(prevId, queueContext.pos - 1)} className="px-3 py-1.5 text-xs font-medium bg-slate-800 border border-slate-700 text-slate-300 hover:border-slate-600 rounded-lg transition-colors">← Prev</Link> : <span className="px-3 py-1.5 text-xs font-medium bg-slate-800/40 border border-slate-700/40 text-slate-600 rounded-lg">← Prev</span>}
+              {nextId ? <Link href={queueLink(nextId, queueContext.pos + 1)} className="px-3 py-1.5 text-xs font-medium bg-violet-500/10 border border-violet-500/25 text-violet-300 hover:bg-violet-500/15 rounded-lg transition-colors">Next →</Link> : <span className="px-3 py-1.5 text-xs font-medium bg-slate-800/40 border border-slate-700/40 text-slate-600 rounded-lg">Next →</span>}
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="bg-slate-800/60 border border-slate-700/50 rounded-xl px-5 py-4 mb-4 flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="text-xl font-bold text-slate-100">{worker.workerNameSnapshot || 'Fatigue Assessment'}</h1>
+          <p className="text-sm text-slate-500 mt-0.5">
+            {worker.jobRole || 'Unknown role'} · {siteName} · {businessName}
+          </p>
+          <p className="text-xs text-slate-600 mt-1">Submitted {fmtDateTime(assessment.submitted_at)}</p>
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${RISK_STYLES[summary.derivedRiskLevel]}`}>
+            {summary.derivedRiskLevel.toUpperCase()} RISK
+          </span>
+          <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${STATUS_STYLES[assessment.status]}`}>
+            {formatStatus(assessment.status)}
+          </span>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_340px] gap-4 items-start">
+        <div className="space-y-4">
+          <div className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-5">
+            <h2 className="text-xs font-semibold text-slate-500 uppercase tracking-widest mb-3">Worker Assessment</h2>
+            <InfoRow label="Assessment context" value={formatAssessmentContext(worker.assessmentContext)} />
+            <InfoRow label="Job role" value={worker.jobRole || '—'} />
+            <InfoRow label="Workgroup" value={worker.workgroup || '—'} />
+            <InfoRow label="Roster" value={worker.rosterPattern || '—'} />
+            <InfoRow label="Current shift start" value={fmtDateTime(worker.currentShiftStartAt)} />
+            <InfoRow label="Planned shift end" value={fmtDateTime(worker.plannedShiftEndAt)} />
+            <InfoRow label="Sleep last 24h" value={`${worker.sleepHoursLast24h} hours`} />
+            <InfoRow label="Sleep last 48h" value={`${worker.sleepHoursLast48h} hours`} />
+            <InfoRow label="Hours awake by end of shift" value={`${worker.hoursAwakeByEndOfShift} hours`} />
+            <InfoRow label="Alertness rating" value={formatAlertness(worker.alertnessRating)} />
+            <InfoRow label="Alcohol before sleep" value={formatAlcoholBand(worker.alcoholBeforeSleepBand)} />
+            <InfoRow label="Drowsy medication / substance" value={worker.drowsyMedicationOrSubstance ? 'Yes' : 'No'} />
+            <InfoRow label="Stress / health issue affecting concentration" value={worker.stressOrHealthIssueAffectingSleepOrConcentration ? 'Yes' : 'No'} />
+            <InfoRow label="Driving after shift" value={worker.drivingAfterShift ? 'Yes' : 'No'} />
+            <InfoRow label="Commute duration" value={worker.commuteDurationMinutes ? `${worker.commuteDurationMinutes} minutes` : '—'} />
+            <InfoRow label="Worker comments" value={worker.workerComments || '—'} />
+          </div>
+
+          <div className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-5">
+            <h2 className="text-xs font-semibold text-slate-500 uppercase tracking-widest mb-3">Score Summary</h2>
+            <InfoRow label="Fatigue score" value={String(summary.fatigueScoreTotal)} />
+            <InfoRow label="Derived risk level" value={summary.derivedRiskLevel.toUpperCase()} />
+            <InfoRow label="Any high-risk response" value={summary.hasAnyHighRiskAnswer ? 'Yes' : 'No'} />
+          </div>
+        </div>
+
+        <div className="space-y-4 lg:sticky lg:top-6">
+          <div className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-5">
+            <h2 className="text-xs font-semibold text-slate-500 uppercase tracking-widest mb-4">Medic Outcome</h2>
+
+            <div className="space-y-3">
+              <label className="block">
+                <span className="mb-2 block text-sm font-medium text-slate-300">Decision</span>
+                <select
+                  value={decision}
+                  onChange={(event) => setDecision(event.target.value as FatigueReviewDecision)}
+                  className="w-full rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 outline-none focus:border-violet-500"
+                >
+                  <option value="">Select outcome</option>
+                  {DECISIONS.map((item) => (
+                    <option key={item.value} value={item.value}>{item.label}</option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="block">
+                <span className="mb-2 block text-sm font-medium text-slate-300">Restrictions</span>
+                <textarea value={restrictions} onChange={(event) => setRestrictions(event.target.value)} rows={3} className="w-full rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 outline-none focus:border-violet-500" />
+              </label>
+
+              <label className="block">
+                <span className="mb-2 block text-sm font-medium text-slate-300">Handover notes</span>
+                <textarea value={handoverNotes} onChange={(event) => setHandoverNotes(event.target.value)} rows={3} className="w-full rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 outline-none focus:border-violet-500" />
+              </label>
+
+              <label className="block">
+                <span className="mb-2 block text-sm font-medium text-slate-300">Comments</span>
+                <textarea value={comments} onChange={(event) => setComments(event.target.value)} rows={4} className="w-full rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 outline-none focus:border-violet-500" />
+              </label>
+
+              <div className="space-y-2 rounded-lg border border-slate-700/60 bg-slate-900/30 p-3">
+                {[
+                  ['Supervisor notified', supervisorNotified, setSupervisorNotified],
+                  ['Transport arranged', transportArranged, setTransportArranged],
+                  ['Sent to room', sentToRoom, setSentToRoom],
+                  ['Sent home', sentHome, setSentHome],
+                  ['Requires higher medical review', requiresHigherMedicalReview, setRequiresHigherMedicalReview],
+                  ['Requires follow-up', requiresFollowUp, setRequiresFollowUp],
+                ].map(([label, value, setter]) => (
+                  <label key={label as string} className="flex items-center gap-3 text-sm text-slate-300">
+                    <input
+                      type="checkbox"
+                      checked={value as boolean}
+                      onChange={(event) => (setter as (value: boolean) => void)(event.target.checked)}
+                      className="h-4 w-4 rounded border-slate-600 bg-slate-900 text-violet-500 focus:ring-violet-500"
+                    />
+                    <span>{label as string}</span>
+                  </label>
+                ))}
+              </div>
+
+              {error && <p className="text-sm text-red-300">{error}</p>}
+              {success && <p className="text-sm text-emerald-300">Fatigue review saved.</p>}
+
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                className="w-full rounded-lg bg-violet-500 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-400 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {saving ? 'Saving...' : 'Save fatigue review'}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}

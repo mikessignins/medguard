@@ -188,3 +188,104 @@ export interface WorkerMembership {
   joined_at: string
   is_active: boolean
 }
+
+export type FatigueAssessmentContext =
+  | 'pre_shift'
+  | 'during_shift'
+  | 'post_shift'
+  | 'journey_management'
+  | 'peer_or_supervisor_concern'
+  | 'other'
+
+export type FatigueAlertnessRating =
+  | 'a_active_alert_wide_awake'
+  | 'b_functioning_well_not_peak'
+  | 'c_ok_but_not_fully_alert'
+  | 'd_groggy_hard_to_concentrate'
+  | 'e_sleepy_would_like_to_lie_down'
+
+export type FatigueAlcoholBeforeSleepBand =
+  | 'none'
+  | 'one_to_two'
+  | 'three_to_four'
+  | 'five_or_more'
+
+export type FatigueRiskLevel = 'low' | 'medium' | 'high'
+
+export type FatigueAssessmentQueueStatus =
+  | 'worker_only_complete'
+  | 'awaiting_medic_review'
+  | 'in_medic_review'
+  | 'resolved'
+
+export type FatigueReviewDecision =
+  | 'fit_normal_duties'
+  | 'fit_restricted_duties'
+  | 'not_fit_for_work'
+  | 'sent_to_room'
+  | 'sent_home'
+  | 'requires_escalation'
+
+export interface FatigueWorkerAssessmentPayload {
+  assessmentContext: FatigueAssessmentContext
+  workerNameSnapshot: string
+  jobRole: string
+  workgroup?: string | null
+  rosterPattern?: string | null
+  currentShiftStartAt?: string | null
+  plannedShiftEndAt?: string | null
+  sleepHoursLast24h: number
+  sleepHoursLast48h: number
+  hoursAwakeByEndOfShift: number
+  alertnessRating: FatigueAlertnessRating
+  alcoholBeforeSleepBand: FatigueAlcoholBeforeSleepBand
+  drowsyMedicationOrSubstance: boolean
+  stressOrHealthIssueAffectingSleepOrConcentration: boolean
+  drivingAfterShift: boolean
+  commuteDurationMinutes?: number | null
+  workerComments?: string | null
+}
+
+export interface FatigueWorkerScoreSummary {
+  fatigueScoreTotal: number
+  hasAnyHighRiskAnswer: boolean
+  derivedRiskLevel: FatigueRiskLevel
+}
+
+export interface FatigueModulePayload {
+  workerAssessment: FatigueWorkerAssessmentPayload
+  workerScoreSummary: FatigueWorkerScoreSummary
+}
+
+export interface FatigueMedicReviewPayload {
+  reviewStartedAt?: string | null
+  reviewedByUserId?: string | null
+  reviewedByName?: string | null
+  fitForWorkDecision?: FatigueReviewDecision | null
+  restrictions?: string | null
+  supervisorNotified?: boolean | null
+  handoverNotes?: string | null
+  transportArranged?: boolean | null
+  sentToRoom?: boolean | null
+  sentHome?: boolean | null
+  requiresHigherMedicalReview?: boolean | null
+  requiresFollowUp?: boolean | null
+  medicOrEsoComments?: string | null
+}
+
+export interface FatigueAssessment {
+  id: string
+  business_id: string
+  site_id: string
+  worker_id: string
+  module_key: 'fatigue_assessment'
+  module_version: number
+  status: FatigueAssessmentQueueStatus
+  payload: FatigueModulePayload
+  review_payload: FatigueMedicReviewPayload
+  submitted_at: string
+  reviewed_at: string | null
+  reviewed_by: string | null
+  exported_at?: string | null
+  phi_purged_at?: string | null
+}
