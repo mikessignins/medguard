@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
-import { CONFIDENTIAL_MEDICATION_MODULE_KEY } from '@/lib/modules'
+import { isKnownModuleKey, MODULE_REGISTRY, type ModuleKey } from '@/lib/modules'
 
 export async function PATCH(req: Request, { params }: { params: { id: string } }) {
   const supabase = await createClient()
@@ -23,6 +23,23 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     return NextResponse.json({ error: 'Invalid value' }, { status: 400 })
   }
 
+  const moduleKey: ModuleKey = typeof body.moduleKey === 'string' && isKnownModuleKey(body.moduleKey)
+    ? body.moduleKey
+    : 'confidential_medication'
+
+  const registry = MODULE_REGISTRY[moduleKey]
+  if (!registry) {
+    return NextResponse.json({ error: 'Unknown module' }, { status: 400 })
+  }
+
+  if (registry.category === 'core' && body.enabled !== true) {
+    return NextResponse.json({ error: 'Core modules must remain enabled' }, { status: 400 })
+  }
+
+  if (!registry.canActivate && body.enabled === true) {
+    return NextResponse.json({ error: 'This module is not ready to activate yet' }, { status: 400 })
+  }
+
   const service = createServiceClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -30,14 +47,22 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
 
   const nextEnabled = body.enabled
 
+  const { data: existingRow } = await service
+    .from('business_modules')
+    .select('config, enabled_at')
+    .eq('business_id', params.id)
+    .eq('module_key', moduleKey)
+    .maybeSingle()
+
   const { error: moduleError } = await service
     .from('business_modules')
     .upsert({
       business_id: params.id,
-      module_key: CONFIDENTIAL_MEDICATION_MODULE_KEY,
+      module_key: moduleKey,
       enabled: nextEnabled,
+      enabled_at: existingRow?.enabled_at ?? new Date().toISOString(),
       disabled_at: nextEnabled ? null : new Date().toISOString(),
-      config: {},
+      config: existingRow?.config ?? {},
     }, { onConflict: 'business_id,module_key' })
 
   if (moduleError) return NextResponse.json({ error: moduleError.message }, { status: 500 })

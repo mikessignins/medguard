@@ -5,11 +5,12 @@ import Link from 'next/link'
 import { format } from 'date-fns'
 import ReminderIntervalPicker from '@/components/superuser/ReminderIntervalPicker'
 import ModulesToggle from '@/components/superuser/ModulesToggle'
+import ModuleCatalog from '@/components/superuser/ModuleCatalog'
 import LogoUpload from '@/components/superuser/LogoUpload'
 import TrialPeriodManager from '@/components/superuser/TrialPeriodManager'
 import IsTestOverride from '@/components/superuser/IsTestOverride'
 import AdminManager from '@/components/superuser/AdminManager'
-import { CONFIDENTIAL_MEDICATION_MODULE_KEY } from '@/lib/modules'
+import { getConfiguredBusinessModules, type BusinessModule } from '@/lib/modules'
 
 interface DeidentifiedConditionMetric {
   metric_key: string
@@ -52,7 +53,7 @@ export default async function BusinessDetailPage({ params }: { params: { id: str
     { data: sites },
     { data: subStats },
     { data: newSubmissions },
-    { data: medModule },
+    { data: businessModules },
     { data: deidentifiedMetrics, error: deidentifiedMetricsError },
   ] = await Promise.all([
     service.from('user_accounts').select('id, display_name, email, contract_end_date').eq('business_id', params.id).eq('role', 'admin'),
@@ -67,10 +68,8 @@ export default async function BusinessDetailPage({ params }: { params: { id: str
       .order('submitted_at', { ascending: false }),
     service
       .from('business_modules')
-      .select('enabled')
-      .eq('business_id', params.id)
-      .eq('module_key', CONFIDENTIAL_MEDICATION_MODULE_KEY)
-      .maybeSingle(),
+      .select('business_id,module_key,enabled,config')
+      .eq('business_id', params.id),
     service.rpc('get_business_deidentified_condition_prevalence', {
       p_business_id: params.id,
     }),
@@ -81,6 +80,12 @@ export default async function BusinessDetailPage({ params }: { params: { id: str
     return acc
   }, {} as Record<string, number>)
 
+  const configuredModules = getConfiguredBusinessModules(
+    (businessModules || []) as BusinessModule[],
+    {
+      surface: 'superuser_config',
+    },
+  )
   const analyticsRows: DeidentifiedConditionMetric[] = (deidentifiedMetrics || []) as DeidentifiedConditionMetric[]
   const suppressed = analyticsRows.length > 0 && analyticsRows.every(row => row.is_suppressed)
 
@@ -142,8 +147,10 @@ export default async function BusinessDetailPage({ params }: { params: { id: str
         {/* Modules */}
         <ModulesToggle
           businessId={business.id}
-          initialEnabled={medModule?.enabled ?? false}
+          initialModules={configuredModules}
         />
+
+        <ModuleCatalog modules={configuredModules} />
 
         {/* Business Logo */}
         <LogoUpload

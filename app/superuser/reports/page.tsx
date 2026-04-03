@@ -10,6 +10,8 @@ interface SearchParams {
 }
 
 interface DeidentifiedConditionMetric {
+  metric_group: string
+  display_order: number
   metric_key: string
   metric_label: string
   affected_workers: number | null
@@ -58,7 +60,7 @@ export default async function SuperuserReportsPage({ searchParams }: { searchPar
   let reportError: string | null = null
 
   if (selectedBusinessId) {
-    const { data, error } = await supabase.rpc('get_business_deidentified_condition_prevalence_filtered', {
+    const { data, error } = await supabase.rpc('get_business_deidentified_health_report_filtered', {
       p_business_id: selectedBusinessId,
       p_site_id: selectedSiteId === 'all' ? null : selectedSiteId,
       p_from: fromDate ? `${fromDate}T00:00:00Z` : null,
@@ -80,6 +82,17 @@ export default async function SuperuserReportsPage({ searchParams }: { searchPar
     : null
 
   const allSuppressed = metrics.length > 0 && metrics.every((m) => m.is_suppressed)
+  const cohortWorkers = metrics.find((m) => !m.is_suppressed && m.cohort_workers != null)?.cohort_workers ?? null
+  const groupedMetrics = metrics.reduce<Record<string, DeidentifiedConditionMetric[]>>((acc, row) => {
+    acc[row.metric_group] ??= []
+    acc[row.metric_group].push(row)
+    return acc
+  }, {})
+
+  const highlightKeys = ['anaphylaxis_risk', 'anaphylaxis_without_device', 'flagged_medication', 'interpreter_support']
+  const highlightMetrics = highlightKeys
+    .map((key) => metrics.find((m) => m.metric_key === key))
+    .filter((metric): metric is DeidentifiedConditionMetric => Boolean(metric))
 
   return (
     <div className="space-y-6">
@@ -179,27 +192,60 @@ export default async function SuperuserReportsPage({ searchParams }: { searchPar
                   Results are suppressed because the cohort is below the minimum threshold.
                 </div>
               )}
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-[var(--border)] bg-[var(--bg-surface)]">
-                      <th className="px-5 py-3 text-left font-medium text-[var(--text-2)]">Metric</th>
-                      <th className="px-4 py-3 text-center font-medium text-[var(--text-2)]">Affected</th>
-                      <th className="px-4 py-3 text-center font-medium text-[var(--text-2)]">Cohort</th>
-                      <th className="px-4 py-3 text-center font-medium text-[var(--text-2)]">Prevalence</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {metrics.map((row, idx) => (
-                      <tr key={row.metric_key} className={idx > 0 ? 'border-t border-[var(--border)]' : ''}>
-                        <td className="px-5 py-3 text-[var(--text-1)]">{row.metric_label}</td>
-                        <td className="px-4 py-3 text-center text-[var(--text-2)]">{row.is_suppressed ? 'Suppressed' : row.affected_workers}</td>
-                        <td className="px-4 py-3 text-center text-[var(--text-2)]">{row.is_suppressed ? 'Suppressed' : row.cohort_workers}</td>
-                        <td className="px-4 py-3 text-center text-[var(--text-2)]">{row.is_suppressed ? 'Suppressed' : `${row.prevalence_percent ?? 0}%`}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              <div className="space-y-6 px-5 py-5">
+                <div className="grid gap-3 md:grid-cols-5">
+                  <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] p-4">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-[var(--text-2)]">Cohort</p>
+                    <p className="mt-2 text-2xl font-semibold text-[var(--text-1)]">
+                      {allSuppressed ? 'Suppressed' : (cohortWorkers ?? '0')}
+                    </p>
+                    <p className="mt-1 text-xs text-[var(--text-2)]">Latest snapshot per worker in filter window</p>
+                  </div>
+                  {highlightMetrics.map((metric) => (
+                    <div key={metric.metric_key} className="rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] p-4">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-[var(--text-2)]">{metric.metric_label}</p>
+                      <p className="mt-2 text-2xl font-semibold text-[var(--text-1)]">
+                        {metric.is_suppressed ? 'Suppressed' : `${metric.prevalence_percent ?? 0}%`}
+                      </p>
+                      <p className="mt-1 text-xs text-[var(--text-2)]">
+                        {metric.is_suppressed ? 'Below minimum cohort threshold' : `${metric.affected_workers ?? 0} workers`}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+
+                {Object.entries(groupedMetrics).map(([groupName, rows]) => (
+                  <section key={groupName} className="overflow-x-auto rounded-xl border border-[var(--border)]">
+                    <div className="border-b border-[var(--border)] bg-[var(--bg-surface)] px-4 py-3">
+                      <h3 className="text-sm font-semibold text-[var(--text-1)]">{groupName}</h3>
+                      <p className="mt-1 text-xs text-[var(--text-2)]">
+                        {groupName === 'Emergency Planning'
+                          ? 'Signals that help plan emergency response, communication support, and medication follow-up.'
+                          : 'De-identified prevalence of key conditions and workforce health signals.'}
+                      </p>
+                    </div>
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-[var(--border)] bg-[var(--bg-card)]">
+                          <th className="px-4 py-3 text-left font-medium text-[var(--text-2)]">Metric</th>
+                          <th className="px-4 py-3 text-center font-medium text-[var(--text-2)]">Affected</th>
+                          <th className="px-4 py-3 text-center font-medium text-[var(--text-2)]">Cohort</th>
+                          <th className="px-4 py-3 text-center font-medium text-[var(--text-2)]">Prevalence</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {rows.map((row, idx) => (
+                          <tr key={row.metric_key} className={idx > 0 ? 'border-t border-[var(--border)]' : ''}>
+                            <td className="px-4 py-3 text-[var(--text-1)]">{row.metric_label}</td>
+                            <td className="px-4 py-3 text-center text-[var(--text-2)]">{row.is_suppressed ? 'Suppressed' : row.affected_workers}</td>
+                            <td className="px-4 py-3 text-center text-[var(--text-2)]">{row.is_suppressed ? 'Suppressed' : row.cohort_workers}</td>
+                            <td className="px-4 py-3 text-center text-[var(--text-2)]">{row.is_suppressed ? 'Suppressed' : `${row.prevalence_percent ?? 0}%`}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </section>
+                ))}
               </div>
             </>
           )}

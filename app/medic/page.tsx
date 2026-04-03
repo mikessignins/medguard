@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import MedicDashboard from '@/components/medic/MedicDashboard'
-import { CONFIDENTIAL_MEDICATION_MODULE_KEY, isBusinessModuleEnabled } from '@/lib/modules'
+import { CONFIDENTIAL_MEDICATION_MODULE_KEY, getConfiguredBusinessModules, type BusinessModule } from '@/lib/modules'
 
 export default async function MedicPage({ searchParams }: { searchParams: { site?: string } }) {
   const supabase = await createClient()
@@ -34,7 +34,10 @@ export default async function MedicPage({ searchParams }: { searchParams: { site
       .eq('business_id', account.business_id),
   ])
 
-  const medDecEnabled = isBusinessModuleEnabled(businessModules, CONFIDENTIAL_MEDICATION_MODULE_KEY)
+  const configuredModules = getConfiguredBusinessModules((businessModules ?? []) as BusinessModule[], {
+    surface: 'medic_queue',
+  })
+  const medDecEnabled = configuredModules.some((module) => module.key === CONFIDENTIAL_MEDICATION_MODULE_KEY && module.enabled)
 
   let medDeclarations = null
   if (medDecEnabled && siteIds.length > 0) {

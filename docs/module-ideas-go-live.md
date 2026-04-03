@@ -6,11 +6,16 @@ This shortlist is designed to plug into `module_catalog` + `business_modules` an
 - Why: high-frequency operational risk.
 - Core fields:
   - sleep_hours_last_24h
-  - sleep_quality
+  - sleep_hours_last_48h
   - hours_awake
   - self_assessed_fatigue_level
-  - alertness_concerns_free_text
-- Workflow: worker submit -> medic/admin review rule-based thresholds.
+  - drowsy_medication_or_substance
+  - stress_or_health_issue_affecting_sleep_or_concentration
+  - driving_after_shift
+- Workflow:
+  - worker self-assessment -> auto score -> medic / ESO review if medium/high.
+- Spec:
+  - [fatigue-module-spec.md](/Volumes/1tbusb/MedM8_WebApp/docs/fatigue-module-spec.md)
 
 ## 2) Heat Stress / Hydration Check
 - Why: common site health and safety control.
@@ -51,6 +56,22 @@ This shortlist is designed to plug into `module_catalog` + `business_modules` an
   - capacity_self_assessment
   - restrictions_acknowledged
 - Workflow: recurring submissions until clearance.
+
+## 6) Refusal Of Assessment / Treatment
+- Why: strong medico-legal value when a worker declines assessment, tests, treatment, or transfer.
+- Core fields:
+  - refusal_context
+  - options_offered
+  - risks_explained
+  - worker_reason_optional
+  - worker_signature
+  - medic_signature
+  - witness_signature
+  - transport_or_escalation_advice
+- Workflow:
+  - medic-led or medic-supported completion -> signed PDF record -> audit-safe retention.
+- Recommendation:
+  - build after fatigue, once the module execution path is proven.
 
 ## Implementation Pattern
 - Entitlement:
