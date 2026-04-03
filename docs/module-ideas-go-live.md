@@ -17,7 +17,32 @@ This shortlist is designed to plug into `module_catalog` + `business_modules` an
 - Spec:
   - [fatigue-module-spec.md](/Volumes/1tbusb/MedM8_WebApp/docs/fatigue-module-spec.md)
 
-## 2) Heat Stress / Hydration Check
+## 2) Psychosocial Health & Wellbeing
+- Why: fastest-growing governance area for mine operators and a major business-reporting need.
+- Core workflows:
+  - Wellbeing Pulse
+  - Post-Incident Psychological Welfare
+  - FIFO Psychological Risk Assessment
+- Core MVP fields:
+  - mood_rating
+  - stress_rating
+  - sleep_quality_on_roster
+  - feeling_overwhelmed_by_work_demands
+  - recent_interpersonal_conflict_at_work
+  - recent_concerning_life_event
+  - feeling_socially_isolated
+  - concern_about_workplace_behaviour
+  - concern_about_roster_or_fatigue_pressure
+  - would_like_support_contact
+- Workflow:
+  - worker can submit anytime
+  - business-configured reminders
+  - higher-risk responses create medic / welfare review items
+  - superuser reporting rolls up into recognised psychosocial hazard domains
+- Spec:
+  - [psychosocial-module-spec.md](/Volumes/1tbusb/MedM8_WebApp/docs/psychosocial-module-spec.md)
+
+## 3) Heat Stress / Hydration Check
 - Why: common site health and safety control.
 - Core fields:
   - hydration_status
@@ -27,7 +52,7 @@ This shortlist is designed to plug into `module_catalog` + `business_modules` an
   - supervisor_notified
 - Workflow: fast triage and trend reporting by site.
 
-## 3) Respiratory / Fit-Test Declaration
+## 4) Respiratory / Fit-Test Declaration
 - Why: role-specific compliance for PPE-intensive work.
 - Core fields:
   - respirator_type
@@ -37,7 +62,7 @@ This shortlist is designed to plug into `module_catalog` + `business_modules` an
   - contraindications
 - Workflow: compliance status + expiry reminder.
 
-## 4) Injury / Incident Self-Report
+## 5) Injury / Incident Self-Report
 - Why: early capture before shift escalation.
 - Core fields:
   - incident_datetime
@@ -47,7 +72,7 @@ This shortlist is designed to plug into `module_catalog` + `business_modules` an
   - treatment_received
 - Workflow: submit -> medic follow-up -> export/audit.
 
-## 5) Return-To-Work Check-In
+## 6) Return-To-Work Check-In
 - Why: controlled follow-up after restricted/unfit decisions.
 - Core fields:
   - linked_case_id
@@ -57,7 +82,7 @@ This shortlist is designed to plug into `module_catalog` + `business_modules` an
   - restrictions_acknowledged
 - Workflow: recurring submissions until clearance.
 
-## 6) Refusal Of Assessment / Treatment
+## 7) Refusal Of Assessment / Treatment
 - Why: strong medico-legal value when a worker declines assessment, tests, treatment, or transfer.
 - Core fields:
   - refusal_context
