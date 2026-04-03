@@ -2,6 +2,7 @@ export type ModuleKey =
   | 'emergency_declaration'
   | 'confidential_medication'
   | 'fatigue_assessment'
+  | 'psychosocial_health'
   | 'fit_for_work_plus'
 
 export type ModuleSurface =
@@ -53,6 +54,7 @@ export interface ConfiguredBusinessModule extends ModuleRegistryEntry {
 export const EMERGENCY_DECLARATION_MODULE_KEY: ModuleKey = 'emergency_declaration'
 export const CONFIDENTIAL_MEDICATION_MODULE_KEY: ModuleKey = 'confidential_medication'
 export const FATIGUE_ASSESSMENT_MODULE_KEY: ModuleKey = 'fatigue_assessment'
+export const PSYCHOSOCIAL_HEALTH_MODULE_KEY: ModuleKey = 'psychosocial_health'
 export const FIT_FOR_WORK_PLUS_MODULE_KEY: ModuleKey = 'fit_for_work_plus'
 
 export const MODULE_REGISTRY: Record<ModuleKey, ModuleRegistryEntry> = {
@@ -103,6 +105,22 @@ export const MODULE_REGISTRY: Record<ModuleKey, ModuleRegistryEntry> = {
     readiness: 'live',
     canActivate: true,
     statusNote: 'Worker fatigue checks, medic review, and reviewed-fatigue exports are live.',
+  },
+  psychosocial_health: {
+    key: 'psychosocial_health',
+    title: 'Psychosocial Health & Wellbeing',
+    description: 'Scheduled or worker-initiated wellbeing pulse with recognised psychosocial hazard reporting.',
+    category: 'custom',
+    icon: 'brain',
+    medicHref: '/medic/psychosocial',
+    surfaces: ['worker_home', 'medic_queue', 'medic_exports', 'admin_reporting', 'superuser_config'],
+    submissionBackend: 'module_engine',
+    supportsExport: true,
+    supportsPurge: true,
+    isBillable: true,
+    readiness: 'foundation_ready',
+    canActivate: false,
+    statusNote: 'Schema and reporting foundation are seeded. Worker and review flows are not live yet.',
   },
   fit_for_work_plus: {
     key: 'fit_for_work_plus',

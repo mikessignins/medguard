@@ -7,6 +7,7 @@ import {
   CONFIDENTIAL_MEDICATION_MODULE_KEY,
   EMERGENCY_DECLARATION_MODULE_KEY,
   FATIGUE_ASSESSMENT_MODULE_KEY,
+  PSYCHOSOCIAL_HEALTH_MODULE_KEY,
   getMedicModuleHref,
 } from '@/lib/modules'
 
@@ -25,6 +26,13 @@ const MODULE_ICON: Record<ModuleKey, JSX.Element> = {
   fatigue_assessment: (
     <svg className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12.8A9 9 0 1111.2 3 7 7 0 0021 12.8z" />
+    </svg>
+  ),
+  psychosocial_health: (
+    <svg className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.5 7a2.5 2.5 0 115 0c0 1.1-.46 1.8-1.2 2.38-.73.56-1.55.97-2.1 1.62-.41.49-.7 1.06-.7 2" />
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 17h.01" />
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.7 6.4A8 8 0 104 12c0 2.1.8 3.9 2.1 5.3.9 1 1.4 1.9 1.4 2.7h9c0-.8.5-1.7 1.4-2.7A8 8 0 005.7 6.4z" />
     </svg>
   ),
   fit_for_work_plus: (
@@ -67,7 +75,11 @@ export default function MedicNav({
 
   const visibleModules = modules.filter((module) => {
     if (module.key === EMERGENCY_DECLARATION_MODULE_KEY) return true
-    if (module.key === CONFIDENTIAL_MEDICATION_MODULE_KEY || module.key === FATIGUE_ASSESSMENT_MODULE_KEY) {
+    if (
+      module.key === CONFIDENTIAL_MEDICATION_MODULE_KEY
+      || module.key === FATIGUE_ASSESSMENT_MODULE_KEY
+      || module.key === PSYCHOSOCIAL_HEALTH_MODULE_KEY
+    ) {
       return module.enabled
     }
     return module.enabled && module.canActivate
