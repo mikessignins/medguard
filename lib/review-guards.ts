@@ -28,7 +28,7 @@ export function validateRequestedReviewStatus(
 export function validateReviewTransition(
   input: ReviewTransitionInput
 ): ReviewGuardFailure | null {
-  const { currentStatus, requestedStatus, currentVersion, requestedVersion } = input
+  const { currentStatus, currentVersion, requestedVersion } = input
 
   if (requestedVersion !== undefined && currentVersion !== requestedVersion) {
     return {
@@ -38,16 +38,13 @@ export function validateReviewTransition(
     }
   }
 
-  if (currentStatus === 'Approved' || currentStatus === 'Recalled') {
+  if (
+    currentStatus === 'Approved' ||
+    currentStatus === 'Requires Follow-up' ||
+    currentStatus === 'Recalled'
+  ) {
     return {
       error: `Cannot change status from terminal state '${currentStatus}'.`,
-      status: 422,
-    }
-  }
-
-  if (currentStatus === 'Requires Follow-up' && requestedStatus !== 'Approved') {
-    return {
-      error: "From 'Requires Follow-up', status can only advance to 'Approved'.",
       status: 422,
     }
   }

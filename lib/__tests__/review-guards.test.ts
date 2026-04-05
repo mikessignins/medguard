@@ -54,13 +54,13 @@ describe('validateReviewTransition', () => {
     })
   })
 
-  it('only allows requires-follow-up submissions to advance to approved', () => {
+  it('treats requires-follow-up as terminal once a decision is made', () => {
     expect(validateReviewTransition({
       currentStatus: 'Requires Follow-up',
-      requestedStatus: 'In Review',
+      requestedStatus: 'Approved',
       currentVersion: 1,
     })).toEqual({
-      error: "From 'Requires Follow-up', status can only advance to 'Approved'.",
+      error: "Cannot change status from terminal state 'Requires Follow-up'.",
       status: 422,
     })
   })

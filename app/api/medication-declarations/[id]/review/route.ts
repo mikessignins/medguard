@@ -4,6 +4,7 @@ import { createClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
 import type { MedDecReviewStatus } from '@/lib/types'
 import { requireAuthenticatedUser, requireMedicScope, requireRole } from '@/lib/route-access'
+import { validateMedicationReviewTransition } from '@/lib/medication-review-guards'
 
 const VALID_STATUSES: MedDecReviewStatus[] = ['Pending', 'In Review', 'Normal Duties', 'Restricted Duties', 'Unfit for Work']
 
@@ -59,15 +60,14 @@ export async function PATCH(
   const scopeError = requireMedicScope(medicAccount, current)
   if (scopeError) return NextResponse.json({ error: scopeError.error }, { status: scopeError.status })
 
-  const OUTCOME_STATUSES: MedDecReviewStatus[] = ['Normal Duties', 'Restricted Duties', 'Unfit for Work']
-  const EARLY_STATUSES: MedDecReviewStatus[] = ['Pending', 'In Review']
-  if (
-    OUTCOME_STATUSES.includes(current.medic_review_status) &&
-    EARLY_STATUSES.includes(medic_review_status)
-  ) {
+  const transitionError = validateMedicationReviewTransition(
+    current.medic_review_status,
+    medic_review_status
+  )
+  if (transitionError) {
     return NextResponse.json(
-      { error: 'Cannot revert a reviewed declaration back to an earlier state.' },
-      { status: 422 }
+      { error: transitionError.error },
+      { status: transitionError.status }
     )
   }
 

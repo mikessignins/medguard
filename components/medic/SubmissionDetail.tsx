@@ -3,7 +3,6 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { encodeQueue } from '@/lib/queue-params'
-import { createClient } from '@/lib/supabase/client'
 import type { WorkerSnapshot, Decision, SubmissionStatus, ScriptUpload, MedicComment } from '@/lib/types'
 
 const FLAGGED_REVIEWS = [
@@ -120,7 +119,6 @@ function InfoRow({ label, value }: { label: string; value?: string | number | bo
 
 export default function SubmissionDetail({ submission, siteName, businessName, currentUserId, queueContext, backHref }: Props) {
   const router = useRouter()
-  const supabase = createClient()
 
   const [status, setStatus] = useState<SubmissionStatus>(submission.status)
   const [decision, setDecision] = useState<Decision | null>(submission.decision)
@@ -164,6 +162,7 @@ export default function SubmissionDetail({ submission, siteName, businessName, c
   const ws = submission.worker_snapshot
   const isPurged = !!submission.phi_purged_at
   const hasSnapshot = !!ws && typeof ws === 'object'
+  const isDecisionLocked = status === 'Approved' || status === 'Requires Follow-up'
 
   const conditionFlags = hasSnapshot && ws.conditionChecklist
     ? Object.entries(ws.conditionChecklist).filter(([, v]) => v?.answer === true)
@@ -185,35 +184,37 @@ export default function SubmissionDetail({ submission, siteName, businessName, c
   async function updateStatus(newStatus: SubmissionStatus, note?: string) {
     setLoading(true)
     setActionError('')
+    try {
+      const res = await fetch(`/api/declarations/${submission.id}/review`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus, note }),
+      })
 
-    const updates: Record<string, unknown> = { status: newStatus }
-
-    if (newStatus === 'Approved' || newStatus === 'Requires Follow-up') {
-      updates.decision = {
-        outcome: newStatus,
-        note: note ?? '',
-        decided_by_user_id: currentUserId,
-        decided_at: new Date().toISOString(),
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        setActionError(data.error || 'Failed to update submission status')
+        return
       }
-    }
 
-    const { error } = await supabase
-      .from('submissions')
-      .update(updates)
-      .eq('id', submission.id)
-
-    if (error) {
-      setActionError(error.message)
+      setStatus(newStatus)
+      if (newStatus === 'Approved' || newStatus === 'Requires Follow-up') {
+        setDecision({
+          outcome: newStatus,
+          note: note?.trim() || undefined,
+          decided_by_user_id: currentUserId,
+          decided_by_name: decision?.decided_by_name || undefined,
+          decided_at: new Date().toISOString(),
+        })
+      }
+      setShowFollowUpModal(false)
+      setFollowUpNote('')
+      router.refresh()
+    } catch {
+      setActionError('Network error — please try again.')
+    } finally {
       setLoading(false)
-      return
     }
-
-    setStatus(newStatus)
-    if (updates.decision) setDecision(updates.decision as Decision)
-    setLoading(false)
-    setShowFollowUpModal(false)
-    setFollowUpNote('')
-    router.refresh()
   }
 
   async function handleExportPdf() {
@@ -610,32 +611,23 @@ export default function SubmissionDetail({ submission, siteName, businessName, c
                     </p>
                   </div>
                 )}
-                <p className="text-sm text-slate-500">Once the follow-up has been resolved, approve this submission.</p>
-                <div className="flex gap-3">
-                  <button
-                    onClick={() => updateStatus('Approved')}
-                    disabled={loading}
-                    className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-medium text-sm transition-colors duration-200 disabled:opacity-50"
-                  >
-                    {loading ? 'Updating...' : 'Approve'}
-                  </button>
-                  <button
-                    onClick={() => { setShowFollowUpModal(true); setFollowUpNote(decision?.note ?? '') }}
-                    disabled={loading}
-                    className="px-5 py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-300 border border-slate-600 rounded-lg font-medium text-sm transition-colors duration-200 disabled:opacity-50"
-                  >
-                    Update Follow-up Note
-                  </button>
-                </div>
+                <p className="text-sm text-slate-500">
+                  Outcome locked. You can still add audit comments and re-export this record until it is purged.
+                </p>
               </div>
             )}
 
             {status === 'Approved' && decision && (
-              <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl px-4 py-3 text-sm text-emerald-400">
-                <p className="font-semibold">Approved</p>
-                {decision.note && <p className="mt-1">{decision.note}</p>}
-                <p className="text-xs opacity-60 mt-1" suppressHydrationWarning>
-                  {fmtDateTime(decision.decided_at)}
+              <div className="space-y-3">
+                <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl px-4 py-3 text-sm text-emerald-400">
+                  <p className="font-semibold">Approved</p>
+                  {decision.note && <p className="mt-1">{decision.note}</p>}
+                  <p className="text-xs opacity-60 mt-1" suppressHydrationWarning>
+                    {fmtDateTime(decision.decided_at)}
+                  </p>
+                </div>
+                <p className="text-sm text-slate-500">
+                  Outcome locked. You can still add audit comments and re-export this record until it is purged.
                 </p>
               </div>
             )}
@@ -678,7 +670,7 @@ export default function SubmissionDetail({ submission, siteName, businessName, c
             </div>
 
             {/* Next Submission button */}
-            {(status === 'Approved' || status === 'Requires Follow-up') && (
+            {isDecisionLocked && (
               <div className="pt-3">
                 {nextId ? (
                   <Link

@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import type { MedicationDeclaration, MedDecReviewStatus, ScriptUpload } from '@/lib/types'
 import { encodeQueue } from '@/lib/queue-params'
+import { isFinalMedicationReviewStatus } from '@/lib/medication-review-guards'
 
 const REVIEW_STATUSES: Exclude<MedDecReviewStatus, 'Pending'>[] = ['Normal Duties', 'Restricted Duties', 'Unfit for Work']
 
@@ -54,6 +55,7 @@ export default function MedDecDetail({ medDec, siteName, businessName, queueCont
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
 
   const isPurged = !!medDec.phi_purged_at
+  const isDecisionLocked = isFinalMedicationReviewStatus(medDec.medic_review_status)
 
   function queueLink(targetId: string, targetPos: number): string {
     if (!queueContext) return `/medic/med-declarations/${targetId}`
@@ -309,11 +311,12 @@ export default function MedDecDetail({ medDec, siteName, businessName, queueCont
                 <button
                   key={s}
                   onClick={() => setReviewStatus(s)}
+                  disabled={isDecisionLocked}
                   className={`px-3 py-2 rounded-lg text-sm font-medium border transition-colors ${
                     reviewStatus === s
                       ? STATUS_COLORS[s]
                       : 'bg-slate-900/40 border-slate-700 text-slate-400 hover:border-slate-600'
-                  }`}
+                  } disabled:cursor-not-allowed disabled:opacity-60`}
                 >
                   {s}
                 </button>
@@ -328,12 +331,19 @@ export default function MedDecDetail({ medDec, siteName, businessName, queueCont
               </div>
               <button
                 onClick={() => setReviewRequired(v => !v)}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 ${reviewRequired ? 'bg-cyan-500' : 'bg-slate-600'}`}
+                disabled={isDecisionLocked}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 ${reviewRequired ? 'bg-cyan-500' : 'bg-slate-600'} disabled:cursor-not-allowed disabled:opacity-60`}
                 aria-pressed={reviewRequired}
               >
                 <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform duration-200 ${reviewRequired ? 'translate-x-6' : 'translate-x-1'}`} />
               </button>
             </div>
+
+            {isDecisionLocked && (
+              <div className="mb-4 rounded-lg border border-slate-700 bg-slate-900/40 px-3 py-2 text-sm text-slate-400">
+                Outcome locked. You can still add comments and re-export this declaration until it is purged.
+              </div>
+            )}
 
             {/* Comments */}
             <div className="mb-4 border-t border-slate-800 pt-4">
@@ -358,7 +368,7 @@ export default function MedDecDetail({ medDec, siteName, businessName, queueCont
                 disabled={saving}
                 className="ml-auto px-5 py-2.5 bg-cyan-600 hover:bg-cyan-500 text-white text-sm font-semibold rounded-lg transition-colors disabled:opacity-50"
               >
-                {saving ? 'Saving…' : 'Save Review'}
+                {saving ? 'Saving…' : isDecisionLocked ? 'Save Comments' : 'Save Review'}
               </button>
             </div>
           </div>
