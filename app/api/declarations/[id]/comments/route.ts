@@ -2,13 +2,11 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { createClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
-import { randomUUID } from 'crypto'
 import type { MedicComment } from '@/lib/types'
 import { hasMedicScopeAccess } from '@/lib/medic-scope'
+import { parseSubmissionComments } from '@/lib/submission-comments'
 
 export const runtime = 'nodejs'
-
-// ─── Auth helper ─────────────────────────────────────────────────────────────
 
 async function getAuthenticatedMedic() {
   const cookieStore = await cookies()
@@ -19,19 +17,29 @@ async function getAuthenticatedMedic() {
       cookies: {
         getAll: () => cookieStore.getAll(),
         setAll: (toSet) => {
-          try { toSet.forEach(({ name, value, options }) => cookieStore.set(name, value, options)) } catch {}
+          try {
+            toSet.forEach(({ name, value, options }) => cookieStore.set(name, value, options))
+          } catch {
+            // No-op in server components.
+          }
         },
       },
     }
   )
-  const { data: { user } } = await authClient.auth.getUser()
+
+  const {
+    data: { user },
+  } = await authClient.auth.getUser()
   if (!user) return null
+
   const { data: account } = await authClient
     .from('user_accounts')
     .select('role, display_name, business_id, site_ids')
     .eq('id', user.id)
     .single()
+
   if (!account || account.role !== 'medic') return null
+
   return {
     id: user.id,
     name: account.display_name as string,
@@ -47,35 +55,45 @@ function serviceClient() {
   )
 }
 
-async function fetchComments(submissionId: string): Promise<MedicComment[]> {
-  const { data } = await serviceClient()
-    .from('submissions')
-    .select('comments')
-    .eq('id', submissionId)
-    .single()
-  const raw = data?.comments
-  return Array.isArray(raw) ? (raw as MedicComment[]) : []
-}
-
 async function fetchScopedSubmission(submissionId: string) {
   const { data } = await serviceClient()
     .from('submissions')
-    .select('id, business_id, site_id, comments')
+    .select('id, business_id, site_id')
     .eq('id', submissionId)
     .single()
 
   return data
 }
 
-async function writeComments(submissionId: string, comments: MedicComment[]) {
-  const { error } = await serviceClient()
-    .from('submissions')
-    .update({ comments })
-    .eq('id', submissionId)
-  return error
+async function fetchComments(submissionId: string): Promise<MedicComment[]> {
+  const { data, error } = await serviceClient()
+    .from('submission_comments')
+    .select('id, medic_user_id, medic_name, note, outcome, created_at, edited_at')
+    .eq('submission_id', submissionId)
+    .order('created_at', { ascending: true })
+
+  if (error) throw error
+  return parseSubmissionComments(data ?? [])
 }
 
-// ─── POST — add a new comment ─────────────────────────────────────────────────
+export async function GET(
+  _request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  const medic = await getAuthenticatedMedic()
+  if (!medic) return new NextResponse('Unauthorized', { status: 401 })
+
+  const submission = await fetchScopedSubmission(params.id)
+  if (!submission) return new NextResponse('Submission not found', { status: 404 })
+  if (!hasMedicScopeAccess(medic, submission)) return new NextResponse('Forbidden', { status: 403 })
+
+  try {
+    return NextResponse.json(await fetchComments(params.id))
+  } catch (error) {
+    console.error('[comments/GET] error:', error)
+    return new NextResponse('Failed to load comments', { status: 500 })
+  }
+}
 
 export async function POST(
   request: NextRequest,
@@ -98,98 +116,34 @@ export async function POST(
   if (!submission) return new NextResponse('Submission not found', { status: 404 })
   if (!hasMedicScopeAccess(medic, submission)) return new NextResponse('Forbidden', { status: 403 })
 
-  const newComment: MedicComment = {
-    id: randomUUID(),
+  const now = new Date().toISOString()
+  const newComment = {
+    submission_id: params.id,
+    business_id: submission.business_id,
+    site_id: submission.site_id,
     medic_user_id: medic.id,
     medic_name: medic.name,
     note,
     outcome: body.outcome ?? null,
-    created_at: new Date().toISOString(),
+    created_at: now,
     edited_at: null,
   }
 
-  const current = Array.isArray(submission.comments) ? (submission.comments as MedicComment[]) : await fetchComments(params.id)
-  const error = await writeComments(params.id, [...current, newComment])
+  const { data, error } = await serviceClient()
+    .from('submission_comments')
+    .insert(newComment)
+    .select('id, medic_user_id, medic_name, note, outcome, created_at, edited_at')
+    .single()
+
   if (error) {
     console.error('[comments/POST] error:', error)
     return new NextResponse(error.message, { status: 500 })
   }
 
-  return NextResponse.json(newComment, { status: 201 })
-}
-
-// ─── PATCH — edit own comment ─────────────────────────────────────────────────
-
-export async function PATCH(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
-  const medic = await getAuthenticatedMedic()
-  if (!medic) return new NextResponse('Unauthorized', { status: 401 })
-
-  let body: { commentId: string; note: string }
-  try {
-    body = await request.json()
-  } catch {
-    return new NextResponse('Invalid JSON', { status: 400 })
+  const comment = parseSubmissionComments(data ? [data] : [])[0]
+  if (!comment) {
+    return new NextResponse('Failed to parse saved comment', { status: 500 })
   }
 
-  const note = body.note?.trim()
-  if (!note || !body.commentId) return new NextResponse('commentId and note required', { status: 400 })
-
-  const submission = await fetchScopedSubmission(params.id)
-  if (!submission) return new NextResponse('Submission not found', { status: 404 })
-  if (!hasMedicScopeAccess(medic, submission)) return new NextResponse('Forbidden', { status: 403 })
-
-  const current = Array.isArray(submission.comments) ? (submission.comments as MedicComment[]) : await fetchComments(params.id)
-  const idx = current.findIndex(c => c.id === body.commentId)
-  if (idx === -1) return new NextResponse('Comment not found', { status: 404 })
-  if (current[idx].medic_user_id !== medic.id) return new NextResponse('Forbidden', { status: 403 })
-
-  const updated = { ...current[idx], note, edited_at: new Date().toISOString() }
-  current[idx] = updated
-
-  const error = await writeComments(params.id, current)
-  if (error) {
-    console.error('[comments/PATCH] error:', error)
-    return new NextResponse(error.message, { status: 500 })
-  }
-
-  return NextResponse.json(updated)
-}
-
-// ─── DELETE — delete own comment ──────────────────────────────────────────────
-
-export async function DELETE(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
-  const medic = await getAuthenticatedMedic()
-  if (!medic) return new NextResponse('Unauthorized', { status: 401 })
-
-  let body: { commentId: string }
-  try {
-    body = await request.json()
-  } catch {
-    return new NextResponse('Invalid JSON', { status: 400 })
-  }
-
-  if (!body.commentId) return new NextResponse('commentId required', { status: 400 })
-
-  const submission = await fetchScopedSubmission(params.id)
-  if (!submission) return new NextResponse('Submission not found', { status: 404 })
-  if (!hasMedicScopeAccess(medic, submission)) return new NextResponse('Forbidden', { status: 403 })
-
-  const current = Array.isArray(submission.comments) ? (submission.comments as MedicComment[]) : await fetchComments(params.id)
-  const comment = current.find(c => c.id === body.commentId)
-  if (!comment) return new NextResponse('Comment not found', { status: 404 })
-  if (comment.medic_user_id !== medic.id) return new NextResponse('Forbidden', { status: 403 })
-
-  const error = await writeComments(params.id, current.filter(c => c.id !== body.commentId))
-  if (error) {
-    console.error('[comments/DELETE] error:', error)
-    return new NextResponse(error.message, { status: 500 })
-  }
-
-  return new NextResponse(null, { status: 204 })
+  return NextResponse.json(comment, { status: 201 })
 }

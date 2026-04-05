@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { createClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
-import { hasMedicScopeAccess } from '@/lib/medic-scope'
+import { requireAuthenticatedUser, requireMedicScope, requireRole } from '@/lib/route-access'
 import type { PsychosocialModulePayload, PsychosocialPostIncidentEventType } from '@/lib/types'
 
 export const runtime = 'nodejs'
@@ -33,17 +33,19 @@ export async function POST(request: NextRequest) {
   )
 
   const { data: { user } } = await authClient.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const userId = user?.id ?? null
+  const authError = requireAuthenticatedUser(userId)
+  if (authError) return NextResponse.json({ error: authError.error }, { status: authError.status })
 
   const { data: account } = await authClient
     .from('user_accounts')
     .select('role, display_name, business_id, site_ids')
-    .eq('id', user.id)
+    .eq('id', userId)
     .single()
 
-  if (!account || account.role !== 'medic') {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  }
+  const roleError = requireRole(account, 'medic')
+  if (roleError) return NextResponse.json({ error: roleError.error }, { status: roleError.status })
+  const medicAccount = account!
 
   let body: Record<string, unknown>
   try {
@@ -62,9 +64,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Missing required post-incident welfare fields.' }, { status: 400 })
   }
 
-  if (!hasMedicScopeAccess(account, { business_id: account.business_id, site_id })) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  }
+  const scopeError = requireMedicScope(medicAccount, { business_id: medicAccount.business_id, site_id })
+  if (scopeError) return NextResponse.json({ error: scopeError.error }, { status: scopeError.status })
 
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -100,10 +101,10 @@ export async function POST(request: NextRequest) {
 
   const review_payload = {
     reviewStartedAt: new Date().toISOString(),
-    reviewedByUserId: user.id,
-    reviewedByName: account.display_name,
-    caseOwnerUserId: user.id,
-    caseOwnerName: account.display_name,
+    reviewedByUserId: userId,
+    reviewedByName: medicAccount.display_name,
+    caseOwnerUserId: userId,
+    caseOwnerName: medicAccount.display_name,
     triagePriority: 'priority',
     assignedReviewPath: 'medic',
     contactOutcome: 'not_contacted_yet',
@@ -117,7 +118,7 @@ export async function POST(request: NextRequest) {
   const { data, error } = await supabase
     .from('module_submissions')
     .insert({
-      business_id: account.business_id,
+      business_id: medicAccount.business_id,
       site_id,
       worker_id: typeof body.workerId === 'string' && body.workerId ? body.workerId : null,
       module_key: 'psychosocial_health',
@@ -126,7 +127,7 @@ export async function POST(request: NextRequest) {
       payload,
       review_payload,
       reviewed_at: new Date().toISOString(),
-      reviewed_by: user.id,
+      reviewed_by: userId,
     })
     .select('id')
     .single()

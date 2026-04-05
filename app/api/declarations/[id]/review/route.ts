@@ -3,13 +3,13 @@ import { createServerClient } from '@supabase/ssr'
 import { createClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
 import type { SubmissionStatus } from '@/lib/types'
-import { hasMedicScopeAccess } from '@/lib/medic-scope'
+import { requireAuthenticatedUser, requireMedicScope, requireRole } from '@/lib/route-access'
+import {
+  validateRequestedReviewStatus,
+  validateReviewTransition,
+} from '@/lib/review-guards'
 
 export const runtime = 'nodejs'
-
-// Statuses a medic can set via the web review UI.
-// 'New' and 'Recalled' are set by the iOS app only.
-const REVIEWABLE_STATUSES: SubmissionStatus[] = ['In Review', 'Approved', 'Requires Follow-up']
 
 export async function PATCH(
   request: NextRequest,
@@ -30,13 +30,15 @@ export async function PATCH(
   )
 
   const { data: { user } } = await authClient.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const userId = user?.id ?? null
+  const authError = requireAuthenticatedUser(userId)
+  if (authError) return NextResponse.json({ error: authError.error }, { status: authError.status })
 
   const { data: account } = await authClient
-    .from('user_accounts').select('role, display_name, business_id, site_ids').eq('id', user.id).single()
-  if (!account || account.role !== 'medic') {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  }
+    .from('user_accounts').select('role, display_name, business_id, site_ids').eq('id', userId).single()
+  const roleError = requireRole(account, 'medic')
+  if (roleError) return NextResponse.json({ error: roleError.error }, { status: roleError.status })
+  const medicAccount = account!
 
   let body: { status: SubmissionStatus; note?: string; version?: number }
   try {
@@ -47,8 +49,9 @@ export async function PATCH(
 
   const { status, note, version } = body
 
-  if (!REVIEWABLE_STATUSES.includes(status)) {
-    return NextResponse.json({ error: `Invalid status '${status}'.` }, { status: 400 })
+  const invalidStatus = validateRequestedReviewStatus(status)
+  if (invalidStatus) {
+    return NextResponse.json({ error: invalidStatus.error }, { status: invalidStatus.status })
   }
 
   const supabase = createClient(
@@ -64,33 +67,24 @@ export async function PATCH(
     .single()
 
   if (!current) return NextResponse.json({ error: 'Submission not found' }, { status: 404 })
-  if (!hasMedicScopeAccess(account, current)) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  }
+  const scopeError = requireMedicScope(medicAccount, current)
+  if (scopeError) return NextResponse.json({ error: scopeError.error }, { status: scopeError.status })
 
-  // Optimistic lock: if caller sent a version, it must match
-  if (version !== undefined && current.version !== version) {
+  const transitionError = validateReviewTransition({
+    currentStatus: current.status,
+    requestedStatus: status,
+    currentVersion: current.version,
+    requestedVersion: version,
+  })
+  if (transitionError) {
     return NextResponse.json(
       {
-        error: 'This form was updated by another user. Please refresh and try again.',
-        current_version: current.version,
+        error: transitionError.error,
+        ...(transitionError.current_version !== undefined
+          ? { current_version: transitionError.current_version }
+          : {}),
       },
-      { status: 409 }
-    )
-  }
-
-  // Client-side transition guard (DB trigger enforces this too, but return a
-  // clear message before hitting the DB so the UI can surface it properly)
-  if (current.status === 'Approved' || current.status === 'Recalled') {
-    return NextResponse.json(
-      { error: `Cannot change status from terminal state '${current.status}'.` },
-      { status: 422 }
-    )
-  }
-  if (current.status === 'Requires Follow-up' && status !== 'Approved') {
-    return NextResponse.json(
-      { error: "From 'Requires Follow-up', status can only advance to 'Approved'." },
-      { status: 422 }
+      { status: transitionError.status }
     )
   }
 
@@ -101,8 +95,8 @@ export async function PATCH(
       ? {
           outcome:           status,
           note:              note?.trim() ?? null,
-          decided_by_user_id: user.id,
-          decided_by_name:   account.display_name as string,
+          decided_by_user_id: userId,
+          decided_by_name:   medicAccount.display_name as string,
           decided_at:        decidedAt,
         }
       : (current.decision ?? null)

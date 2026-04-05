@@ -2,7 +2,9 @@ import { createClient } from '@/lib/supabase/server'
 import { redirect, notFound } from 'next/navigation'
 import SubmissionDetail from '@/components/medic/SubmissionDetail'
 import { parseQueue } from '@/lib/queue-params'
-import type { WorkerSnapshot, Decision, SubmissionStatus, ScriptUpload, MedicComment } from '@/lib/types'
+import type { WorkerSnapshot, Decision, SubmissionStatus, ScriptUpload } from '@/lib/types'
+import { hasMedicScopeAccess } from '@/lib/medic-scope'
+import { parseSubmissionComments } from '@/lib/submission-comments'
 
 function parseSnapshot(raw: unknown): WorkerSnapshot | null {
   if (!raw) return null
@@ -42,23 +44,6 @@ function parseScriptUploads(raw: unknown): ScriptUpload[] {
   }
 }
 
-function parseComments(raw: unknown): MedicComment[] {
-  if (!raw) return []
-  try {
-    const arr = typeof raw === 'string' ? JSON.parse(raw) : raw
-    if (!Array.isArray(arr)) return []
-    return arr.filter(
-      (c): c is MedicComment =>
-        typeof c === 'object' && c !== null &&
-        typeof c.id === 'string' &&
-        typeof c.medic_user_id === 'string' &&
-        typeof c.note === 'string'
-    )
-  } catch {
-    return []
-  }
-}
-
 function parseSiteSpecificAnswers(raw: unknown): Record<string, string> {
   if (!raw) return {}
   try {
@@ -84,9 +69,26 @@ export default async function SubmissionPage({
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const { data: raw } = await supabase.from('submissions').select('*').eq('id', params.id).single()
+  const { data: account } = await supabase
+    .from('user_accounts')
+    .select('role, business_id, site_ids, contract_end_date')
+    .eq('id', user.id)
+    .single()
+
+  if (!account || account.role !== 'medic') redirect('/')
+
+  if (account.contract_end_date && new Date(account.contract_end_date) < new Date()) {
+    redirect('/expired')
+  }
+
+  const { data: raw } = await supabase
+    .from('submissions')
+    .select('*')
+    .eq('id', params.id)
+    .single()
 
   if (!raw) notFound()
+  if (!hasMedicScopeAccess(account, raw)) notFound()
 
   // Auto-tag as In Review when a medic opens a New submission
   if (raw.status === 'New') {
@@ -94,10 +96,19 @@ export default async function SubmissionPage({
     raw.status = 'In Review'
   }
 
-  const [{ data: site }, { data: business }] = await Promise.all([
+  const [{ data: site }, { data: business }, { data: commentRows, error: commentError }] = await Promise.all([
     supabase.from('sites').select('name').eq('id', raw.site_id).single(),
     supabase.from('businesses').select('name').eq('id', raw.business_id).single(),
+    supabase
+      .from('submission_comments')
+      .select('id, medic_user_id, medic_name, note, outcome, created_at, edited_at')
+      .eq('submission_id', raw.id)
+      .order('created_at', { ascending: true }),
   ])
+
+  if (commentError) {
+    console.error('[medic/submissions/[id]] failed to load comments:', commentError)
+  }
 
   // Parse script uploads and generate fresh signed URLs (1 hour expiry)
   const rawUploads = parseScriptUploads(raw.script_uploads)
@@ -111,6 +122,11 @@ export default async function SubmissionPage({
   )
 
   // Sanitise all fields before passing to the client component
+  const comments =
+    commentRows && commentRows.length > 0
+      ? parseSubmissionComments(commentRows)
+      : parseSubmissionComments(raw.comments)
+
   const submission = {
     id: String(raw.id ?? ''),
     business_id: String(raw.business_id ?? ''),
@@ -128,7 +144,7 @@ export default async function SubmissionPage({
     worker_snapshot: parseSnapshot(raw.worker_snapshot),
     decision: parseDecision(raw.decision),
     scriptUploads,
-    comments: parseComments(raw.comments),
+    comments,
   }
 
   const queueContext = parseQueue(searchParams)

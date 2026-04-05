@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
+import { requireAuthenticatedUser, requireRole } from '@/lib/route-access'
 
 const MAX_SIZE = 2 * 1024 * 1024 // 2 MB
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp']
@@ -9,17 +10,18 @@ type LogoVariant = 'default' | 'light' | 'dark'
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const userId = user?.id ?? null
+  const authError = requireAuthenticatedUser(userId)
+  if (authError) return NextResponse.json({ error: authError.error }, { status: authError.status })
 
   const { data: account } = await supabase
     .from('user_accounts')
     .select('role')
-    .eq('id', user.id)
+    .eq('id', userId)
     .single()
 
-  if (!account || account.role !== 'superuser') {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  }
+  const roleError = requireRole(account, 'superuser')
+  if (roleError) return NextResponse.json({ error: roleError.error }, { status: roleError.status })
 
   const formData = await req.formData()
   const file = formData.get('logo') as File | null

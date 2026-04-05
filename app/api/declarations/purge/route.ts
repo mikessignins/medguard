@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { createClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
-import { hasMedicScopeAccess } from '@/lib/medic-scope'
+import { validatePurgeSelection } from '@/lib/purge-guards'
+import { requireAuthenticatedUser, requireMedicScope, requireRole } from '@/lib/route-access'
 
 export const runtime = 'nodejs'
 
@@ -22,13 +23,15 @@ export async function POST(request: NextRequest) {
     }
   )
   const { data: { user } } = await authClient.auth.getUser()
-  if (!user) return new NextResponse('Unauthorized', { status: 401 })
+  const userId = user?.id ?? null
+  const authError = requireAuthenticatedUser(userId)
+  if (authError) return new NextResponse(authError.error, { status: authError.status })
 
   const { data: account } = await authClient
-    .from('user_accounts').select('role, display_name, business_id, site_ids').eq('id', user.id).single()
-  if (!account || account.role !== 'medic') {
-    return new NextResponse('Forbidden', { status: 403 })
-  }
+    .from('user_accounts').select('role, display_name, business_id, site_ids').eq('id', userId).single()
+  const roleError = requireRole(account, 'medic')
+  if (roleError) return new NextResponse(roleError.error, { status: roleError.status })
+  const medicAccount = account!
 
   // 2. Parse body
   let ids: string[]
@@ -54,21 +57,14 @@ export async function POST(request: NextRequest) {
     .select('id, business_id, site_id, site_name, worker_snapshot, exported_at, exported_by_name, decision')
     .in('id', ids)
 
-  if ((submissions ?? []).length !== ids.length) {
-    return NextResponse.json({ error: 'One or more declarations were not found.' }, { status: 404 })
+  const purgeError = validatePurgeSelection(ids, submissions ?? [])
+  if (purgeError) {
+    return NextResponse.json({ error: purgeError.error }, { status: purgeError.status })
   }
 
-  const outOfScope = (submissions ?? []).some((submission) => !hasMedicScopeAccess(account, submission))
+  const outOfScope = (submissions ?? []).some((submission) => requireMedicScope(medicAccount, submission))
   if (outOfScope) {
     return new NextResponse('Forbidden', { status: 403 })
-  }
-
-  const unexported = (submissions ?? []).filter(s => !s.exported_at)
-  if (unexported.length > 0) {
-    return NextResponse.json(
-      { error: 'All declarations must be exported to PDF before purging.' },
-      { status: 400 }
-    )
   }
 
   // 4. Build audit log entries (site_name already snapshotted on row since migration 002)
@@ -83,8 +79,8 @@ export async function POST(request: NextRequest) {
       site_id:          sub.site_id ?? null,
       site_name:        sub.site_name ?? null,
       business_id:      sub.business_id,
-      medic_user_id:    user.id,
-      medic_name:       account.display_name as string,
+      medic_user_id:    userId,
+      medic_name:       medicAccount.display_name as string,
       purged_at:        purgedAt,
       form_type:        'emergency_declaration',
       exported_at:      sub.exported_at ?? null,

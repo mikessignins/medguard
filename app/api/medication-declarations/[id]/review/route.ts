@@ -3,7 +3,7 @@ import { createServerClient } from '@supabase/ssr'
 import { createClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
 import type { MedDecReviewStatus } from '@/lib/types'
-import { hasMedicScopeAccess } from '@/lib/medic-scope'
+import { requireAuthenticatedUser, requireMedicScope, requireRole } from '@/lib/route-access'
 
 const VALID_STATUSES: MedDecReviewStatus[] = ['Pending', 'In Review', 'Normal Duties', 'Restricted Duties', 'Unfit for Work']
 
@@ -26,13 +26,15 @@ export async function PATCH(
   )
 
   const { data: { user } } = await authClient.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const userId = user?.id ?? null
+  const authError = requireAuthenticatedUser(userId)
+  if (authError) return NextResponse.json({ error: authError.error }, { status: authError.status })
 
   const { data: account } = await authClient
-    .from('user_accounts').select('role, display_name, business_id, site_ids').eq('id', user.id).single()
-  if (!account || account.role !== 'medic') {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  }
+    .from('user_accounts').select('role, display_name, business_id, site_ids').eq('id', userId).single()
+  const roleError = requireRole(account, 'medic')
+  if (roleError) return NextResponse.json({ error: roleError.error }, { status: roleError.status })
+  const medicAccount = account!
 
   const body = await request.json()
   const { medic_review_status, medic_comments, review_required } = body
@@ -54,9 +56,8 @@ export async function PATCH(
     .single()
 
   if (!current) return NextResponse.json({ error: 'Declaration not found' }, { status: 404 })
-  if (!hasMedicScopeAccess(account, current)) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  }
+  const scopeError = requireMedicScope(medicAccount, current)
+  if (scopeError) return NextResponse.json({ error: scopeError.error }, { status: scopeError.status })
 
   const OUTCOME_STATUSES: MedDecReviewStatus[] = ['Normal Duties', 'Restricted Duties', 'Unfit for Work']
   const EARLY_STATUSES: MedDecReviewStatus[] = ['Pending', 'In Review']
@@ -76,7 +77,7 @@ export async function PATCH(
       medic_review_status,
       medic_comments: medic_comments ?? '',
       review_required: !!review_required,
-      medic_name: account.display_name,
+      medic_name: medicAccount.display_name,
       medic_reviewed_at: new Date().toISOString(),
     })
     .eq('id', params.id)

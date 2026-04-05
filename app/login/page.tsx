@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
 import { createClient } from '@/lib/supabase/client'
+import { resolveWebPortalDestination } from '@/lib/web-access'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
@@ -46,20 +47,16 @@ export default function LoginPage() {
       .eq('id', account.business_id)
       .single()
 
-    if (business?.is_suspended) {
-      router.push('/suspended')
+    const destination = resolveWebPortalDestination({
+      role: account.role,
+      contractEndDate: account.contract_end_date,
+      isSuspended: business?.is_suspended ?? false,
+    })
+
+    if (destination) {
+      router.push(destination)
       return
     }
-
-    if (account.contract_end_date && new Date(account.contract_end_date) < new Date()) {
-      router.push('/expired')
-      return
-    }
-
-    if (account.role === 'pending_medic') { router.push('/pending'); return }
-    if (account.role === 'medic') { router.push('/medic'); return }
-    if (account.role === 'admin') { router.push('/admin'); return }
-    if (account.role === 'superuser') { router.push('/superuser'); return }
 
     setError('This account type does not have web portal access.')
     setLoading(false)

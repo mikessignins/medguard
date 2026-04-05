@@ -138,8 +138,6 @@ export default function SubmissionDetail({ submission, siteName, businessName, c
   const [commentDraft, setCommentDraft] = useState('')
   const [commentSaving, setCommentSaving] = useState(false)
   const [commentError, setCommentError] = useState('')
-  const [editingId, setEditingId] = useState<string | null>(null)
-  const [editDraft, setEditDraft] = useState('')
 
   async function handleAddComment() {
     const note = commentDraft.trim()
@@ -160,44 +158,6 @@ export default function SubmissionDetail({ submission, siteName, businessName, c
       setCommentError('Network error — please try again.')
     } finally {
       setCommentSaving(false)
-    }
-  }
-
-  async function handleSaveEdit(commentId: string) {
-    const note = editDraft.trim()
-    if (!note) return
-    setCommentSaving(true)
-    setCommentError('')
-    try {
-      const res = await fetch(`/api/declarations/${submission.id}/comments`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ commentId, note }),
-      })
-      if (!res.ok) { setCommentError(await res.text()); return }
-      const updated: MedicComment = await res.json()
-      setComments(prev => prev.map(c => c.id === commentId ? updated : c))
-      setEditingId(null)
-      setEditDraft('')
-    } catch {
-      setCommentError('Network error — please try again.')
-    } finally {
-      setCommentSaving(false)
-    }
-  }
-
-  async function handleDeleteComment(commentId: string) {
-    setCommentError('')
-    try {
-      const res = await fetch(`/api/declarations/${submission.id}/comments`, {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ commentId }),
-      })
-      if (!res.ok) { setCommentError(await res.text()); return }
-      setComments(prev => prev.filter(c => c.id !== commentId))
-    } catch {
-      setCommentError('Network error — please try again.')
     }
   }
 
@@ -751,7 +711,6 @@ export default function SubmissionDetail({ submission, siteName, businessName, c
               <div className="space-y-4 mb-6">
                 {comments.map(comment => {
                   const isOwn = comment.medic_user_id === currentUserId
-                  const isEditing = editingId === comment.id
                   return (
                     <div key={comment.id} className="border border-slate-700/50 rounded-lg p-4">
                       {/* Author + timestamp */}
@@ -766,55 +725,12 @@ export default function SubmissionDetail({ submission, siteName, businessName, c
                         </div>
                         <div className="flex items-center gap-2 text-xs text-slate-500" suppressHydrationWarning>
                           <span>{fmtDateTime(comment.created_at)}</span>
-                          {comment.edited_at && <span className="italic">· edited</span>}
                         </div>
                       </div>
 
-                      {/* Body */}
-                      {isEditing ? (
-                        <div className="mt-2 space-y-2">
-                          <textarea
-                            value={editDraft}
-                            onChange={e => setEditDraft(e.target.value)}
-                            rows={3}
-                            className="w-full px-3 py-2 bg-slate-900/60 border border-slate-600 rounded-lg text-sm text-slate-100 placeholder-slate-500 resize-none focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500"
-                          />
-                          <div className="flex gap-2">
-                            <button
-                              onClick={() => handleSaveEdit(comment.id)}
-                              disabled={commentSaving || !editDraft.trim()}
-                              className="px-3 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-medium rounded-lg disabled:opacity-50 transition-colors"
-                            >
-                              {commentSaving ? 'Saving…' : 'Save'}
-                            </button>
-                            <button
-                              onClick={() => { setEditingId(null); setEditDraft('') }}
-                              className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-300 text-xs font-medium rounded-lg transition-colors"
-                            >
-                              Cancel
-                            </button>
-                          </div>
-                        </div>
-                      ) : (
-                        <>
-                          <p className="text-sm text-slate-200 whitespace-pre-wrap">{comment.note}</p>
-                          {isOwn && (
-                            <div className="flex gap-3 mt-2">
-                              <button
-                                onClick={() => { setEditingId(comment.id); setEditDraft(comment.note) }}
-                                className="text-xs text-cyan-400 hover:text-cyan-300 transition-colors"
-                              >
-                                Edit
-                              </button>
-                              <button
-                                onClick={() => handleDeleteComment(comment.id)}
-                                className="text-xs text-red-400 hover:text-red-300 transition-colors"
-                              >
-                                Delete
-                              </button>
-                            </div>
-                          )}
-                        </>
+                      <p className="text-sm text-slate-200 whitespace-pre-wrap">{comment.note}</p>
+                      {isOwn && (
+                        <p className="mt-2 text-xs text-slate-500">Saved as part of the clinical audit trail.</p>
                       )}
                     </div>
                   )
@@ -825,6 +741,9 @@ export default function SubmissionDetail({ submission, siteName, businessName, c
             {/* New comment composer */}
             {!isPurged && (
               <div className="space-y-2">
+                <p className="text-xs text-slate-500">
+                  Notes are append-only once posted so the review history stays intact.
+                </p>
                 <textarea
                   value={commentDraft}
                   onChange={e => setCommentDraft(e.target.value)}

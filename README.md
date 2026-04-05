@@ -1,36 +1,94 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# MedPass Web App
 
-## Getting Started
+The web app is the operations and governance portal for MedPass. It supports:
 
-First, run the development server:
+- medic review of emergency declarations, medication declarations, fatigue, and psychosocial cases
+- admin management of staff, sites, invite codes, billing, and purge logs
+- superuser management of businesses, platform billing, reporting, and feedback
+
+The companion iOS app lives at `/Volumes/1tbusb/xcode/meddec` and handles worker-facing submissions plus mobile medic/admin workflows.
+
+## Stack
+
+- Next.js 14 App Router
+- React 18
+- Supabase Auth, PostgREST, Storage, and SSR helpers
+- Tailwind CSS
+- Vitest for unit tests
+
+## Local Development
+
+Install dependencies and start the dev server:
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Useful commands:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+npm test
+npm run build
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+The app expects Supabase environment variables in local env files:
 
-## Learn More
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- `SUPABASE_SERVICE_ROLE_KEY`
+- `CRON_SECRET`
 
-To learn more about Next.js, take a look at the following resources:
+## Main App Areas
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- `app/medic`
+  Medic queue, detail, export, and review workflows
+- `app/admin`
+  Business-scoped administration and reporting
+- `app/superuser`
+  Platform-wide business management and reporting
+- `app/api`
+  Route handlers for review actions, exports, purge jobs, feedback, and business configuration
+- `lib`
+  Shared parsing, access control, billing helpers, Supabase clients, and testable business logic
+- `components`
+  UI by role and module
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Access Model
 
-## Deploy on Vercel
+The main roles are:
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+- `medic`
+- `admin`
+- `superuser`
+- `pending_medic`
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Business and site access are enforced through Supabase and in route/page guards. Shared scope helpers live in `lib/medic-scope.ts`.
+
+## Data Governance Notes
+
+- Reviewed/exported PHI is purged from operational tables after the retention window and copied into immutable audit logs.
+- Emergency declaration comments are now stored in the `submission_comments` table as append-only rows rather than a mutable JSON array on `submissions`.
+- Superuser reporting is intended to be de-identified/aggregate-only at the database boundary, not just hidden in the UI.
+
+Recent migration of note:
+
+- `docs/migrations/029_normalize_submission_comments.sql`
+  Creates `submission_comments`, backfills legacy JSON comments, and makes comment history append-only.
+
+## Testing
+
+Current web tests focus on shared business logic in `lib/__tests__`.
+
+High-value regression areas:
+
+- medic site/business scope checks
+- comment parsing and append-only comment loading
+- queue parameter handling
+- risk chip derivation
+
+## Operational Notes
+
+- Apply database migrations before deploying code that depends on them.
+- `SUPABASE_SERVICE_ROLE_KEY` is used only in trusted server routes and server components.
+- The cron purge route is protected by `Authorization: Bearer <CRON_SECRET>`.

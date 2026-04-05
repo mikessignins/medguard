@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { createClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
-import { hasMedicScopeAccess } from '@/lib/medic-scope'
+import { requireAuthenticatedUser, requireMedicScope, requireRole } from '@/lib/route-access'
 
 export const runtime = 'nodejs'
 
@@ -22,16 +22,18 @@ export async function POST(request: NextRequest) {
   )
 
   const { data: { user } } = await authClient.auth.getUser()
-  if (!user) return new NextResponse('Unauthorized', { status: 401 })
+  const userId = user?.id ?? null
+  const authError = requireAuthenticatedUser(userId)
+  if (authError) return new NextResponse(authError.error, { status: authError.status })
 
   const { data: account } = await authClient
     .from('user_accounts')
     .select('role, display_name, business_id, site_ids')
-    .eq('id', user.id)
+    .eq('id', userId)
     .single()
-  if (!account || account.role !== 'medic') {
-    return new NextResponse('Forbidden', { status: 403 })
-  }
+  const roleError = requireRole(account, 'medic')
+  if (roleError) return new NextResponse(roleError.error, { status: roleError.status })
+  const medicAccount = account!
 
   let ids: string[]
   try {
@@ -58,7 +60,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'One or more fatigue assessments were not found.' }, { status: 404 })
   }
 
-  const outOfScope = (assessments ?? []).some((entry) => !hasMedicScopeAccess(account, entry))
+  const outOfScope = (assessments ?? []).some((entry) => requireMedicScope(medicAccount, entry))
   if (outOfScope) {
     return new NextResponse('Forbidden', { status: 403 })
   }
@@ -93,8 +95,8 @@ export async function POST(request: NextRequest) {
       site_id: entry.site_id ?? null,
       site_name: null,
       business_id: entry.business_id,
-      medic_user_id: user.id,
-      medic_name: account.display_name as string,
+      medic_user_id: userId,
+      medic_name: medicAccount.display_name as string,
       purged_at: purgedAt,
       form_type: 'fatigue_assessment',
       exported_at: entry.exported_at ?? null,

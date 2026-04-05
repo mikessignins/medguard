@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { createClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
-import { hasMedicScopeAccess } from '@/lib/medic-scope'
+import { requireAuthenticatedUser, requireMedicScope, requireRole } from '@/lib/route-access'
 import type { PsychosocialReviewEntry, PsychosocialReviewPayload } from '@/lib/types'
 
 export const runtime = 'nodejs'
@@ -30,17 +30,19 @@ export async function PATCH(
   const {
     data: { user },
   } = await authClient.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const userId = user?.id ?? null
+  const authError = requireAuthenticatedUser(userId)
+  if (authError) return NextResponse.json({ error: authError.error }, { status: authError.status })
 
   const { data: account } = await authClient
     .from('user_accounts')
     .select('role, display_name, business_id, site_ids')
-    .eq('id', user.id)
+    .eq('id', userId)
     .single()
 
-  if (!account || account.role !== 'medic') {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  }
+  const roleError = requireRole(account, 'medic')
+  if (roleError) return NextResponse.json({ error: roleError.error }, { status: roleError.status })
+  const medicAccount = account!
 
   let body: PsychosocialReviewPayload
   let nextStatus: typeof NEXT_STATUSES[number] = 'resolved'
@@ -71,9 +73,8 @@ export async function PATCH(
     .single()
 
   if (!current) return NextResponse.json({ error: 'Psychosocial support check-in not found.' }, { status: 404 })
-  if (!hasMedicScopeAccess(account, current)) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  }
+  const scopeError = requireMedicScope(medicAccount, current)
+  if (scopeError) return NextResponse.json({ error: scopeError.error }, { status: scopeError.status })
   const workflowKind = current.payload?.workerPulse?.workflowKind
     ?? (current.payload?.postIncidentWelfare ? 'post_incident_psychological_welfare' : null)
 
@@ -97,7 +98,7 @@ export async function PATCH(
     )
   }
 
-  if (current.status === 'in_medic_review' && lockedReviewerId && lockedReviewerId !== user.id) {
+  if (current.status === 'in_medic_review' && lockedReviewerId && lockedReviewerId !== userId) {
     return NextResponse.json(
       { error: 'Another reviewer has already claimed this psychosocial support check-in.' },
       { status: 409 },
@@ -115,8 +116,8 @@ export async function PATCH(
         {
           id: crypto.randomUUID(),
           createdAt: now,
-          createdByUserId: user.id,
-          createdByName: account.display_name,
+          createdByUserId: userId,
+          createdByName: medicAccount.display_name,
           actionLabel:
             typeof body.supportActions === 'string' && body.supportActions.trim()
               ? body.supportActions.trim()
@@ -130,10 +131,10 @@ export async function PATCH(
     ...(existingReviewPayload ?? {}),
     ...body,
     reviewStartedAt: existingReviewPayload?.reviewStartedAt ?? now,
-    reviewedByUserId: user.id,
-    reviewedByName: account.display_name,
-    caseOwnerUserId: (body.caseOwnerUserId ?? existingReviewPayload?.caseOwnerUserId ?? user.id) as string,
-    caseOwnerName: (body.caseOwnerName ?? existingReviewPayload?.caseOwnerName ?? account.display_name) as string,
+    reviewedByUserId: userId,
+    reviewedByName: medicAccount.display_name,
+    caseOwnerUserId: (body.caseOwnerUserId ?? existingReviewPayload?.caseOwnerUserId ?? userId) as string,
+    caseOwnerName: (body.caseOwnerName ?? existingReviewPayload?.caseOwnerName ?? medicAccount.display_name) as string,
     followUpRequired:
       nextStatus === 'awaiting_follow_up'
         ? true
@@ -148,7 +149,7 @@ export async function PATCH(
       status: nextStatus,
       review_payload: reviewPayload,
       reviewed_at: now,
-      reviewed_by: user.id,
+      reviewed_by: userId,
     })
     .eq('id', params.id)
     .eq('module_key', 'psychosocial_health')

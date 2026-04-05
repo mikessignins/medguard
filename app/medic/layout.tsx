@@ -8,6 +8,7 @@ import ThemeToggle from '@/components/ThemeToggle'
 import MedicNav from '@/components/medic/MedicNav'
 import BusinessThemeLogo from '@/components/BusinessThemeLogo'
 import { getConfiguredBusinessModules, type BusinessModule } from '@/lib/modules'
+import { canAccessMedicPortal, resolveWebPortalDestination } from '@/lib/web-access'
 
 export default async function MedicLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient()
@@ -20,10 +21,20 @@ export default async function MedicLayout({ children }: { children: React.ReactN
     .eq('id', user.id)
     .single()
 
-  if (!account || account.role !== 'medic') redirect('/')
+  if (!account) redirect('/')
 
-  if (account.contract_end_date && new Date(account.contract_end_date) < new Date()) {
-    redirect('/expired')
+  const initialDestination = resolveWebPortalDestination({
+    role: account.role,
+    contractEndDate: account.contract_end_date,
+    isSuspended: false,
+  })
+
+  if (!canAccessMedicPortal({
+    role: account.role,
+    contractEndDate: account.contract_end_date,
+    isSuspended: false,
+  })) {
+    redirect(initialDestination ?? '/')
   }
 
   const [{ data: business }, { data: businessModules }] = await Promise.all([
@@ -38,7 +49,15 @@ export default async function MedicLayout({ children }: { children: React.ReactN
       .eq('business_id', account.business_id),
   ])
 
-  if (business?.is_suspended) redirect('/suspended')
+  const finalDestination = resolveWebPortalDestination({
+    role: account.role,
+    contractEndDate: account.contract_end_date,
+    isSuspended: business?.is_suspended ?? false,
+  })
+
+  if (finalDestination !== '/medic') {
+    redirect(finalDestination ?? '/')
+  }
 
   const configuredModules = getConfiguredBusinessModules((businessModules ?? []) as BusinessModule[], {
     surface: 'medic_queue',
