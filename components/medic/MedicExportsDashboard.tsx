@@ -154,17 +154,13 @@ export default function MedicExportsDashboard({ sites, submissions, medDeclarati
   const siteSubmissions = submissions.filter((s) => s.site_id === activeTab && s.status !== 'Recalled')
   const readySubmissions = siteSubmissions.filter((s) => !s.exported_at && !s.phi_purged_at && FINAL_SUBMISSION_STATUSES.includes(s.status))
   const exportedSubmissions = siteSubmissions.filter((s) => !!s.exported_at && !s.phi_purged_at)
-  const purgedSubmissions = siteSubmissions.filter((s) => !!s.phi_purged_at)
-
   const siteMedDecs = medDeclarations.filter((m) => m.site_id === activeTab)
   const readyMedDecs = siteMedDecs.filter((m) => !m.exported_at && !m.phi_purged_at && FINAL_MED_DEC_STATUSES.includes(m.medic_review_status))
   const exportedMedDecs = siteMedDecs.filter((m) => !!m.exported_at && !m.phi_purged_at)
-  const purgedMedDecs = siteMedDecs.filter((m) => !!m.phi_purged_at)
 
   const siteFatigue = fatigueAssessments.filter((item) => item.site_id === activeTab)
   const readyFatigue = siteFatigue.filter((item) => !item.exported_at && !item.phi_purged_at && item.status === FINAL_FATIGUE_STATUS)
   const exportedFatigue = siteFatigue.filter((item) => !!item.exported_at && !item.phi_purged_at)
-  const purgedFatigue = siteFatigue.filter((item) => !!item.phi_purged_at)
 
   const sitePsychosocial = psychosocialAssessments.filter(
     (item) =>
@@ -174,14 +170,13 @@ export default function MedicExportsDashboard({ sites, submissions, medDeclarati
   )
   const readyPsychosocial = sitePsychosocial.filter((item) => !item.exported_at && !item.phi_purged_at && item.status === FINAL_PSYCHOSOCIAL_STATUS)
   const exportedPsychosocial = sitePsychosocial.filter((item) => !!item.exported_at && !item.phi_purged_at)
-  const purgedPsychosocial = sitePsychosocial.filter((item) => !!item.phi_purged_at)
 
   const badgeCounts = Object.fromEntries(
     sites.map((site) => {
-      const subCount = submissions.filter((s) => s.site_id === site.id && s.status !== 'Recalled' && (!s.phi_purged_at && (FINAL_SUBMISSION_STATUSES.includes(s.status) || !!s.exported_at) || !!s.phi_purged_at)).length
-      const medCount = medDeclarations.filter((m) => m.site_id === site.id && (!m.phi_purged_at && (FINAL_MED_DEC_STATUSES.includes(m.medic_review_status) || !!m.exported_at) || !!m.phi_purged_at)).length
-      const fatigueCount = fatigueAssessments.filter((item) => item.site_id === site.id && (!item.phi_purged_at && (item.status === FINAL_FATIGUE_STATUS || !!item.exported_at) || !!item.phi_purged_at)).length
-      const psychosocialCount = psychosocialAssessments.filter((item) => item.site_id === site.id && (!item.phi_purged_at && (item.status === FINAL_PSYCHOSOCIAL_STATUS || !!item.exported_at) || !!item.phi_purged_at)).length
+      const subCount = submissions.filter((s) => s.site_id === site.id && s.status !== 'Recalled' && !s.phi_purged_at && (FINAL_SUBMISSION_STATUSES.includes(s.status) || !!s.exported_at)).length
+      const medCount = medDeclarations.filter((m) => m.site_id === site.id && !m.phi_purged_at && (FINAL_MED_DEC_STATUSES.includes(m.medic_review_status) || !!m.exported_at)).length
+      const fatigueCount = fatigueAssessments.filter((item) => item.site_id === site.id && !item.phi_purged_at && (item.status === FINAL_FATIGUE_STATUS || !!item.exported_at)).length
+      const psychosocialCount = psychosocialAssessments.filter((item) => item.site_id === site.id && !item.phi_purged_at && (item.status === FINAL_PSYCHOSOCIAL_STATUS || !!item.exported_at)).length
       return [site.id, subCount + medCount + fatigueCount + psychosocialCount]
     })
   )
@@ -332,10 +327,9 @@ export default function MedicExportsDashboard({ sites, submissions, medDeclarati
 
       <div className="space-y-4">
         <SectionHeader title="Emergency Medical Forms" subtitle="Final decisions become export-ready here and stay re-exportable until purged." />
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4"><p className="text-xs uppercase tracking-widest text-slate-500">Ready to Export</p><p className="mt-1 text-2xl font-bold text-cyan-400">{readySubmissions.length}</p></div>
           <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4"><p className="text-xs uppercase tracking-widest text-slate-500">Exported</p><p className="mt-1 text-2xl font-bold text-amber-400">{exportedSubmissions.length}</p></div>
-          <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4"><p className="text-xs uppercase tracking-widest text-slate-500">Purged</p><p className="mt-1 text-2xl font-bold text-slate-400">{purgedSubmissions.length}</p></div>
         </div>
 
         {readySubmissions.length > 0 && (
@@ -385,29 +379,13 @@ export default function MedicExportsDashboard({ sites, submissions, medDeclarati
             </div>
           </div>
         )}
-
-        {purgedSubmissions.length > 0 && (
-          <div className="rounded-xl border border-slate-800 bg-slate-900/60 overflow-hidden">
-            <div className="px-4 py-3 border-b border-slate-800"><p className="text-xs font-semibold uppercase tracking-widest text-slate-500">Purged History</p></div>
-            {purgedSubmissions.map((sub, i) => (
-              <Link key={sub.id} href={submissionHref(sub.id)} className={`w-full text-left px-5 py-4 flex items-center justify-between hover:bg-slate-800 transition-colors ${i > 0 ? 'border-t border-slate-800' : ''}`}>
-                <div>
-                  <p className="font-semibold text-slate-400">PHI Purged</p>
-                  <p className="text-sm text-slate-600 mt-1">{fmtDate(sub.visit_date)}</p>
-                </div>
-                <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-slate-700 text-slate-500">Purged</span>
-              </Link>
-            ))}
-          </div>
-        )}
       </div>
 
       <div className="space-y-4">
         <SectionHeader title="Confidential Medication Declarations" subtitle="Final medication reviews stay here for export and the 7-day retention window." />
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4"><p className="text-xs uppercase tracking-widest text-slate-500">Ready to Export</p><p className="mt-1 text-2xl font-bold text-violet-400">{readyMedDecs.length}</p></div>
           <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4"><p className="text-xs uppercase tracking-widest text-slate-500">Exported</p><p className="mt-1 text-2xl font-bold text-amber-400">{exportedMedDecs.length}</p></div>
-          <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4"><p className="text-xs uppercase tracking-widest text-slate-500">Purged</p><p className="mt-1 text-2xl font-bold text-slate-400">{purgedMedDecs.length}</p></div>
         </div>
 
         {readyMedDecs.length > 0 && (
@@ -457,29 +435,13 @@ export default function MedicExportsDashboard({ sites, submissions, medDeclarati
             </div>
           </div>
         )}
-
-        {purgedMedDecs.length > 0 && (
-          <div className="rounded-xl border border-slate-800 bg-slate-900/60 overflow-hidden">
-            <div className="px-4 py-3 border-b border-slate-800"><p className="text-xs font-semibold uppercase tracking-widest text-slate-500">Purged History</p></div>
-            {purgedMedDecs.map((m, i) => (
-              <Link key={m.id} href={medDecHref(m.id)} className={`w-full text-left px-5 py-4 flex items-center justify-between hover:bg-slate-800 transition-colors ${i > 0 ? 'border-t border-slate-800' : ''}`}>
-                <div>
-                  <p className="font-semibold text-slate-400">PHI Purged</p>
-                  <p className="text-sm text-slate-600 mt-1">{fmtDate(m.submitted_at)}</p>
-                </div>
-                <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-slate-700 text-slate-500">Purged</span>
-              </Link>
-            ))}
-          </div>
-        )}
       </div>
 
       <div className="space-y-4">
         <SectionHeader title="Psychosocial Cases" subtitle="Reviewed psychosocial support and post-incident welfare cases can be exported into the record and retained until purged. Wellbeing pulses are excluded." />
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4"><p className="text-xs uppercase tracking-widest text-slate-500">Ready to Export</p><p className="mt-1 text-2xl font-bold text-violet-400">{readyPsychosocial.length}</p></div>
           <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4"><p className="text-xs uppercase tracking-widest text-slate-500">Exported</p><p className="mt-1 text-2xl font-bold text-amber-400">{exportedPsychosocial.length}</p></div>
-          <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4"><p className="text-xs uppercase tracking-widest text-slate-500">Purged</p><p className="mt-1 text-2xl font-bold text-slate-400">{purgedPsychosocial.length}</p></div>
         </div>
 
         {readyPsychosocial.length > 0 && (
@@ -534,28 +496,13 @@ export default function MedicExportsDashboard({ sites, submissions, medDeclarati
           </div>
         )}
 
-        {purgedPsychosocial.length > 0 && (
-          <div className="rounded-xl border border-slate-800 bg-slate-900/60 overflow-hidden">
-            <div className="px-4 py-3 border-b border-slate-800"><p className="text-xs font-semibold uppercase tracking-widest text-slate-500">Purged History</p></div>
-            {purgedPsychosocial.map((item, i) => (
-              <Link key={item.id} href={psychosocialHref(item.id)} className={`w-full text-left px-5 py-4 flex items-center justify-between hover:bg-slate-800 transition-colors ${i > 0 ? 'border-t border-slate-800' : ''}`}>
-                <div>
-                  <p className="font-semibold text-slate-400">PHI Purged</p>
-                  <p className="text-sm text-slate-600 mt-1">{fmtDate(item.submitted_at)}</p>
-                </div>
-                <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-slate-700 text-slate-500">Purged</span>
-              </Link>
-            ))}
-          </div>
-        )}
       </div>
 
       <div className="space-y-4">
         <SectionHeader title="Fatigue Assessments" subtitle="Medic-reviewed fatigue outcomes can be exported into the business medical record and kept available until purged." />
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4"><p className="text-xs uppercase tracking-widest text-slate-500">Ready to Export</p><p className="mt-1 text-2xl font-bold text-violet-400">{readyFatigue.length}</p></div>
           <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4"><p className="text-xs uppercase tracking-widest text-slate-500">Exported</p><p className="mt-1 text-2xl font-bold text-amber-400">{exportedFatigue.length}</p></div>
-          <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4"><p className="text-xs uppercase tracking-widest text-slate-500">Purged</p><p className="mt-1 text-2xl font-bold text-slate-400">{purgedFatigue.length}</p></div>
         </div>
 
         {readyFatigue.length > 0 && (
@@ -607,21 +554,6 @@ export default function MedicExportsDashboard({ sites, submissions, medDeclarati
                 </div>
               ))}
             </div>
-          </div>
-        )}
-
-        {purgedFatigue.length > 0 && (
-          <div className="rounded-xl border border-slate-800 bg-slate-900/60 overflow-hidden">
-            <div className="px-4 py-3 border-b border-slate-800"><p className="text-xs font-semibold uppercase tracking-widest text-slate-500">Purged History</p></div>
-            {purgedFatigue.map((item, i) => (
-              <Link key={item.id} href={fatigueHref(item.id)} className={`w-full text-left px-5 py-4 flex items-center justify-between hover:bg-slate-800 transition-colors ${i > 0 ? 'border-t border-slate-800' : ''}`}>
-                <div>
-                  <p className="font-semibold text-slate-400">PHI Purged</p>
-                  <p className="text-sm text-slate-600 mt-1">{fmtDate(item.submitted_at)}</p>
-                </div>
-                <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-slate-700 text-slate-500">Purged</span>
-              </Link>
-            ))}
           </div>
         )}
       </div>

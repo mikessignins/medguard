@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 
 const EVENT_TYPES = [
@@ -15,9 +15,11 @@ const EVENT_TYPES = [
 
 export default function PostIncidentWelfareForm({
   sites,
+  workers,
   initialSite,
 }: {
   sites: Array<{ id: string; name: string }>
+  workers: Array<{ id: string; display_name: string; site_ids: string[] }>
   initialSite?: string
 }) {
   const router = useRouter()
@@ -40,6 +42,22 @@ export default function PostIncidentWelfareForm({
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
+  const workersForSite = useMemo(
+    () => workers.filter((worker) => worker.site_ids.includes(siteId)),
+    [siteId, workers],
+  )
+
+  const resolvedWorkerId = useMemo(() => {
+    const manualId = workerId.trim()
+    if (manualId) return manualId
+
+    const matches = workersForSite.filter(
+      (worker) => worker.display_name.trim().toLocaleLowerCase() === workerNameSnapshot.trim().toLocaleLowerCase(),
+    )
+
+    return matches.length === 1 ? matches[0].id : null
+  }, [workerId, workerNameSnapshot, workersForSite])
+
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setSaving(true)
@@ -52,7 +70,7 @@ export default function PostIncidentWelfareForm({
         body: JSON.stringify({
           site_id: siteId,
           workerNameSnapshot,
-          workerId: workerId.trim() || null,
+          workerId: resolvedWorkerId,
           jobRole: jobRole.trim() || null,
           linkedIncidentOrCaseId: linkedIncidentOrCaseId.trim() || null,
           eventType,
@@ -85,59 +103,70 @@ export default function PostIncidentWelfareForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6 rounded-3xl border border-slate-800 bg-slate-950/70 p-6">
+    <form
+      onSubmit={handleSubmit}
+      className="space-y-6 rounded-3xl border border-[var(--border-md)] bg-[var(--bg-card)] p-6 shadow-sm"
+    >
       <div>
-        <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">Workflow 3</p>
-        <h1 className="mt-2 text-3xl font-semibold text-slate-100">New Post-Incident Psychological Welfare Case</h1>
-        <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-400">
+        <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--text-3)]">Workflow 3</p>
+        <h1 className="mt-2 text-3xl font-semibold text-[var(--text-1)]">New Post-Incident Psychological Welfare Case</h1>
+        <p className="mt-3 max-w-3xl text-sm leading-6 text-[var(--text-2)]">
           Use this medic-led workflow after a traumatic or clinically significant event. It creates an identifiable welfare case inside the psychosocial umbrella module.
+        </p>
+        <p className="mt-2 max-w-3xl text-sm leading-6 text-[var(--text-3)]">
+          Enter the worker&apos;s name as it appears in MedGuard and we&apos;ll match the registered worker account for you when possible. The worker account ID is now only a fallback.
         </p>
       </div>
 
       <div className="grid gap-5 md:grid-cols-2">
         <label className="block">
-          <span className="mb-2 block text-sm font-medium text-slate-200">Site</span>
-          <select value={siteId} onChange={(event) => setSiteId(event.target.value)} className="w-full rounded-2xl border border-slate-800 bg-slate-950 px-4 py-3 text-sm text-slate-100">
+          <span className="mb-2 block text-sm font-medium text-[var(--text-1)]">Site</span>
+          <select value={siteId} onChange={(event) => setSiteId(event.target.value)} className="w-full rounded-2xl border border-[var(--border-md)] bg-[var(--bg-input)] px-4 py-3 text-sm text-[var(--text-1)]">
             {sites.map((site) => <option key={site.id} value={site.id}>{site.name}</option>)}
           </select>
         </label>
         <label className="block">
-          <span className="mb-2 block text-sm font-medium text-slate-200">Worker name</span>
-          <input value={workerNameSnapshot} onChange={(event) => setWorkerNameSnapshot(event.target.value)} className="w-full rounded-2xl border border-slate-800 bg-slate-950 px-4 py-3 text-sm text-slate-100" required />
+          <span className="mb-2 block text-sm font-medium text-[var(--text-1)]">Worker name</span>
+          <input value={workerNameSnapshot} onChange={(event) => setWorkerNameSnapshot(event.target.value)} list="post-incident-worker-names" className="w-full rounded-2xl border border-[var(--border-md)] bg-[var(--bg-input)] px-4 py-3 text-sm text-[var(--text-1)]" required />
+          <datalist id="post-incident-worker-names">
+            {workersForSite.map((worker) => (
+              <option key={worker.id} value={worker.display_name} />
+            ))}
+          </datalist>
         </label>
         <label className="block">
-          <span className="mb-2 block text-sm font-medium text-slate-200">Worker ID</span>
-          <input value={workerId} onChange={(event) => setWorkerId(event.target.value)} className="w-full rounded-2xl border border-slate-800 bg-slate-950 px-4 py-3 text-sm text-slate-100" placeholder="Optional UUID if known" />
+          <span className="mb-2 block text-sm font-medium text-[var(--text-1)]">Worker account ID</span>
+          <input value={workerId} onChange={(event) => setWorkerId(event.target.value)} className="w-full rounded-2xl border border-[var(--border-md)] bg-[var(--bg-input)] px-4 py-3 text-sm text-[var(--text-1)]" placeholder="Optional fallback if the worker name is not matched" />
         </label>
         <label className="block">
-          <span className="mb-2 block text-sm font-medium text-slate-200">Job role</span>
-          <input value={jobRole} onChange={(event) => setJobRole(event.target.value)} className="w-full rounded-2xl border border-slate-800 bg-slate-950 px-4 py-3 text-sm text-slate-100" />
+          <span className="mb-2 block text-sm font-medium text-[var(--text-1)]">Job role</span>
+          <input value={jobRole} onChange={(event) => setJobRole(event.target.value)} className="w-full rounded-2xl border border-[var(--border-md)] bg-[var(--bg-input)] px-4 py-3 text-sm text-[var(--text-1)]" />
         </label>
         <label className="block">
-          <span className="mb-2 block text-sm font-medium text-slate-200">Linked incident or case ID</span>
-          <input value={linkedIncidentOrCaseId} onChange={(event) => setLinkedIncidentOrCaseId(event.target.value)} className="w-full rounded-2xl border border-slate-800 bg-slate-950 px-4 py-3 text-sm text-slate-100" />
+          <span className="mb-2 block text-sm font-medium text-[var(--text-1)]">Linked incident or case ID</span>
+          <input value={linkedIncidentOrCaseId} onChange={(event) => setLinkedIncidentOrCaseId(event.target.value)} className="w-full rounded-2xl border border-[var(--border-md)] bg-[var(--bg-input)] px-4 py-3 text-sm text-[var(--text-1)]" />
         </label>
         <label className="block">
-          <span className="mb-2 block text-sm font-medium text-slate-200">Event type</span>
-          <select value={eventType} onChange={(event) => setEventType(event.target.value as (typeof EVENT_TYPES)[number][0])} className="w-full rounded-2xl border border-slate-800 bg-slate-950 px-4 py-3 text-sm text-slate-100">
+          <span className="mb-2 block text-sm font-medium text-[var(--text-1)]">Event type</span>
+          <select value={eventType} onChange={(event) => setEventType(event.target.value as (typeof EVENT_TYPES)[number][0])} className="w-full rounded-2xl border border-[var(--border-md)] bg-[var(--bg-input)] px-4 py-3 text-sm text-[var(--text-1)]">
             {EVENT_TYPES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
           </select>
         </label>
         <label className="block md:col-span-2">
-          <span className="mb-2 block text-sm font-medium text-slate-200">Event date and time</span>
-          <input type="datetime-local" value={eventDateTime} onChange={(event) => setEventDateTime(event.target.value)} className="w-full rounded-2xl border border-slate-800 bg-slate-950 px-4 py-3 text-sm text-slate-100" required />
+          <span className="mb-2 block text-sm font-medium text-[var(--text-1)]">Event date and time</span>
+          <input type="datetime-local" value={eventDateTime} onChange={(event) => setEventDateTime(event.target.value)} className="w-full rounded-2xl border border-[var(--border-md)] bg-[var(--bg-input)] px-4 py-3 text-sm text-[var(--text-1)]" required />
         </label>
         <label className="block md:col-span-2">
-          <span className="mb-2 block text-sm font-medium text-slate-200">Nature of exposure</span>
-          <textarea value={natureOfExposure} onChange={(event) => setNatureOfExposure(event.target.value)} rows={4} className="w-full rounded-2xl border border-slate-800 bg-slate-950 px-4 py-3 text-sm text-slate-100" required />
+          <span className="mb-2 block text-sm font-medium text-[var(--text-1)]">Nature of exposure</span>
+          <textarea value={natureOfExposure} onChange={(event) => setNatureOfExposure(event.target.value)} rows={4} className="w-full rounded-2xl border border-[var(--border-md)] bg-[var(--bg-input)] px-4 py-3 text-sm text-[var(--text-1)]" required />
         </label>
         <label className="block md:col-span-2">
-          <span className="mb-2 block text-sm font-medium text-slate-200">Initial review notes</span>
-          <textarea value={reviewNotes} onChange={(event) => setReviewNotes(event.target.value)} rows={4} className="w-full rounded-2xl border border-slate-800 bg-slate-950 px-4 py-3 text-sm text-slate-100" />
+          <span className="mb-2 block text-sm font-medium text-[var(--text-1)]">Initial review notes</span>
+          <textarea value={reviewNotes} onChange={(event) => setReviewNotes(event.target.value)} rows={4} className="w-full rounded-2xl border border-[var(--border-md)] bg-[var(--bg-input)] px-4 py-3 text-sm text-[var(--text-1)]" />
         </label>
         <label className="block md:col-span-2">
-          <span className="mb-2 block text-sm font-medium text-slate-200">Follow-up scheduled at</span>
-          <input type="datetime-local" value={followUpScheduledAt} onChange={(event) => setFollowUpScheduledAt(event.target.value)} className="w-full rounded-2xl border border-slate-800 bg-slate-950 px-4 py-3 text-sm text-slate-100" />
+          <span className="mb-2 block text-sm font-medium text-[var(--text-1)]">Follow-up scheduled at</span>
+          <input type="datetime-local" value={followUpScheduledAt} onChange={(event) => setFollowUpScheduledAt(event.target.value)} className="w-full rounded-2xl border border-[var(--border-md)] bg-[var(--bg-input)] px-4 py-3 text-sm text-[var(--text-1)]" />
         </label>
       </div>
 
@@ -150,7 +179,7 @@ export default function PostIncidentWelfareForm({
           ['External psychology referral offered', externalPsychologyReferralOffered, setExternalPsychologyReferralOffered],
           ['Confidentiality acknowledged', confidentialityAcknowledged, setConfidentialityAcknowledged],
         ].map(([label, value, setter]) => (
-          <label key={label as string} className="inline-flex items-center gap-3 rounded-2xl border border-slate-800 bg-slate-950 px-4 py-3 text-sm text-slate-200">
+          <label key={label as string} className="inline-flex items-center gap-3 rounded-2xl border border-[var(--border-md)] bg-[var(--bg-surface)] px-4 py-3 text-sm text-[var(--text-1)]">
             <input type="checkbox" checked={value as boolean} onChange={(event) => (setter as (v: boolean) => void)(event.target.checked)} className="h-4 w-4 rounded border-slate-600 bg-slate-900 text-cyan-500 focus:ring-cyan-500" />
             {label as string}
           </label>

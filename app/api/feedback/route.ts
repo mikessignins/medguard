@@ -25,7 +25,7 @@ export async function POST(req: Request) {
     .eq('id', userId)
     .single()
 
-  const roleError = requireOneOfRoles(account, ['medic', 'admin'])
+  const roleError = requireOneOfRoles(account, ['medic', 'admin', 'superuser'])
   if (roleError) return NextResponse.json({ error: roleError.error }, { status: roleError.status })
   const allowedAccount = account!
 

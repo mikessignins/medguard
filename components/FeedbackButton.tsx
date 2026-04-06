@@ -1,5 +1,6 @@
 'use client'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 
 type Category = 'Bug' | 'Error' | 'Idea' | 'Other'
 
@@ -10,6 +11,11 @@ export default function FeedbackButton() {
   const [submitting, setSubmitting] = useState(false)
   const [sent, setSent] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -28,7 +34,7 @@ export default function FeedbackButton() {
       } else {
         setSent(true)
         setMessage('')
-        setTimeout(() => { setOpen(false); setSent(false) }, 2000)
+        setTimeout(() => { setOpen(false); setSent(false) }, 3500)
       }
     } catch {
       setError('Network error, please try again')
@@ -51,7 +57,7 @@ export default function FeedbackButton() {
         Send Feedback
       </button>
 
-      {open && (
+      {mounted && open && createPortal((
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
           {/* Modal uses CSS variables so it adapts to light/dark automatically */}
           <div
@@ -87,7 +93,7 @@ export default function FeedbackButton() {
                   </svg>
                 </div>
                 <p className="font-medium" style={{ color: 'var(--text-1)' }}>Thanks for your feedback!</p>
-                <p className="text-sm mt-1" style={{ color: 'var(--text-3)' }}>It has been sent to the MedPass team.</p>
+                <p className="text-sm mt-1" style={{ color: 'var(--text-3)' }}>It has been sent to the MedGuard team.</p>
               </div>
             ) : (
               <form onSubmit={handleSubmit} className="px-6 py-5 space-y-4">
@@ -160,7 +166,7 @@ export default function FeedbackButton() {
             )}
           </div>
         </div>
-      )}
+      ), document.body)}
     </>
   )
 }

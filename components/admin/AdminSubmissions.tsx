@@ -145,6 +145,9 @@ export default function AdminSubmissions({ overview, sites }: Props) {
         <p className="text-sm text-slate-500 mt-0.5">
           Business-scoped oversight only. This page shows workflow counts and site trends without exposing declaration contents.
         </p>
+        <p className="text-sm text-slate-500 mt-2">
+          The overview card for <span className="font-medium text-slate-300">Unreviewed &gt;24h</span> combines both <span className="font-medium text-slate-300">Awaiting Review</span> and <span className="font-medium text-slate-300">In Review</span> items that are still unresolved after 24 hours.
+        </p>
       </div>
 
       <section className="space-y-4">

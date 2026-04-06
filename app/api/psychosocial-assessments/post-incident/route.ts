@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
-import { createClient } from '@supabase/supabase-js'
+import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
 import { requireAuthenticatedUser, requireMedicScope, requireRole } from '@/lib/route-access'
 import type { PsychosocialModulePayload, PsychosocialPostIncidentEventType } from '@/lib/types'
@@ -10,6 +10,46 @@ import { safeLogServerEvent } from '@/lib/app-event-log'
 import { enforceActionRateLimit } from '@/lib/rate-limit'
 
 export const runtime = 'nodejs'
+
+async function resolveWorkerId({
+  supabase,
+  businessId,
+  siteId,
+  workerId,
+  workerNameSnapshot,
+}: {
+  supabase: SupabaseClient
+  businessId: string
+  siteId: string
+  workerId: string | null
+  workerNameSnapshot: string
+}) {
+  if (workerId) return { workerId }
+
+  const { data, error } = await supabase
+    .from('user_accounts')
+    .select('id, display_name')
+    .eq('business_id', businessId)
+    .eq('role', 'worker')
+    .contains('site_ids', [siteId])
+    .ilike('display_name', workerNameSnapshot)
+    .limit(2)
+  const workers = (data ?? []) as Array<{ id: string; display_name: string | null }>
+
+  if (error) {
+    return { error: 'Unable to validate the worker account for this welfare case.' }
+  }
+
+  if (workers.length === 0) {
+    return { error: 'No worker account matched that name at this site. Enter the worker name exactly as registered in MedGuard or add the worker account ID as a fallback.' }
+  }
+
+  if (workers.length > 1) {
+    return { error: 'More than one worker account matched that name at this site. Please enter the worker account ID fallback to identify the correct worker.' }
+  }
+
+  return { workerId: workers[0].id }
+}
 
 export async function POST(request: NextRequest) {
   const cookieStore = await cookies()
@@ -85,10 +125,24 @@ export async function POST(request: NextRequest) {
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
   )
 
+  const resolvedWorker = await resolveWorkerId({
+    supabase,
+    businessId: medicAccount.business_id,
+    siteId: site_id,
+    workerId: workerId ?? null,
+    workerNameSnapshot,
+  })
+
+  if (resolvedWorker.error) {
+    return NextResponse.json({ error: resolvedWorker.error }, { status: 400 })
+  }
+
+  const resolvedWorkerId = resolvedWorker.workerId
+
   const payload: PsychosocialModulePayload = {
     postIncidentWelfare: {
       linkedIncidentOrCaseId,
-      workerId,
+      workerId: resolvedWorkerId,
       workerNameSnapshot,
       jobRole,
       eventType: eventType as PsychosocialPostIncidentEventType,
@@ -133,7 +187,7 @@ export async function POST(request: NextRequest) {
     .insert({
       business_id: medicAccount.business_id,
       site_id,
-      worker_id: workerId,
+      worker_id: resolvedWorkerId,
       module_key: 'psychosocial_health',
       module_version: 1,
       status: 'in_medic_review',

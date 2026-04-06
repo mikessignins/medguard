@@ -3,12 +3,35 @@ import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { redirect } from 'next/navigation'
 import { formatDistanceToNow } from 'date-fns'
 
-function MetricCard({ title, value, color, alert }: { title: string; value: number; color: string; alert?: boolean }) {
+function MetricCard({
+  title,
+  value,
+  color,
+  alert,
+  helpText,
+}: {
+  title: string
+  value: number
+  color: string
+  alert?: boolean
+  helpText?: string
+}) {
   return (
     <div className={`bg-[var(--bg-card)] backdrop-blur-sm border rounded-xl p-5 ${
       alert && value > 0 ? 'border-red-500/40 bg-red-500/5' : 'border-[var(--border-md)]'
     }`}>
-      <p className="text-xs font-semibold text-[var(--text-3)] uppercase tracking-wide mb-2">{title}</p>
+      <div className="mb-2 flex items-start gap-2">
+        <p className="text-xs font-semibold text-[var(--text-3)] uppercase tracking-wide">{title}</p>
+        {helpText && (
+          <span
+            className="inline-flex h-4 w-4 shrink-0 cursor-help items-center justify-center rounded-full border border-[var(--border-md)] text-[10px] font-semibold text-[var(--text-3)]"
+            title={helpText}
+            aria-label={helpText}
+          >
+            i
+          </span>
+        )}
+      </div>
       <p className={`text-3xl font-bold ${alert && value > 0 ? 'text-red-400' : color}`}>{value}</p>
       {alert && value > 0 && (
         <p className="text-xs text-red-400 mt-1">Review required — safety risk</p>
@@ -84,7 +107,13 @@ export default async function AdminPage() {
     { title: 'Pending Medics', value: pendingCount ?? 0, color: 'text-amber-400', alert: false },
     { title: 'Sites', value: siteCount ?? 0, color: 'text-violet-400', alert: false },
     { title: 'Declarations This Month', value: submissionsThisMonth, color: 'text-cyan-400', alert: false },
-    { title: 'Unreviewed >24h', value: staleForms ?? 0, color: 'text-slate-400', alert: true },
+    {
+      title: 'Unreviewed >24h',
+      value: staleForms ?? 0,
+      color: 'text-slate-400',
+      alert: true,
+      helpText: 'Includes both awaiting review and already in review submissions that are still unresolved after 24 hours.',
+    },
   ]
 
   // Warn if the auto-purge cron hasn't run in > 25 hours

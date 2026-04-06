@@ -1,5 +1,5 @@
 'use client'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { format } from 'date-fns'
@@ -50,6 +50,10 @@ export default function FeedbackReview({
   const [editNote, setEditNote] = useState('')
   const [editStatus, setEditStatus] = useState<FeedbackStatus>('Unread')
   const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    setItems(initialItems)
+  }, [initialItems])
 
   function openItem(item: FeedbackItem) {
     setSelected(item)

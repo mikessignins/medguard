@@ -13,7 +13,7 @@ export default async function MedicPostIncidentWelfarePage({
 
   const { data: account } = await supabase
     .from('user_accounts')
-    .select('role, site_ids, contract_end_date')
+    .select('role, business_id, site_ids, contract_end_date')
     .eq('id', user.id)
     .single()
 
@@ -21,11 +21,26 @@ export default async function MedicPostIncidentWelfarePage({
   if (account.contract_end_date && new Date(account.contract_end_date) < new Date()) redirect('/expired')
 
   const siteIds: string[] = account.site_ids || []
-  const { data: sites } = await supabase
-    .from('sites')
-    .select('id,name')
-    .in('id', siteIds.length ? siteIds : ['__none__'])
-    .order('name', { ascending: true })
+  const [{ data: sites }, { data: workers }] = await Promise.all([
+    supabase
+      .from('sites')
+      .select('id,name')
+      .in('id', siteIds.length ? siteIds : ['__none__'])
+      .order('name', { ascending: true }),
+    supabase
+      .from('user_accounts')
+      .select('id,display_name,site_ids')
+      .eq('business_id', account.business_id)
+      .eq('role', 'worker')
+      .overlaps('site_ids', siteIds.length ? siteIds : ['__none__'])
+      .order('display_name', { ascending: true }),
+  ])
 
-  return <PostIncidentWelfareForm sites={sites || []} initialSite={searchParams.site} />
+  return (
+    <PostIncidentWelfareForm
+      sites={sites || []}
+      workers={workers || []}
+      initialSite={searchParams.site}
+    />
+  )
 }
