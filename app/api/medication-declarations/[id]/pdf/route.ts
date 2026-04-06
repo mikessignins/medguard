@@ -3,6 +3,8 @@ import { createClient } from '@supabase/supabase-js'
 import PDFDocument from 'pdfkit'
 import type { ScriptUpload } from '@/lib/types'
 import { resolveBusinessLogoUrl } from '@/lib/business-logo'
+import { enforceActionRateLimit } from '@/lib/rate-limit'
+import { safeLogServerEvent } from '@/lib/app-event-log'
 import {
   streamToBuffer, sanitize, fmtDate, fmtDateTime, parseArray,
   pageHeader, pageFooter, sectionHeader, twoColTable,
@@ -31,6 +33,21 @@ export async function GET(
 async function generateMedDecPdf(id: string) {
   const auth = await getAuthenticatedMedic()
   if (!auth) return new NextResponse('Unauthorized', { status: 401 })
+
+  const rateLimited = await enforceActionRateLimit({
+    action: 'medication_pdf_exported',
+    actorUserId: auth.user.id,
+    actorRole: auth.account.role,
+    actorName: auth.account.display_name,
+    businessId: auth.account.business_id,
+    moduleKey: 'confidential_medication',
+    route: '/api/medication-declarations/[id]/pdf',
+    targetId: id,
+    limit: 10,
+    windowMs: 5 * 60_000,
+    errorMessage: 'Too many medication PDF exports were requested. Please wait a few minutes and try again.',
+  })
+  if (rateLimited) return rateLimited
 
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -363,6 +380,19 @@ async function generateMedDecPdf(id: string) {
       })
       .eq('id', id)
   }
+
+  await safeLogServerEvent({
+    source: 'web_api',
+    action: 'medication_pdf_exported',
+    result: 'success',
+    actorUserId: auth.user.id,
+    actorRole: auth.account.role,
+    actorName: auth.account.display_name,
+    businessId: auth.account.business_id,
+    moduleKey: 'confidential_medication',
+    route: '/api/medication-declarations/[id]/pdf',
+    targetId: id,
+  })
 
   return new NextResponse(pdfBuffer as unknown as BodyInit, {
     status: 200,

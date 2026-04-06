@@ -5,6 +5,10 @@ import { cookies } from 'next/headers'
 import type { MedDecReviewStatus } from '@/lib/types'
 import { requireAuthenticatedUser, requireMedicScope, requireRole } from '@/lib/route-access'
 import { validateMedicationReviewTransition } from '@/lib/medication-review-guards'
+import { safeLogServerEvent } from '@/lib/app-event-log'
+import { parseJsonBody } from '@/lib/api-validation'
+import { medicationReviewRequestSchema } from '@/lib/review-request-schemas'
+import { enforceActionRateLimit } from '@/lib/rate-limit'
 
 const VALID_STATUSES: MedDecReviewStatus[] = ['Pending', 'In Review', 'Normal Duties', 'Restricted Duties', 'Unfit for Work']
 
@@ -37,8 +41,25 @@ export async function PATCH(
   if (roleError) return NextResponse.json({ error: roleError.error }, { status: roleError.status })
   const medicAccount = account!
 
-  const body = await request.json()
-  const { medic_review_status, medic_comments, review_required } = body
+  const rateLimited = await enforceActionRateLimit({
+    action: 'medication_review_saved',
+    actorUserId: userId!,
+    actorRole: medicAccount.role,
+    actorName: medicAccount.display_name,
+    businessId: medicAccount.business_id,
+    moduleKey: 'confidential_medication',
+    route: '/api/medication-declarations/[id]/review',
+    targetId: params.id,
+    limit: 20,
+    windowMs: 5 * 60_000,
+    errorMessage: 'Too many medication review updates were submitted. Please wait a moment and try again.',
+  })
+  if (rateLimited) return rateLimited
+
+  const parsed = await parseJsonBody(request, medicationReviewRequestSchema)
+  if (!parsed.success) return parsed.response
+
+  const { medic_review_status, medic_comments, review_required } = parsed.data
 
   if (!VALID_STATUSES.includes(medic_review_status)) {
     return NextResponse.json({ error: 'Invalid status' }, { status: 400 })
@@ -76,12 +97,43 @@ export async function PATCH(
     .update({
       medic_review_status,
       medic_comments: medic_comments ?? '',
-      review_required: !!review_required,
+      review_required,
       medic_name: medicAccount.display_name,
       medic_reviewed_at: new Date().toISOString(),
     })
     .eq('id', params.id)
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) {
+    await safeLogServerEvent({
+      source: 'web_api',
+      action: 'medication_review_saved',
+      result: 'failure',
+      actorUserId: userId,
+      actorRole: medicAccount.role,
+      actorName: medicAccount.display_name,
+      businessId: medicAccount.business_id,
+      moduleKey: 'confidential_medication',
+      route: '/api/medication-declarations/[id]/review',
+      targetId: params.id,
+      errorMessage: error.message,
+      context: { medic_review_status },
+    })
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+
+  await safeLogServerEvent({
+    source: 'web_api',
+    action: 'medication_review_saved',
+    result: 'success',
+    actorUserId: userId,
+    actorRole: medicAccount.role,
+    actorName: medicAccount.display_name,
+    businessId: medicAccount.business_id,
+    moduleKey: 'confidential_medication',
+    route: '/api/medication-declarations/[id]/review',
+    targetId: params.id,
+    context: { medic_review_status },
+  })
+
   return NextResponse.json({ ok: true })
 }

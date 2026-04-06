@@ -2,6 +2,12 @@ import { createClient } from '@/lib/supabase/server'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import { requireAuthenticatedUser, requireRole } from '@/lib/route-access'
+import { parseJsonBody } from '@/lib/api-validation'
+import { z } from 'zod'
+
+const trialSchema = z.object({
+  trial_until: z.string().datetime({ offset: true }).nullable(),
+})
 
 // PATCH /api/businesses/[id]/trial
 // Body: { trial_until: string (ISO) | null }
@@ -23,13 +29,9 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   const roleError = requireRole(account, 'superuser')
   if (roleError) return NextResponse.json({ error: roleError.error }, { status: roleError.status })
 
-  const body = await req.json()
-  const { trial_until } = body
-
-  // Accept a valid ISO date string or null (to clear the trial period)
-  if (trial_until !== null && (typeof trial_until !== 'string' || isNaN(Date.parse(trial_until)))) {
-    return NextResponse.json({ error: 'trial_until must be an ISO date string or null' }, { status: 400 })
-  }
+  const parsed = await parseJsonBody(req, trialSchema)
+  if (!parsed.success) return parsed.response
+  const { trial_until } = parsed.data
 
   const service = createServiceClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,

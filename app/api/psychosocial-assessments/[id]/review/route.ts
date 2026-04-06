@@ -3,11 +3,13 @@ import { createServerClient } from '@supabase/ssr'
 import { createClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
 import { requireAuthenticatedUser, requireMedicScope, requireRole } from '@/lib/route-access'
-import type { PsychosocialReviewEntry, PsychosocialReviewPayload } from '@/lib/types'
+import type { PsychosocialReviewEntry } from '@/lib/types'
+import { safeLogServerEvent } from '@/lib/app-event-log'
+import { parseJsonBody } from '@/lib/api-validation'
+import { psychosocialReviewRequestSchema } from '@/lib/review-request-schemas'
+import { enforceActionRateLimit } from '@/lib/rate-limit'
 
 export const runtime = 'nodejs'
-
-const NEXT_STATUSES = ['awaiting_follow_up', 'resolved'] as const
 
 export async function PATCH(
   request: NextRequest,
@@ -44,21 +46,25 @@ export async function PATCH(
   if (roleError) return NextResponse.json({ error: roleError.error }, { status: roleError.status })
   const medicAccount = account!
 
-  let body: PsychosocialReviewPayload
-  let nextStatus: typeof NEXT_STATUSES[number] = 'resolved'
-  try {
-    const parsed = await request.json()
-    body = parsed as PsychosocialReviewPayload
-    if (typeof parsed.nextStatus === 'string' && NEXT_STATUSES.includes(parsed.nextStatus)) {
-      nextStatus = parsed.nextStatus
-    }
-  } catch {
-    return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
-  }
+  const rateLimited = await enforceActionRateLimit({
+    action: 'psychosocial_review_saved',
+    actorUserId: userId!,
+    actorRole: medicAccount.role,
+    actorName: medicAccount.display_name,
+    businessId: medicAccount.business_id,
+    moduleKey: 'psychosocial_health',
+    route: '/api/psychosocial-assessments/[id]/review',
+    targetId: params.id,
+    limit: 20,
+    windowMs: 5 * 60_000,
+    errorMessage: 'Too many psychosocial review updates were submitted. Please wait a moment and try again.',
+  })
+  if (rateLimited) return rateLimited
 
-  if (!body.outcomeSummary?.trim()) {
-    return NextResponse.json({ error: 'An outcome summary is required.' }, { status: 400 })
-  }
+  const parsed = await parseJsonBody(request, psychosocialReviewRequestSchema)
+  if (!parsed.success) return parsed.response
+
+  const { nextStatus, ...body } = parsed.data
 
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -106,7 +112,7 @@ export async function PATCH(
   }
 
   const now = new Date().toISOString()
-  const newReviewComment = typeof body.reviewComments === 'string' ? body.reviewComments.trim() : ''
+  const newReviewComment = typeof body.reviewComments === 'string' ? body.reviewComments : ''
   const existingEntries = Array.isArray(existingReviewPayload?.reviewEntries)
     ? (existingReviewPayload.reviewEntries as PsychosocialReviewEntry[])
     : []
@@ -119,8 +125,8 @@ export async function PATCH(
           createdByUserId: userId,
           createdByName: medicAccount.display_name,
           actionLabel:
-            typeof body.supportActions === 'string' && body.supportActions.trim()
-              ? body.supportActions.trim()
+            typeof body.supportActions === 'string' && body.supportActions
+              ? body.supportActions
               : null,
           note: newReviewComment,
         },
@@ -154,7 +160,37 @@ export async function PATCH(
     .eq('id', params.id)
     .eq('module_key', 'psychosocial_health')
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) {
+    await safeLogServerEvent({
+      source: 'web_api',
+      action: 'psychosocial_review_saved',
+      result: 'failure',
+      actorUserId: userId,
+      actorRole: medicAccount.role,
+      actorName: medicAccount.display_name,
+      businessId: medicAccount.business_id,
+      moduleKey: 'psychosocial_health',
+      route: '/api/psychosocial-assessments/[id]/review',
+      targetId: params.id,
+      errorMessage: error.message,
+      context: { next_status: nextStatus, workflow_kind: workflowKind },
+    })
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+
+  await safeLogServerEvent({
+    source: 'web_api',
+    action: 'psychosocial_review_saved',
+    result: 'success',
+    actorUserId: userId,
+    actorRole: medicAccount.role,
+    actorName: medicAccount.display_name,
+    businessId: medicAccount.business_id,
+    moduleKey: 'psychosocial_health',
+    route: '/api/psychosocial-assessments/[id]/review',
+    targetId: params.id,
+    context: { next_status: nextStatus, workflow_kind: workflowKind },
+  })
 
   return NextResponse.json({ ok: true })
 }

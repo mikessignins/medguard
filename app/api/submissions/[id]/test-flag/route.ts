@@ -1,6 +1,12 @@
 import { createClient } from '@/lib/supabase/server'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
+import { parseJsonBody } from '@/lib/api-validation'
+import { z } from 'zod'
+
+const testFlagSchema = z.object({
+  is_test: z.boolean(),
+})
 
 // PATCH /api/submissions/[id]/test-flag
 // Body: { is_test: boolean }
@@ -22,10 +28,9 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  const body = await req.json()
-  if (typeof body.is_test !== 'boolean') {
-    return NextResponse.json({ error: 'is_test must be a boolean' }, { status: 400 })
-  }
+  const parsed = await parseJsonBody(req, testFlagSchema)
+  if (!parsed.success) return parsed.response
+  const body = parsed.data
 
   const service = createServiceClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,

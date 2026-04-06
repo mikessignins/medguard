@@ -4,18 +4,12 @@ import { createClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
 import { requireAuthenticatedUser, requireMedicScope, requireRole } from '@/lib/route-access'
 import type { PsychosocialModulePayload, PsychosocialPostIncidentEventType } from '@/lib/types'
+import { parseJsonBody } from '@/lib/api-validation'
+import { psychosocialPostIncidentRequestSchema } from '@/lib/review-request-schemas'
+import { safeLogServerEvent } from '@/lib/app-event-log'
+import { enforceActionRateLimit } from '@/lib/rate-limit'
 
 export const runtime = 'nodejs'
-
-const EVENT_TYPES: PsychosocialPostIncidentEventType[] = [
-  'witnessed_serious_injury',
-  'witnessed_death',
-  'involved_in_cpr',
-  'personally_injured',
-  'serious_near_miss',
-  'distressing_behavioural_incident',
-  'other',
-]
 
 export async function POST(request: NextRequest) {
   const cookieStore = await cookies()
@@ -47,22 +41,41 @@ export async function POST(request: NextRequest) {
   if (roleError) return NextResponse.json({ error: roleError.error }, { status: roleError.status })
   const medicAccount = account!
 
-  let body: Record<string, unknown>
-  try {
-    body = await request.json()
-  } catch {
-    return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
-  }
+  const rateLimited = await enforceActionRateLimit({
+    action: 'psychosocial_post_incident_created',
+    actorUserId: userId!,
+    actorRole: medicAccount.role,
+    actorName: medicAccount.display_name,
+    businessId: medicAccount.business_id,
+    moduleKey: 'psychosocial_health',
+    route: '/api/psychosocial-assessments/post-incident',
+    limit: 10,
+    windowMs: 10 * 60_000,
+    errorMessage: 'Too many post-incident welfare cases were created in a short period. Please wait a few minutes and try again.',
+  })
+  if (rateLimited) return rateLimited
 
-  const site_id = typeof body.site_id === 'string' ? body.site_id : ''
-  const workerNameSnapshot = typeof body.workerNameSnapshot === 'string' ? body.workerNameSnapshot.trim() : ''
-  const eventType = typeof body.eventType === 'string' ? body.eventType as PsychosocialPostIncidentEventType : null
-  const eventDateTime = typeof body.eventDateTime === 'string' ? body.eventDateTime : ''
-  const natureOfExposure = typeof body.natureOfExposure === 'string' ? body.natureOfExposure.trim() : ''
+  const parsed = await parseJsonBody(request, psychosocialPostIncidentRequestSchema)
+  if (!parsed.success) return parsed.response
 
-  if (!site_id || !workerNameSnapshot || !eventType || !EVENT_TYPES.includes(eventType) || !eventDateTime || !natureOfExposure) {
-    return NextResponse.json({ error: 'Missing required post-incident welfare fields.' }, { status: 400 })
-  }
+  const {
+    site_id,
+    workerNameSnapshot,
+    workerId,
+    jobRole,
+    linkedIncidentOrCaseId,
+    eventType,
+    eventDateTime,
+    natureOfExposure,
+    initialDefusingOffered,
+    normalReactionsExplained,
+    supportPersonContacted,
+    eapReferralOffered,
+    externalPsychologyReferralOffered,
+    followUpScheduledAt,
+    confidentialityAcknowledged,
+    reviewNotes,
+  } = parsed.data
 
   const scopeError = requireMedicScope(medicAccount, { business_id: medicAccount.business_id, site_id })
   if (scopeError) return NextResponse.json({ error: scopeError.error }, { status: scopeError.status })
@@ -74,21 +87,21 @@ export async function POST(request: NextRequest) {
 
   const payload: PsychosocialModulePayload = {
     postIncidentWelfare: {
-      linkedIncidentOrCaseId: typeof body.linkedIncidentOrCaseId === 'string' ? body.linkedIncidentOrCaseId || null : null,
-      workerId: typeof body.workerId === 'string' ? body.workerId || null : null,
+      linkedIncidentOrCaseId,
+      workerId,
       workerNameSnapshot,
-      jobRole: typeof body.jobRole === 'string' ? body.jobRole || null : null,
-      eventType,
+      jobRole,
+      eventType: eventType as PsychosocialPostIncidentEventType,
       eventDateTime,
       natureOfExposure,
-      initialDefusingOffered: Boolean(body.initialDefusingOffered),
-      normalReactionsExplained: Boolean(body.normalReactionsExplained),
-      supportPersonContacted: Boolean(body.supportPersonContacted),
-      eapReferralOffered: Boolean(body.eapReferralOffered),
-      externalPsychologyReferralOffered: Boolean(body.externalPsychologyReferralOffered),
-      followUpScheduledAt: typeof body.followUpScheduledAt === 'string' && body.followUpScheduledAt ? body.followUpScheduledAt : null,
-      confidentialityAcknowledged: Boolean(body.confidentialityAcknowledged),
-      reviewNotes: typeof body.reviewNotes === 'string' ? body.reviewNotes || null : null,
+      initialDefusingOffered,
+      normalReactionsExplained,
+      supportPersonContacted,
+      eapReferralOffered,
+      externalPsychologyReferralOffered,
+      followUpScheduledAt,
+      confidentialityAcknowledged,
+      reviewNotes,
     },
     scoreSummary: {
       derivedPulseRiskLevel: 'high',
@@ -108,11 +121,11 @@ export async function POST(request: NextRequest) {
     triagePriority: 'priority',
     assignedReviewPath: 'medic',
     contactOutcome: 'not_contacted_yet',
-    followUpRequired: typeof body.followUpScheduledAt === 'string' && body.followUpScheduledAt ? true : false,
-    followUpScheduledAt: typeof body.followUpScheduledAt === 'string' && body.followUpScheduledAt ? body.followUpScheduledAt : null,
-    supportPersonContacted: Boolean(body.supportPersonContacted),
-    eapReferralOffered: Boolean(body.eapReferralOffered),
-    externalPsychologyReferralOffered: Boolean(body.externalPsychologyReferralOffered),
+    followUpRequired: !!followUpScheduledAt,
+    followUpScheduledAt,
+    supportPersonContacted,
+    eapReferralOffered,
+    externalPsychologyReferralOffered,
   }
 
   const { data, error } = await supabase
@@ -120,7 +133,7 @@ export async function POST(request: NextRequest) {
     .insert({
       business_id: medicAccount.business_id,
       site_id,
-      worker_id: typeof body.workerId === 'string' && body.workerId ? body.workerId : null,
+      worker_id: workerId,
       module_key: 'psychosocial_health',
       module_version: 1,
       status: 'in_medic_review',
@@ -133,8 +146,35 @@ export async function POST(request: NextRequest) {
     .single()
 
   if (error || !data) {
+    await safeLogServerEvent({
+      source: 'web_api',
+      action: 'psychosocial_post_incident_created',
+      result: 'failure',
+      actorUserId: userId,
+      actorRole: medicAccount.role,
+      actorName: medicAccount.display_name,
+      businessId: medicAccount.business_id,
+      moduleKey: 'psychosocial_health',
+      route: '/api/psychosocial-assessments/post-incident',
+      errorMessage: error?.message || 'Failed to create post-incident welfare case.',
+      context: { site_id, event_type: eventType },
+    })
     return NextResponse.json({ error: error?.message || 'Failed to create post-incident welfare case.' }, { status: 500 })
   }
+
+  await safeLogServerEvent({
+    source: 'web_api',
+    action: 'psychosocial_post_incident_created',
+    result: 'success',
+    actorUserId: userId,
+    actorRole: medicAccount.role,
+    actorName: medicAccount.display_name,
+    businessId: medicAccount.business_id,
+    moduleKey: 'psychosocial_health',
+    route: '/api/psychosocial-assessments/post-incident',
+    targetId: data.id,
+    context: { site_id, event_type: eventType },
+  })
 
   return NextResponse.json({ id: data.id })
 }

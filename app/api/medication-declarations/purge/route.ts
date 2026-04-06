@@ -3,6 +3,10 @@ import { createServerClient } from '@supabase/ssr'
 import { createClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
 import { requireAuthenticatedUser, requireMedicScope, requireRole } from '@/lib/route-access'
+import { safeLogServerEvent } from '@/lib/app-event-log'
+import { parseJsonBody } from '@/lib/api-validation'
+import { medicationPurgeRequestSchema } from '@/lib/review-request-schemas'
+import { enforceActionRateLimit } from '@/lib/rate-limit'
 
 export const runtime = 'nodejs'
 
@@ -32,13 +36,23 @@ export async function POST(request: NextRequest) {
   if (roleError) return new NextResponse(roleError.error, { status: roleError.status })
   const medicAccount = account!
 
-  let ids: string[]
-  try {
-    const body = await request.json()
-    ids = Array.isArray(body.ids) ? body.ids : []
-  } catch {
-    return new NextResponse('Invalid request body', { status: 400 })
-  }
+  const rateLimited = await enforceActionRateLimit({
+    action: 'medication_purge_completed',
+    actorUserId: userId!,
+    actorRole: medicAccount.role,
+    actorName: medicAccount.display_name,
+    businessId: medicAccount.business_id,
+    moduleKey: 'confidential_medication',
+    route: '/api/medication-declarations/purge',
+    limit: 5,
+    windowMs: 15 * 60_000,
+    errorMessage: 'Too many medication purge requests were submitted. Please wait before trying again.',
+  })
+  if (rateLimited) return rateLimited
+
+  const parsed = await parseJsonBody(request, medicationPurgeRequestSchema)
+  if (!parsed.success) return parsed.response
+  const { ids } = parsed.data
 
   if (ids.length === 0) {
     return NextResponse.json({ purged: 0 })
@@ -113,8 +127,34 @@ export async function POST(request: NextRequest) {
 
   if (error) {
     console.error('[med-dec/purge] update error:', error)
+    await safeLogServerEvent({
+      source: 'web_api',
+      action: 'medication_purge_completed',
+      result: 'failure',
+      actorUserId: userId,
+      actorRole: medicAccount.role,
+      actorName: medicAccount.display_name,
+      businessId: medicAccount.business_id,
+      moduleKey: 'confidential_medication',
+      route: '/api/medication-declarations/purge',
+      errorMessage: error.message,
+      context: { purge_count: ids.length },
+    })
     return new NextResponse(`Purge failed: ${error.message}`, { status: 500 })
   }
+
+  await safeLogServerEvent({
+    source: 'web_api',
+    action: 'medication_purge_completed',
+    result: 'success',
+    actorUserId: userId,
+    actorRole: medicAccount.role,
+    actorName: medicAccount.display_name,
+    businessId: medicAccount.business_id,
+    moduleKey: 'confidential_medication',
+    route: '/api/medication-declarations/purge',
+    context: { purge_count: ids.length },
+  })
 
   return NextResponse.json({ purged: ids.length })
 }

@@ -2,12 +2,15 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { createClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
-import type { SubmissionStatus } from '@/lib/types'
 import { requireAuthenticatedUser, requireMedicScope, requireRole } from '@/lib/route-access'
 import {
   validateRequestedReviewStatus,
   validateReviewTransition,
 } from '@/lib/review-guards'
+import { safeLogServerEvent } from '@/lib/app-event-log'
+import { parseJsonBody } from '@/lib/api-validation'
+import { emergencyReviewRequestSchema } from '@/lib/review-request-schemas'
+import { enforceActionRateLimit } from '@/lib/rate-limit'
 
 export const runtime = 'nodejs'
 
@@ -40,14 +43,25 @@ export async function PATCH(
   if (roleError) return NextResponse.json({ error: roleError.error }, { status: roleError.status })
   const medicAccount = account!
 
-  let body: { status: SubmissionStatus; note?: string; version?: number }
-  try {
-    body = await request.json()
-  } catch {
-    return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
-  }
+  const rateLimited = await enforceActionRateLimit({
+    action: 'emergency_review_saved',
+    actorUserId: userId!,
+    actorRole: medicAccount.role,
+    actorName: medicAccount.display_name,
+    businessId: medicAccount.business_id,
+    moduleKey: 'emergency_declaration',
+    route: '/api/declarations/[id]/review',
+    targetId: params.id,
+    limit: 20,
+    windowMs: 5 * 60_000,
+    errorMessage: 'Too many emergency review updates were submitted. Please wait a moment and try again.',
+  })
+  if (rateLimited) return rateLimited
 
-  const { status, note, version } = body
+  const parsed = await parseJsonBody(request, emergencyReviewRequestSchema)
+  if (!parsed.success) return parsed.response
+
+  const { status, note, version } = parsed.data
 
   const invalidStatus = validateRequestedReviewStatus(status)
   if (invalidStatus) {
@@ -74,7 +88,7 @@ export async function PATCH(
     currentStatus: current.status,
     requestedStatus: status,
     currentVersion: current.version,
-    requestedVersion: version,
+    requestedVersion: version ?? undefined,
   })
   if (transitionError) {
     return NextResponse.json(
@@ -106,6 +120,37 @@ export async function PATCH(
     .update({ status, decision })
     .eq('id', params.id)
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) {
+    await safeLogServerEvent({
+      source: 'web_api',
+      action: 'emergency_review_saved',
+      result: 'failure',
+      actorUserId: userId,
+      actorRole: medicAccount.role,
+      actorName: medicAccount.display_name,
+      businessId: medicAccount.business_id,
+      moduleKey: 'emergency_declaration',
+      route: '/api/declarations/[id]/review',
+      targetId: params.id,
+      errorMessage: error.message,
+      context: { status },
+    })
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+
+  await safeLogServerEvent({
+    source: 'web_api',
+    action: 'emergency_review_saved',
+    result: 'success',
+    actorUserId: userId,
+    actorRole: medicAccount.role,
+    actorName: medicAccount.display_name,
+    businessId: medicAccount.business_id,
+    moduleKey: 'emergency_declaration',
+    route: '/api/declarations/[id]/review',
+    targetId: params.id,
+    context: { status },
+  })
+
   return NextResponse.json({ ok: true })
 }

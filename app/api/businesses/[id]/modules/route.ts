@@ -3,6 +3,13 @@ import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import { isKnownModuleKey, MODULE_REGISTRY, type ModuleKey } from '@/lib/modules'
 import { requireAuthenticatedUser, requireRole } from '@/lib/route-access'
+import { parseJsonBody } from '@/lib/api-validation'
+import { z } from 'zod'
+
+const businessModuleSchema = z.object({
+  enabled: z.boolean(),
+  moduleKey: z.string().optional(),
+})
 
 export async function PATCH(req: Request, { params }: { params: { id: string } }) {
   const supabase = await createClient()
@@ -20,10 +27,9 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   const roleError = requireRole(account, 'superuser')
   if (roleError) return NextResponse.json({ error: roleError.error }, { status: roleError.status })
 
-  const body = await req.json()
-  if (typeof body.enabled !== 'boolean') {
-    return NextResponse.json({ error: 'Invalid value' }, { status: 400 })
-  }
+  const parsed = await parseJsonBody(req, businessModuleSchema)
+  if (!parsed.success) return parsed.response
+  const body = parsed.data
 
   const moduleKey: ModuleKey = typeof body.moduleKey === 'string' && isKnownModuleKey(body.moduleKey)
     ? body.moduleKey

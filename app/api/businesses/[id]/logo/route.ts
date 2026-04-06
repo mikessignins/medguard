@@ -2,10 +2,12 @@ import { createClient } from '@/lib/supabase/server'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuthenticatedUser, requireRole } from '@/lib/route-access'
+import { z } from 'zod'
 
 const MAX_SIZE = 2 * 1024 * 1024 // 2 MB
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp']
 type LogoVariant = 'default' | 'light' | 'dark'
+const logoVariantSchema = z.enum(['default', 'light', 'dark'])
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   const supabase = await createClient()
@@ -26,7 +28,11 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const formData = await req.formData()
   const file = formData.get('logo') as File | null
   const rawVariant = formData.get('variant')
-  const variant: LogoVariant = rawVariant === 'light' || rawVariant === 'dark' ? rawVariant : 'default'
+  const variantResult = logoVariantSchema.safeParse(rawVariant ?? 'default')
+  if (!variantResult.success) {
+    return NextResponse.json({ error: 'Invalid logo variant' }, { status: 400 })
+  }
+  const variant: LogoVariant = variantResult.data
   if (!file) return NextResponse.json({ error: 'No file provided' }, { status: 400 })
   if (!ALLOWED_TYPES.includes(file.type)) {
     return NextResponse.json({ error: 'Invalid file type. Use JPEG, PNG, or WebP.' }, { status: 400 })

@@ -3,35 +3,39 @@
 import { useMemo } from 'react'
 import { format } from 'date-fns'
 
-interface SubmissionItem {
-  submitted_at: string
-  status: string
-  site_id: string | null
-}
-
-interface MedDeclarationItem {
-  submitted_at: string
-  medic_review_status: string | null
-  site_id: string | null
-}
-
 interface SiteItem {
   id: string
   name: string
 }
 
-interface Props {
-  submissions: SubmissionItem[]
-  medDeclarations: MedDeclarationItem[]
-  sites: SiteItem[]
+interface BreakdownRow {
+  label: string
+  value: number
 }
 
-function getMonthKey(dateStr: string) {
-  try {
-    return format(new Date(dateStr), 'yyyy-MM')
-  } catch {
-    return 'Unknown'
+interface SubmissionOverview {
+  emergency: {
+    newCount: number
+    inReviewCount: number
+    approvedCount: number
+    followUpCount: number
+    totalActioned: number
+    monthlyRows: BreakdownRow[]
+    siteRows: BreakdownRow[]
   }
+  medication: {
+    pendingCount: number
+    inReviewCount: number
+    reviewedCount: number
+    totalVisible: number
+    monthlyRows: BreakdownRow[]
+    siteRows: BreakdownRow[]
+  }
+}
+
+interface Props {
+  overview: SubmissionOverview
+  sites: SiteItem[]
 }
 
 function formatMonth(key: string) {
@@ -113,81 +117,26 @@ function MetricCard({
   )
 }
 
-export default function AdminSubmissions({ submissions, medDeclarations, sites }: Props) {
+export default function AdminSubmissions({ overview, sites }: Props) {
   const siteNameMap = useMemo(() => buildSiteNameMap(sites), [sites])
 
-  const emergency = useMemo(() => {
-    const newCount = submissions.filter(item => item.status === 'New').length
-    const inReviewCount = submissions.filter(item => item.status === 'In Review').length
-    const approvedCount = submissions.filter(item => item.status === 'Approved').length
-    const followUpCount = submissions.filter(item => item.status === 'Requires Follow-up').length
-    const actioned = submissions.filter(
-      item => item.status === 'In Review' || item.status === 'Approved' || item.status === 'Requires Follow-up',
-    )
+  const emergency = useMemo(() => ({
+    ...overview.emergency,
+    monthlyRows: overview.emergency.monthlyRows.map((row) => ({ ...row, label: formatMonth(row.label) })),
+    siteRows: overview.emergency.siteRows.map((row) => ({
+      ...row,
+      label: row.label ? siteNameMap.get(row.label) ?? 'Unknown site' : 'Unknown site',
+    })),
+  }), [overview.emergency, siteNameMap])
 
-    const monthlyCounts: Record<string, number> = {}
-    for (const item of actioned) {
-      const key = getMonthKey(item.submitted_at)
-      monthlyCounts[key] = (monthlyCounts[key] ?? 0) + 1
-    }
-
-    const siteCounts: Record<string, number> = {}
-    for (const item of actioned) {
-      const key = item.site_id ? siteNameMap.get(item.site_id) ?? 'Unknown site' : 'Unknown site'
-      siteCounts[key] = (siteCounts[key] ?? 0) + 1
-    }
-
-    return {
-      newCount,
-      inReviewCount,
-      approvedCount,
-      followUpCount,
-      totalActioned: actioned.length,
-      monthlyRows: Object.entries(monthlyCounts)
-        .sort((a, b) => b[0].localeCompare(a[0]))
-        .map(([label, value]) => ({ label: formatMonth(label), value })),
-      siteRows: Object.entries(siteCounts)
-        .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-        .map(([label, value]) => ({ label, value })),
-    }
-  }, [siteNameMap, submissions])
-
-  const medication = useMemo(() => {
-    const pendingCount = medDeclarations.filter(
-      item => !item.medic_review_status || item.medic_review_status === 'Pending',
-    ).length
-    const inReviewCount = medDeclarations.filter(item => item.medic_review_status === 'In Review').length
-    const reviewedCount = medDeclarations.filter(
-      item => item.medic_review_status === 'Normal Duties'
-        || item.medic_review_status === 'Restricted Duties'
-        || item.medic_review_status === 'Unfit for Work',
-    ).length
-
-    const monthlyCounts: Record<string, number> = {}
-    for (const item of medDeclarations) {
-      const key = getMonthKey(item.submitted_at)
-      monthlyCounts[key] = (monthlyCounts[key] ?? 0) + 1
-    }
-
-    const siteCounts: Record<string, number> = {}
-    for (const item of medDeclarations) {
-      const key = item.site_id ? siteNameMap.get(item.site_id) ?? 'Unknown site' : 'Unknown site'
-      siteCounts[key] = (siteCounts[key] ?? 0) + 1
-    }
-
-    return {
-      pendingCount,
-      inReviewCount,
-      reviewedCount,
-      totalVisible: medDeclarations.length,
-      monthlyRows: Object.entries(monthlyCounts)
-        .sort((a, b) => b[0].localeCompare(a[0]))
-        .map(([label, value]) => ({ label: formatMonth(label), value })),
-      siteRows: Object.entries(siteCounts)
-        .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-        .map(([label, value]) => ({ label, value })),
-    }
-  }, [medDeclarations, siteNameMap])
+  const medication = useMemo(() => ({
+    ...overview.medication,
+    monthlyRows: overview.medication.monthlyRows.map((row) => ({ ...row, label: formatMonth(row.label) })),
+    siteRows: overview.medication.siteRows.map((row) => ({
+      ...row,
+      label: row.label ? siteNameMap.get(row.label) ?? 'Unknown site' : 'Unknown site',
+    })),
+  }), [overview.medication, siteNameMap])
 
   return (
     <div className="space-y-8">

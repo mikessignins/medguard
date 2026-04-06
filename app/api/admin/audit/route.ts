@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { createClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
+import { parseJsonBody } from '@/lib/api-validation'
+import { safeLogServerEvent } from '@/lib/app-event-log'
+import { adminAuditRequestSchema } from '@/lib/review-request-schemas'
+import { enforceActionRateLimit } from '@/lib/rate-limit'
 
 export const runtime = 'nodejs'
 
@@ -33,21 +37,22 @@ export async function POST(request: NextRequest) {
     return new NextResponse('Forbidden', { status: 403 })
   }
 
-  let body: {
-    action: string
-    target_user_id?: string | null
-    target_name?: string | null
-    detail?: Record<string, unknown> | null
-  }
-  try {
-    body = await request.json()
-  } catch {
-    return new NextResponse('Invalid request body', { status: 400 })
-  }
+  const rateLimited = await enforceActionRateLimit({
+    action: 'admin_audit_recorded',
+    actorUserId: user.id,
+    actorRole: account.role,
+    actorName: account.display_name,
+    businessId: account.business_id,
+    route: '/api/admin/audit',
+    limit: 20,
+    windowMs: 60_000,
+    errorMessage: 'Too many admin audit actions were submitted. Please wait a minute and try again.',
+  })
+  if (rateLimited) return rateLimited
 
-  if (!body.action?.trim()) {
-    return new NextResponse('action is required', { status: 400 })
-  }
+  const parsed = await parseJsonBody(request, adminAuditRequestSchema)
+  if (!parsed.success) return parsed.response
+  const body = parsed.data
 
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -66,8 +71,32 @@ export async function POST(request: NextRequest) {
 
   if (error) {
     console.error('[admin/audit] insert error:', error)
+    await safeLogServerEvent({
+      source: 'web_api',
+      action: 'admin_audit_recorded',
+      result: 'failure',
+      actorUserId: user.id,
+      actorRole: account.role,
+      actorName: account.display_name,
+      businessId: account.business_id,
+      route: '/api/admin/audit',
+      errorMessage: error.message,
+      context: { action: body.action },
+    })
     return new NextResponse(error.message, { status: 500 })
   }
+
+  await safeLogServerEvent({
+    source: 'web_api',
+    action: 'admin_audit_recorded',
+    result: 'success',
+    actorUserId: user.id,
+    actorRole: account.role,
+    actorName: account.display_name,
+    businessId: account.business_id,
+    route: '/api/admin/audit',
+    context: { action: body.action },
+  })
 
   return new NextResponse(null, { status: 204 })
 }

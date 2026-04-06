@@ -16,6 +16,8 @@ import {
   PSYCHOSOCIAL_HAZARDS,
 } from '@/lib/psychosocial'
 import type { PsychosocialAssessment, PsychosocialReviewPayload } from '@/lib/types'
+import { enforceActionRateLimit } from '@/lib/rate-limit'
+import { safeLogServerEvent } from '@/lib/app-event-log'
 import {
   streamToBuffer,
   sanitize,
@@ -78,6 +80,21 @@ async function generatePsychosocialPdf(id: string) {
   if (!account || account.role !== 'medic') {
     return new NextResponse('Forbidden', { status: 403 })
   }
+
+  const rateLimited = await enforceActionRateLimit({
+    action: 'psychosocial_pdf_exported',
+    actorUserId: user.id,
+    actorRole: account.role,
+    actorName: account.display_name,
+    businessId: account.business_id,
+    moduleKey: 'psychosocial_health',
+    route: '/api/psychosocial-assessments/[id]/pdf',
+    targetId: id,
+    limit: 10,
+    windowMs: 5 * 60_000,
+    errorMessage: 'Too many psychosocial PDF exports were requested. Please wait a few minutes and try again.',
+  })
+  if (rateLimited) return rateLimited
 
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -262,6 +279,19 @@ async function generatePsychosocialPdf(id: string) {
       .eq('id', id)
       .eq('module_key', 'psychosocial_health')
   }
+
+  await safeLogServerEvent({
+    source: 'web_api',
+    action: 'psychosocial_pdf_exported',
+    result: 'success',
+    actorUserId: user.id,
+    actorRole: account.role,
+    actorName: account.display_name,
+    businessId: account.business_id,
+    moduleKey: 'psychosocial_health',
+    route: '/api/psychosocial-assessments/[id]/pdf',
+    targetId: id,
+  })
 
   return new NextResponse(new Uint8Array(pdfBuffer), {
     status: 200,

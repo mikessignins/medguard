@@ -2,6 +2,13 @@ import { createClient } from '@/lib/supabase/server'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import { requireAuthenticatedUser, requireRole } from '@/lib/route-access'
+import { parseJsonBody } from '@/lib/api-validation'
+import { z } from 'zod'
+
+const feedbackUpdateSchema = z.object({
+  status: z.enum(['Unread', 'Read', 'Planned', 'Implemented', 'Archived']),
+  superuser_note: z.string().max(5000, 'Note is too long').optional().default(''),
+})
 
 export async function PATCH(req: Request, { params }: { params: { id: string } }) {
   const supabase = await createClient()
@@ -19,7 +26,9 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   const roleError = requireRole(account, 'superuser')
   if (roleError) return NextResponse.json({ error: roleError.error }, { status: roleError.status })
 
-  const { status, superuser_note } = await req.json()
+  const parsed = await parseJsonBody(req, feedbackUpdateSchema)
+  if (!parsed.success) return parsed.response
+  const { status, superuser_note } = parsed.data
 
   const service = createServiceClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,

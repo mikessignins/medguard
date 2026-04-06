@@ -5,6 +5,10 @@ import { cookies } from 'next/headers'
 import type { MedicComment } from '@/lib/types'
 import { hasMedicScopeAccess } from '@/lib/medic-scope'
 import { parseSubmissionComments } from '@/lib/submission-comments'
+import { parseJsonBody } from '@/lib/api-validation'
+import { submissionCommentRequestSchema } from '@/lib/review-request-schemas'
+import { enforceActionRateLimit } from '@/lib/rate-limit'
+import { safeLogServerEvent } from '@/lib/app-event-log'
 
 export const runtime = 'nodejs'
 
@@ -102,15 +106,24 @@ export async function POST(
   const medic = await getAuthenticatedMedic()
   if (!medic) return new NextResponse('Unauthorized', { status: 401 })
 
-  let body: { note: string; outcome?: string | null }
-  try {
-    body = await request.json()
-  } catch {
-    return new NextResponse('Invalid JSON', { status: 400 })
-  }
+  const rateLimited = await enforceActionRateLimit({
+    action: 'emergency_comment_saved',
+    actorUserId: medic.id,
+    actorName: medic.name,
+    businessId: medic.business_id,
+    moduleKey: 'emergency_declaration',
+    route: '/api/declarations/[id]/comments',
+    targetId: params.id,
+    limit: 12,
+    windowMs: 60_000,
+    errorMessage: 'Too many comments were submitted. Please wait a minute and try again.',
+  })
+  if (rateLimited) return rateLimited
 
-  const note = body.note?.trim()
-  if (!note) return new NextResponse('note is required', { status: 400 })
+  const parsed = await parseJsonBody(request, submissionCommentRequestSchema)
+  if (!parsed.success) return parsed.response
+
+  const { note, outcome } = parsed.data
 
   const submission = await fetchScopedSubmission(params.id)
   if (!submission) return new NextResponse('Submission not found', { status: 404 })
@@ -124,7 +137,7 @@ export async function POST(
     medic_user_id: medic.id,
     medic_name: medic.name,
     note,
-    outcome: body.outcome ?? null,
+    outcome: outcome ?? null,
     created_at: now,
     edited_at: null,
   }
@@ -137,6 +150,18 @@ export async function POST(
 
   if (error) {
     console.error('[comments/POST] error:', error)
+    await safeLogServerEvent({
+      source: 'web_api',
+      action: 'emergency_comment_saved',
+      result: 'failure',
+      actorUserId: medic.id,
+      actorName: medic.name,
+      businessId: medic.business_id,
+      moduleKey: 'emergency_declaration',
+      route: '/api/declarations/[id]/comments',
+      targetId: params.id,
+      errorMessage: error.message,
+    })
     return new NextResponse(error.message, { status: 500 })
   }
 
@@ -144,6 +169,18 @@ export async function POST(
   if (!comment) {
     return new NextResponse('Failed to parse saved comment', { status: 500 })
   }
+
+  await safeLogServerEvent({
+    source: 'web_api',
+    action: 'emergency_comment_saved',
+    result: 'success',
+    actorUserId: medic.id,
+    actorName: medic.name,
+    businessId: medic.business_id,
+    moduleKey: 'emergency_declaration',
+    route: '/api/declarations/[id]/comments',
+    targetId: params.id,
+  })
 
   return NextResponse.json(comment, { status: 201 })
 }

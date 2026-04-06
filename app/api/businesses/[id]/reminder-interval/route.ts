@@ -2,6 +2,18 @@ import { createClient } from '@/lib/supabase/server'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import { requireAuthenticatedUser, requireRole } from '@/lib/route-access'
+import { parseJsonBody } from '@/lib/api-validation'
+import { z } from 'zod'
+
+const reminderIntervalSchema = z.object({
+  months: z.union([
+    z.literal(1),
+    z.literal(2),
+    z.literal(3),
+    z.literal(6),
+    z.literal(12),
+  ]),
+})
 
 export async function PATCH(req: Request, { params }: { params: { id: string } }) {
   const supabase = await createClient()
@@ -19,10 +31,9 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   const roleError = requireRole(account, 'superuser')
   if (roleError) return NextResponse.json({ error: roleError.error }, { status: roleError.status })
 
-  const { months } = await req.json()
-  if (![1, 2, 3, 6, 12].includes(months)) {
-    return NextResponse.json({ error: 'Invalid interval' }, { status: 400 })
-  }
+  const parsed = await parseJsonBody(req, reminderIntervalSchema)
+  if (!parsed.success) return parsed.response
+  const { months } = parsed.data
 
   const service = createServiceClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,

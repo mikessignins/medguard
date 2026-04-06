@@ -2,19 +2,14 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { createClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
-import type { FatigueMedicReviewPayload, FatigueReviewDecision } from '@/lib/types'
+import type { FatigueMedicReviewPayload } from '@/lib/types'
 import { requireAuthenticatedUser, requireMedicScope, requireRole } from '@/lib/route-access'
+import { safeLogServerEvent } from '@/lib/app-event-log'
+import { parseJsonBody } from '@/lib/api-validation'
+import { fatigueReviewRequestSchema } from '@/lib/review-request-schemas'
+import { enforceActionRateLimit } from '@/lib/rate-limit'
 
 export const runtime = 'nodejs'
-
-const REVIEW_DECISIONS: FatigueReviewDecision[] = [
-  'fit_normal_duties',
-  'fit_restricted_duties',
-  'not_fit_for_work',
-  'sent_to_room',
-  'sent_home',
-  'requires_escalation',
-]
 
 export async function PATCH(
   request: NextRequest,
@@ -49,16 +44,24 @@ export async function PATCH(
   if (roleError) return NextResponse.json({ error: roleError.error }, { status: roleError.status })
   const medicAccount = account!
 
-  let body: FatigueMedicReviewPayload
-  try {
-    body = await request.json()
-  } catch {
-    return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
-  }
+  const rateLimited = await enforceActionRateLimit({
+    action: 'fatigue_review_saved',
+    actorUserId: userId!,
+    actorRole: medicAccount.role,
+    actorName: medicAccount.display_name,
+    businessId: medicAccount.business_id,
+    moduleKey: 'fatigue_assessment',
+    route: '/api/fatigue-assessments/[id]/review',
+    targetId: params.id,
+    limit: 20,
+    windowMs: 5 * 60_000,
+    errorMessage: 'Too many fatigue review updates were submitted. Please wait a moment and try again.',
+  })
+  if (rateLimited) return rateLimited
 
-  if (!body.fitForWorkDecision || !REVIEW_DECISIONS.includes(body.fitForWorkDecision)) {
-    return NextResponse.json({ error: 'A valid fatigue review outcome is required.' }, { status: 400 })
-  }
+  const parsed = await parseJsonBody(request, fatigueReviewRequestSchema)
+  if (!parsed.success) return parsed.response
+  const body: FatigueMedicReviewPayload = parsed.data
 
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -119,7 +122,37 @@ export async function PATCH(
     .eq('id', params.id)
     .eq('module_key', 'fatigue_assessment')
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) {
+    await safeLogServerEvent({
+      source: 'web_api',
+      action: 'fatigue_review_saved',
+      result: 'failure',
+      actorUserId: userId,
+      actorRole: medicAccount.role,
+      actorName: medicAccount.display_name,
+      businessId: medicAccount.business_id,
+      moduleKey: 'fatigue_assessment',
+      route: '/api/fatigue-assessments/[id]/review',
+      targetId: params.id,
+      errorMessage: error.message,
+      context: { fit_for_work_decision: body.fitForWorkDecision },
+    })
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+
+  await safeLogServerEvent({
+    source: 'web_api',
+    action: 'fatigue_review_saved',
+    result: 'success',
+    actorUserId: userId,
+    actorRole: medicAccount.role,
+    actorName: medicAccount.display_name,
+    businessId: medicAccount.business_id,
+    moduleKey: 'fatigue_assessment',
+    route: '/api/fatigue-assessments/[id]/review',
+    targetId: params.id,
+    context: { fit_for_work_decision: body.fitForWorkDecision },
+  })
 
   return NextResponse.json({ ok: true })
 }

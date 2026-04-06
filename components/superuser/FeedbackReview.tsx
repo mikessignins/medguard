@@ -1,8 +1,10 @@
 'use client'
-import { useState, useMemo } from 'react'
+import { useState } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { format } from 'date-fns'
 import type { FeedbackItem, FeedbackStatus } from '@/lib/types'
+import PaginationControls from '@/components/PaginationControls'
 
 const STATUS_COLORS: Record<FeedbackStatus, string> = {
   Unread: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
@@ -23,21 +25,31 @@ const ALL_STATUSES: FeedbackStatus[] = ['Unread', 'Read', 'Planned', 'Implemente
 
 interface Props {
   items: FeedbackItem[]
+  currentStatus: FeedbackStatus | 'All'
+  statusCounts: Record<FeedbackStatus, number>
+  totalCount: number
+  page: number
+  pageSize: number
+  totalPages: number
+  pathname: string
 }
 
-export default function FeedbackReview({ items: initialItems }: Props) {
+export default function FeedbackReview({
+  items: initialItems,
+  currentStatus,
+  statusCounts,
+  totalCount,
+  page,
+  pageSize,
+  totalPages,
+  pathname,
+}: Props) {
   const router = useRouter()
   const [items, setItems] = useState(initialItems)
-  const [filterStatus, setFilterStatus] = useState<FeedbackStatus | 'All'>('Unread')
   const [selected, setSelected] = useState<FeedbackItem | null>(null)
   const [editNote, setEditNote] = useState('')
   const [editStatus, setEditStatus] = useState<FeedbackStatus>('Unread')
   const [saving, setSaving] = useState(false)
-
-  const filtered = useMemo(() => {
-    if (filterStatus === 'All') return items
-    return items.filter(i => i.status === filterStatus)
-  }, [items, filterStatus])
 
   function openItem(item: FeedbackItem) {
     setSelected(item)
@@ -68,14 +80,14 @@ export default function FeedbackReview({ items: initialItems }: Props) {
     }
   }
 
-  const unreadCount = items.filter(i => i.status === 'Unread').length
+  const unreadCount = statusCounts.Unread ?? items.filter(i => i.status === 'Unread').length
 
   return (
     <div>
       <div className="mb-6">
         <h1 className="text-xl font-bold text-slate-100">Feedback</h1>
         <p className="text-sm text-slate-500 mt-0.5">
-          {items.length} {items.length === 1 ? 'submission' : 'submissions'} total
+          {totalCount} {totalCount === 1 ? 'submission' : 'submissions'} in this view
           {unreadCount > 0 && <span className="ml-2 text-amber-400 font-medium">· {unreadCount} unread</span>}
         </p>
       </div>
@@ -83,11 +95,11 @@ export default function FeedbackReview({ items: initialItems }: Props) {
       {/* Filter tabs */}
       <div className="flex flex-wrap gap-2 mb-5">
         {(['All', ...ALL_STATUSES] as const).map(s => (
-          <button
+          <Link
             key={s}
-            onClick={() => setFilterStatus(s)}
+            href={s === 'All' ? pathname : `${pathname}?status=${encodeURIComponent(s)}`}
             className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${
-              filterStatus === s
+              currentStatus === s
                 ? 'bg-cyan-500/10 border-cyan-500/40 text-cyan-400'
                 : 'bg-slate-800 border-slate-700 text-slate-400 hover:border-slate-600'
             }`}
@@ -95,18 +107,19 @@ export default function FeedbackReview({ items: initialItems }: Props) {
             {s}
             {s !== 'All' && (
               <span className="ml-1.5 text-xs opacity-60">
-                {items.filter(i => i.status === s).length}
+                {statusCounts[s]}
               </span>
             )}
-          </button>
+          </Link>
         ))}
       </div>
 
-      {filtered.length === 0 ? (
-        <p className="text-center py-16 text-[var(--text-3)]">No feedback with status &ldquo;{filterStatus}&rdquo;.</p>
+      {items.length === 0 ? (
+        <p className="text-center py-16 text-[var(--text-3)]">No feedback with status &ldquo;{currentStatus}&rdquo;.</p>
       ) : (
+        <>
         <div className="space-y-3">
-          {filtered.map(item => (
+          {items.map(item => (
             <button
               key={item.id}
               onClick={() => openItem(item)}
@@ -136,6 +149,19 @@ export default function FeedbackReview({ items: initialItems }: Props) {
             </button>
           ))}
         </div>
+        {totalPages > 1 && (
+          <PaginationControls
+            page={page}
+            pageSize={pageSize}
+            totalCount={totalCount}
+            totalPages={totalPages}
+            pathname={pathname}
+            searchParams={{
+              status: currentStatus !== 'All' ? currentStatus : undefined,
+            }}
+          />
+        )}
+        </>
       )}
 
       {/* Detail modal */}

@@ -1,8 +1,5 @@
-'use client'
-import { useState, useMemo } from 'react'
+import PaginationControls from '@/components/PaginationControls'
 import { format } from 'date-fns'
-
-const PAGE_SIZE = 25
 
 interface PurgeLogEntry {
   id: string
@@ -22,6 +19,13 @@ interface PurgeLogEntry {
 
 interface Props {
   logs: PurgeLogEntry[]
+  totalCount: number
+  page: number
+  pageSize: number
+  totalPages: number
+  pathname: string
+  currentSearch: string
+  currentFormType: 'all' | 'emergency_declaration' | 'medication_declaration'
   showBusiness?: boolean
 }
 
@@ -30,64 +34,47 @@ const FORM_TYPE_LABELS: Record<string, string> = {
   medication_declaration: 'Med. Declaration',
 }
 
-export default function PurgeLog({ logs, showBusiness = false }: Props) {
-  const [search, setSearch] = useState('')
-  const [formTypeFilter, setFormTypeFilter] = useState<'all' | 'emergency_declaration' | 'medication_declaration'>('all')
-  const [page, setPage] = useState(0)
-
-  const hasFormTypes = logs.some(e => !!e.form_type)
-
-  const filtered = useMemo(() => {
-    let result = logs
-    if (formTypeFilter !== 'all') {
-      result = result.filter(e => e.form_type === formTypeFilter)
-    }
-    const q = search.trim().toLowerCase()
-    if (q) result = result.filter(e => e.worker_name?.toLowerCase().includes(q))
-    return result
-  }, [logs, search, formTypeFilter])
-
-  const totalPages = Math.ceil(filtered.length / PAGE_SIZE)
-  const pageSlice = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
-
-  function handleSearch(value: string) {
-    setSearch(value)
-    setPage(0)
-  }
-
-  function handleFilterChange(value: typeof formTypeFilter) {
-    setFormTypeFilter(value)
-    setPage(0)
-  }
+export default function PurgeLog({
+  logs,
+  totalCount,
+  page,
+  pageSize,
+  totalPages,
+  pathname,
+  currentSearch,
+  currentFormType,
+  showBusiness = false,
+}: Props) {
+  const hasFormTypes = true
 
   return (
     <div>
       <div className="mb-6">
         <h1 className="text-xl font-bold text-slate-100">Purge Log</h1>
         <p className="text-sm text-slate-500 mt-0.5">
-          Permanent governance record of all PHI purges — {logs.length} {logs.length === 1 ? 'entry' : 'entries'} total
+          Permanent governance record of all PHI purges — {totalCount} {totalCount === 1 ? 'entry' : 'entries'} total
         </p>
       </div>
 
       {/* Filters row */}
-      <div className="flex flex-wrap items-center gap-3 mb-5">
+      <form className="mb-5 flex flex-wrap items-center gap-3">
         <div className="relative">
           <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
           </svg>
           <input
+            name="q"
             type="text"
             placeholder="Search by worker name…"
-            value={search}
-            onChange={e => handleSearch(e.target.value)}
+            defaultValue={currentSearch}
             className="pl-9 pr-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-cyan-500 transition-colors w-56"
           />
         </div>
 
         {hasFormTypes && (
           <select
-            value={formTypeFilter}
-            onChange={e => handleFilterChange(e.target.value as typeof formTypeFilter)}
+            name="form_type"
+            defaultValue={currentFormType}
             className="px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-slate-200 focus:outline-none focus:border-cyan-500 transition-colors"
           >
             <option value="all">All form types</option>
@@ -96,16 +83,23 @@ export default function PurgeLog({ logs, showBusiness = false }: Props) {
           </select>
         )}
 
-        {(search || formTypeFilter !== 'all') && (
+        <button
+          type="submit"
+          className="rounded-lg bg-cyan-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-cyan-500"
+        >
+          Apply
+        </button>
+
+        {(currentSearch || currentFormType !== 'all') && (
           <span className="text-sm text-slate-500">
-            {filtered.length} {filtered.length === 1 ? 'result' : 'results'}
+            {totalCount} {totalCount === 1 ? 'result' : 'results'}
           </span>
         )}
-      </div>
+      </form>
 
-      {filtered.length === 0 ? (
+      {logs.length === 0 ? (
         <p className="text-center py-16 text-slate-600">
-          {search || formTypeFilter !== 'all' ? 'No records match the current filters.' : 'No purge events recorded yet.'}
+          {currentSearch || currentFormType !== 'all' ? 'No records match the current filters.' : 'No purge events recorded yet.'}
         </p>
       ) : (
         <>
@@ -123,7 +117,7 @@ export default function PurgeLog({ logs, showBusiness = false }: Props) {
                   </tr>
                 </thead>
                 <tbody>
-                  {pageSlice.map((entry, i) => {
+                  {logs.map((entry, i) => {
                     const isAuto = entry.medic_name === 'Auto-purge (system)'
                     return (
                       <tr
@@ -215,28 +209,17 @@ export default function PurgeLog({ logs, showBusiness = false }: Props) {
 
           {/* Pagination */}
           {totalPages > 1 && (
-            <div className="mt-4 flex items-center justify-between text-sm text-slate-500">
-              <span>
-                Showing {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, filtered.length)} of {filtered.length}
-              </span>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setPage(p => p - 1)}
-                  disabled={page === 0}
-                  className="px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-700 hover:border-slate-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                >
-                  Previous
-                </button>
-                <span className="px-2">Page {page + 1} of {totalPages}</span>
-                <button
-                  onClick={() => setPage(p => p + 1)}
-                  disabled={page >= totalPages - 1}
-                  className="px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-700 hover:border-slate-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                >
-                  Next
-                </button>
-              </div>
-            </div>
+            <PaginationControls
+              page={page}
+              pageSize={pageSize}
+              totalCount={totalCount}
+              totalPages={totalPages}
+              pathname={pathname}
+              searchParams={{
+                q: currentSearch || undefined,
+                form_type: currentFormType !== 'all' ? currentFormType : undefined,
+              }}
+            />
           )}
         </>
       )}

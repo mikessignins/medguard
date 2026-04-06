@@ -6,6 +6,8 @@ import PDFDocument from 'pdfkit'
 import { resolveBusinessLogoUrl } from '@/lib/business-logo'
 import { hasMedicScopeAccess } from '@/lib/medic-scope'
 import type { FatigueAssessment, FatigueMedicReviewPayload, FatigueModulePayload } from '@/lib/types'
+import { enforceActionRateLimit } from '@/lib/rate-limit'
+import { safeLogServerEvent } from '@/lib/app-event-log'
 import {
   streamToBuffer,
   sanitize,
@@ -132,6 +134,21 @@ async function generateFatiguePdf(id: string) {
   if (!account || account.role !== 'medic') {
     return new NextResponse('Forbidden', { status: 403 })
   }
+
+  const rateLimited = await enforceActionRateLimit({
+    action: 'fatigue_pdf_exported',
+    actorUserId: user.id,
+    actorRole: account.role,
+    actorName: account.display_name,
+    businessId: account.business_id,
+    moduleKey: 'fatigue_assessment',
+    route: '/api/fatigue-assessments/[id]/pdf',
+    targetId: id,
+    limit: 10,
+    windowMs: 5 * 60_000,
+    errorMessage: 'Too many fatigue PDF exports were requested. Please wait a few minutes and try again.',
+  })
+  if (rateLimited) return rateLimited
 
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -280,6 +297,19 @@ async function generateFatiguePdf(id: string) {
       .eq('id', id)
       .eq('module_key', 'fatigue_assessment')
   }
+
+  await safeLogServerEvent({
+    source: 'web_api',
+    action: 'fatigue_pdf_exported',
+    result: 'success',
+    actorUserId: user.id,
+    actorRole: account.role,
+    actorName: account.display_name,
+    businessId: account.business_id,
+    moduleKey: 'fatigue_assessment',
+    route: '/api/fatigue-assessments/[id]/pdf',
+    targetId: id,
+  })
 
   return new NextResponse(new Uint8Array(pdfBuffer), {
     status: 200,

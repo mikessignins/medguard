@@ -2,6 +2,15 @@ import { createClient } from '@/lib/supabase/server'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import { requireAuthenticatedUser, requireOneOfRoles } from '@/lib/route-access'
+import { parseJsonBody } from '@/lib/api-validation'
+import { safeLogServerEvent } from '@/lib/app-event-log'
+import { enforceActionRateLimit } from '@/lib/rate-limit'
+import { z } from 'zod'
+
+const feedbackPayloadSchema = z.object({
+  category: z.enum(['Bug', 'Error', 'Idea', 'Other']),
+  message: z.string().trim().min(1, 'Message is required').max(5000, 'Message is too long'),
+})
 
 export async function POST(req: Request) {
   const supabase = await createClient()
@@ -20,11 +29,22 @@ export async function POST(req: Request) {
   if (roleError) return NextResponse.json({ error: roleError.error }, { status: roleError.status })
   const allowedAccount = account!
 
-  const { category, message } = await req.json()
+  const rateLimited = await enforceActionRateLimit({
+    action: 'feedback_submitted',
+    actorUserId: userId!,
+    actorRole: allowedAccount.role,
+    actorName: allowedAccount.display_name,
+    businessId: allowedAccount.business_id,
+    route: '/api/feedback',
+    limit: 8,
+    windowMs: 10 * 60_000,
+    errorMessage: 'Too much feedback was submitted in a short period. Please wait a few minutes and try again.',
+  })
+  if (rateLimited) return rateLimited
 
-  if (!category || !message?.trim()) {
-    return NextResponse.json({ error: 'Category and message are required' }, { status: 400 })
-  }
+  const parsed = await parseJsonBody(req, feedbackPayloadSchema)
+  if (!parsed.success) return parsed.response
+  const { category, message } = parsed.data
 
   const service = createServiceClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -37,9 +57,36 @@ export async function POST(req: Request) {
     submitted_by_role: allowedAccount.role,
     business_id: allowedAccount.business_id,
     category,
-    message: message.trim(),
+    message,
   })
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) {
+    await safeLogServerEvent({
+      source: 'web_api',
+      action: 'feedback_submitted',
+      result: 'failure',
+      actorUserId: userId,
+      actorRole: allowedAccount.role,
+      actorName: allowedAccount.display_name,
+      businessId: allowedAccount.business_id,
+      route: '/api/feedback',
+      errorMessage: error.message,
+      context: { category },
+    })
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+
+  await safeLogServerEvent({
+    source: 'web_api',
+    action: 'feedback_submitted',
+    result: 'success',
+    actorUserId: userId,
+    actorRole: allowedAccount.role,
+    actorName: allowedAccount.display_name,
+    businessId: allowedAccount.business_id,
+    route: '/api/feedback',
+    context: { category },
+  })
+
   return NextResponse.json({ ok: true })
 }
