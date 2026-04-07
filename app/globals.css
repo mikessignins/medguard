@@ -255,6 +255,25 @@ body {
     -webkit-backdrop-filter: blur(12px);
     border: 1px solid rgba(148, 163, 184, 0.1);
   }
+
+  /* ─── Semantic CSS-variable utilities ───────────────────────────────
+   * Use these in new components instead of hardcoded bg-slate-800/60 etc.
+   * They resolve via the CSS variables in :root / [data-theme="light"]
+   * so no !important overrides are needed.
+   * ─────────────────────────────────────────────────────────────────── */
+  .bg-base-color    { background-color: var(--bg-base); }
+  .bg-card-color    { background-color: var(--bg-card); }
+  .bg-surface-color { background-color: var(--bg-surface); }
+  .bg-input-color   { background-color: var(--bg-input); }
+  .text-primary     { color: var(--text-1); }
+  .text-secondary   { color: var(--text-2); }
+  .text-muted       { color: var(--text-3); }
+  .border-default   { border-color: var(--border); }
+  .border-md-color  { border-color: var(--border-md); }
+  .text-brand       { color: var(--brand-primary); }
+  .text-brand-strong { color: var(--brand-primary-strong); }
+  .bg-brand-soft    { background-color: var(--brand-primary-soft); }
+  .border-brand     { border-color: var(--brand-primary-border); }
 }
 
 @layer base {
