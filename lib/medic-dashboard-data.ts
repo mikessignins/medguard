@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation'
-import { createClient } from '@/lib/supabase/server'
+import { getRequestClient, getRequestUser, getRequestUserAccount, getRequestBusinessModules } from '@/lib/supabase/request-cache'
 import {
   CONFIDENTIAL_MEDICATION_MODULE_KEY,
   FATIGUE_ASSESSMENT_MODULE_KEY,
@@ -18,24 +18,20 @@ export interface MedicDashboardData {
 }
 
 export async function getMedicDashboardData(): Promise<MedicDashboardData> {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
+  // Cached: deduplicates with the layout's auth + account + modules queries
+  // within the same server render — avoids triple-fetching on every tab change.
+  const user = await getRequestUser()
   if (!user) redirect('/login')
 
-  const { data: account } = await supabase
-    .from('user_accounts')
-    .select('role, site_ids, business_id, contract_end_date')
-    .eq('id', user.id)
-    .single()
-
+  const account = await getRequestUserAccount(user.id)
   if (!account || account.role !== 'medic') redirect('/')
 
   if (account.contract_end_date && new Date(account.contract_end_date) < new Date()) {
     redirect('/expired')
   }
+
+  const businessModules = await getRequestBusinessModules(account.business_id)
+  const supabase = await getRequestClient()
 
   const siteIds: string[] = account.site_ids || []
   const siteSelect = 'id,name,is_office'
@@ -46,20 +42,16 @@ export async function getMedicDashboardData(): Promise<MedicDashboardData> {
   const fatigueSelect =
     'id,business_id,site_id,worker_id,module_key,module_version,status,payload,review_payload,submitted_at,reviewed_at,reviewed_by,exported_at,phi_purged_at'
 
-  const [{ data: sites }, { data: submissions }, { data: businessModules }] = await Promise.all([
+  const [{ data: sites }, { data: submissions }] = await Promise.all([
     supabase.from('sites').select(siteSelect).in('id', siteIds.length ? siteIds : ['__none__']),
     supabase
       .from('submissions')
       .select(submissionSelect)
       .in('site_id', siteIds.length ? siteIds : ['__none__'])
       .order('submitted_at', { ascending: false }),
-    supabase
-      .from('business_modules')
-      .select('module_key, enabled')
-      .eq('business_id', account.business_id),
   ])
 
-  const configuredModules = getConfiguredBusinessModules((businessModules ?? []) as BusinessModule[], {
+  const configuredModules = getConfiguredBusinessModules(businessModules as BusinessModule[], {
     surface: 'medic_queue',
   })
   const medDecEnabled = configuredModules.some(

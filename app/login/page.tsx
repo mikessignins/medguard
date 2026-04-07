@@ -22,16 +22,13 @@ export default function LoginPage() {
     setLoading(true)
     setError('')
 
-    const { error: signInError } = await supabase.auth.signInWithPassword({ email, password })
+    const { data: { user }, error: signInError } = await supabase.auth.signInWithPassword({ email, password })
 
-    if (signInError) {
-      setError(signInError.message)
+    if (signInError || !user) {
+      setError(signInError?.message ?? 'Login failed')
       setLoading(false)
       return
     }
-
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) { setError('Login failed'); setLoading(false); return }
 
     const { data: account } = await supabase
       .from('user_accounts')

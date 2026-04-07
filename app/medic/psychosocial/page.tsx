@@ -5,7 +5,7 @@ import {
   PSYCHOSOCIAL_HEALTH_MODULE_KEY,
   type BusinessModule,
 } from '@/lib/modules'
-import { createClient } from '@/lib/supabase/server'
+import { getRequestClient, getRequestUser, getRequestUserAccount, getRequestBusinessModules } from '@/lib/supabase/request-cache'
 import type { PsychosocialAssessment } from '@/lib/types'
 
 function parsePsychosocialAssessment(raw: Record<string, unknown>): PsychosocialAssessment {
@@ -34,33 +34,23 @@ export default async function MedicPsychosocialDashboardPage({
 }: {
   searchParams: { site?: string }
 }) {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
+  // Cached helpers — deduplicated with layout's auth/account/modules queries
+  const user = await getRequestUser()
   if (!user) redirect('/login')
 
-  const { data: account } = await supabase
-    .from('user_accounts')
-    .select('role, business_id, site_ids, contract_end_date')
-    .eq('id', user.id)
-    .single()
-
+  const account = await getRequestUserAccount(user.id)
   if (!account || account.role !== 'medic') redirect('/')
   if (account.contract_end_date && new Date(account.contract_end_date) < new Date()) redirect('/expired')
 
   const siteIds: string[] = account.site_ids || []
+  const supabase = await getRequestClient()
 
-  const [{ data: sites }, { data: businessModules }] = await Promise.all([
+  const [{ data: sites }, businessModules] = await Promise.all([
     supabase.from('sites').select('id,name,is_office').in('id', siteIds.length ? siteIds : ['__none__']),
-    supabase
-      .from('business_modules')
-      .select('module_key, enabled')
-      .eq('business_id', account.business_id),
+    getRequestBusinessModules(account.business_id),
   ])
 
-  const configuredModules = getConfiguredBusinessModules((businessModules ?? []) as BusinessModule[], {
+  const configuredModules = getConfiguredBusinessModules(businessModules as BusinessModule[], {
     surface: 'medic_queue',
   })
   const psychosocialEnabled = configuredModules.some(

@@ -1,4 +1,3 @@
-import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
@@ -9,18 +8,15 @@ import MedicNav from '@/components/medic/MedicNav'
 import BusinessThemeLogo from '@/components/BusinessThemeLogo'
 import { getConfiguredBusinessModules, type BusinessModule } from '@/lib/modules'
 import { canAccessMedicPortal, resolveWebPortalDestination } from '@/lib/web-access'
+import { getRequestClient, getRequestUser, getRequestUserAccount, getRequestBusinessModules } from '@/lib/supabase/request-cache'
 
 export default async function MedicLayout({ children }: { children: React.ReactNode }) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  // All three helpers are React cache() — deduplicated with any page-level calls
+  // in the same render, so tab changes don't double-fetch auth or account data.
+  const user = await getRequestUser()
   if (!user) redirect('/login')
 
-  const { data: account } = await supabase
-    .from('user_accounts')
-    .select('display_name, role, business_id, contract_end_date')
-    .eq('id', user.id)
-    .single()
-
+  const account = await getRequestUserAccount(user.id)
   if (!account) redirect('/')
 
   const initialDestination = resolveWebPortalDestination({
@@ -37,16 +33,14 @@ export default async function MedicLayout({ children }: { children: React.ReactN
     redirect(initialDestination ?? '/')
   }
 
-  const [{ data: business }, { data: businessModules }] = await Promise.all([
+  const supabase = await getRequestClient()
+  const [{ data: business }, businessModules] = await Promise.all([
     supabase
       .from('businesses')
       .select('name, logo_url, logo_url_light, logo_url_dark, is_suspended')
       .eq('id', account.business_id)
       .single(),
-    supabase
-      .from('business_modules')
-      .select('business_id, module_key, enabled, config')
-      .eq('business_id', account.business_id),
+    getRequestBusinessModules(account.business_id),
   ])
 
   const finalDestination = resolveWebPortalDestination({
@@ -59,7 +53,7 @@ export default async function MedicLayout({ children }: { children: React.ReactN
     redirect(finalDestination ?? '/')
   }
 
-  const configuredModules = getConfiguredBusinessModules((businessModules ?? []) as BusinessModule[], {
+  const configuredModules = getConfiguredBusinessModules(businessModules as BusinessModule[], {
     surface: 'medic_queue',
   })
 
@@ -78,10 +72,10 @@ export default async function MedicLayout({ children }: { children: React.ReactN
                 logoUrlDark={business.logo_url_dark}
               />
             ) : (
-              <Image src="/medm8-icon.png" alt="MedPass" width={32} height={32} className="rounded-lg" />
+              <Image src="/medm8-icon.png" alt="MedGuard" width={32} height={32} className="rounded-lg" />
             )}
             <div className="flex-1 min-w-0">
-              <p className="text-base font-bold leading-tight text-[var(--medic-text)]">MedPass</p>
+              <p className="text-base font-bold leading-tight text-[var(--medic-text)]">MedGuard</p>
               <p className="text-xs font-medium text-[var(--medic-accent-strong)]">Medic Operations</p>
               <p className="mt-1 truncate text-[11px] text-[var(--medic-muted)]">{business?.name || 'Assigned business'}</p>
             </div>
