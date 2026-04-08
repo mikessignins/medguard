@@ -97,7 +97,7 @@ export default async function BusinessDetailPage({ params }: { params: { id: str
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
           </svg>
         </Link>
-        <span className="text-xl font-bold text-[var(--text-1)]">MedPass</span>
+        <span className="text-xl font-bold text-[var(--text-1)]">MedGuard</span>
         <span className="text-sm text-[var(--text-3)]">|</span>
         <span className="text-sm text-[var(--text-2)]">Superuser</span>
         <span className="text-sm text-[var(--text-3)]">/</span>

@@ -43,10 +43,10 @@ export default async function AdminLayout({ children }: { children: React.ReactN
                 logoUrlDark={business.logo_url_dark}
               />
             ) : (
-              <Image src="/medm8-icon.png" alt="MedPass" width={32} height={32} className="rounded-lg" />
+              <Image src="/medm8-icon.png" alt="MedGuard" width={32} height={32} className="rounded-lg" />
             )}
             <div className="flex-1 min-w-0">
-              <p className="text-slate-100 font-bold text-base leading-tight">MedPass</p>
+              <p className="text-slate-100 font-bold text-base leading-tight">MedGuard</p>
               <p className="text-cyan-400 text-xs font-medium">Admin Portal</p>
             </div>
             <ThemeToggle compact />

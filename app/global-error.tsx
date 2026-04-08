@@ -18,7 +18,7 @@ export default function GlobalError({
     <html lang="en">
       <body className="min-h-screen bg-slate-100">
         <RouteErrorState
-          title="MedPass could not finish loading."
+          title="MedGuard could not finish loading."
           message="A full-page failure was caught before it could take down the entire portal experience."
           onRetry={reset}
         />

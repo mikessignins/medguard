@@ -96,7 +96,7 @@ export function pageHeader(
       })
     } catch {
       doc.font(F_BOLD).fontSize(8).fillColor('#FFFFFF')
-        .text(options?.businessName || 'MedPass', MARGIN + CONTENT_W - 120, y + 10, {
+        .text(options?.businessName || 'MedGuard', MARGIN + CONTENT_W - 120, y + 10, {
           width: 110,
           align: 'right',
           lineBreak: false,
@@ -104,7 +104,7 @@ export function pageHeader(
     }
   } else {
     doc.font(F_BOLD).fontSize(8).fillColor('#FFFFFF')
-      .text(options?.businessName || 'MedPass', MARGIN + CONTENT_W - 120, y + 10, {
+      .text(options?.businessName || 'MedGuard', MARGIN + CONTENT_W - 120, y + 10, {
         width: 110,
         align: 'right',
         lineBreak: false,

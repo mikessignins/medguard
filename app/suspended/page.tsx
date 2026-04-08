@@ -17,10 +17,10 @@ export default async function SuspendedPage() {
         </div>
         <h1 className="text-2xl font-bold text-slate-800 mb-2">Account Suspended</h1>
         <p className="text-slate-600 mb-2">
-          Your organisation&apos;s MedPass account has been suspended.
+          Your organisation&apos;s MedGuard account has been suspended.
         </p>
         <p className="text-slate-500 text-sm mb-6">
-          Please contact MedPass support to resolve this.
+          Please contact MedGuard support to resolve this.
         </p>
         <SignOutButton />
       </div>

@@ -9,7 +9,7 @@ const figtree = Figtree({
 })
 
 export const metadata: Metadata = {
-  title: 'MedPass Web',
+  title: 'MedGuard',
   description: 'Clinical Fitness-for-Work Declaration Management Portal',
   icons: {
     icon: '/medm8-icon.png',

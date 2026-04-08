@@ -50,7 +50,7 @@ export default function InviteCodeManager({ initialCode, businessId }: Props) {
       <h1 className="text-2xl font-bold text-slate-100 mb-6">Invite Code</h1>
       <div className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-8 max-w-md">
         <p className="text-sm text-slate-400 mb-6">
-          Share this code with new medics so they can register and join your organisation via the MedPass mobile app.
+          Share this code with new medics so they can register and join your organisation via the MedGuard mobile app.
         </p>
 
         {error && (
