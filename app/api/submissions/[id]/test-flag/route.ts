@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
-import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
-import { parseJsonBody } from '@/lib/api-validation'
+import { parseJsonBody, parseUuidParam } from '@/lib/api-validation'
+import { requireSameOrigin } from '@/lib/api-security'
 import { z } from 'zod'
 
 const testFlagSchema = z.object({
@@ -14,6 +14,12 @@ const testFlagSchema = z.object({
 // The DB trigger (lock_is_test_when_reviewed) will reject this if the
 // submission has already been moved past 'New' status.
 export async function PATCH(req: Request, { params }: { params: { id: string } }) {
+  const parsedId = parseUuidParam(params.id, 'Submission id')
+  if (!parsedId.success) return parsedId.response
+
+  const csrfError = requireSameOrigin(req)
+  if (csrfError) return csrfError
+
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -32,16 +38,11 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   if (!parsed.success) return parsed.response
   const body = parsed.data
 
-  const service = createServiceClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  )
-
   // Verify the submission exists and is still in 'New' status (only state where is_test is mutable).
-  const { data: submission } = await service
+  const { data: submission } = await supabase
     .from('submissions')
     .select('status')
-    .eq('id', params.id)
+    .eq('id', parsedId.value)
     .single()
 
   if (!submission) return NextResponse.json({ error: 'Submission not found' }, { status: 404 })
@@ -52,10 +53,10 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     )
   }
 
-  const { error } = await service
+  const { error } = await supabase
     .from('submissions')
     .update({ is_test: body.is_test })
-    .eq('id', params.id)
+    .eq('id', parsedId.value)
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ ok: true })

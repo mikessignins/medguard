@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { getExportErrorMessage } from '@/lib/export-feedback'
 import {
   formatPsychosocialAssignedReviewPath,
   formatPsychosocialContactOutcome,
@@ -238,8 +239,10 @@ export default function PsychosocialDetail({
     try {
       const response = await fetch(`/api/psychosocial-assessments/${assessment.id}/pdf`)
       if (!response.ok) {
-        const text = await response.text().catch(() => '')
-        setError(text || 'Failed to export psychosocial support PDF.')
+        setError(await getExportErrorMessage(
+          response,
+          'The psychosocial support PDF could not be exported.',
+        ))
         return
       }
 

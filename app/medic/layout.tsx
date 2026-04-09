@@ -8,7 +8,7 @@ import MedicNav from '@/components/medic/MedicNav'
 import BusinessThemeLogo from '@/components/BusinessThemeLogo'
 import { getConfiguredBusinessModules, type BusinessModule } from '@/lib/modules'
 import { canAccessMedicPortal, resolveWebPortalDestination } from '@/lib/web-access'
-import { getRequestClient, getRequestUser, getRequestUserAccount, getRequestBusinessModules } from '@/lib/supabase/request-cache'
+import { getRequestBusiness, getRequestUser, getRequestUserAccount, getRequestBusinessModules } from '@/lib/supabase/request-cache'
 
 export default async function MedicLayout({ children }: { children: React.ReactNode }) {
   // All three helpers are React cache() — deduplicated with any page-level calls
@@ -33,13 +33,8 @@ export default async function MedicLayout({ children }: { children: React.ReactN
     redirect(initialDestination ?? '/')
   }
 
-  const supabase = await getRequestClient()
-  const [{ data: business }, businessModules] = await Promise.all([
-    supabase
-      .from('businesses')
-      .select('name, logo_url, logo_url_light, logo_url_dark, is_suspended')
-      .eq('id', account.business_id)
-      .single(),
+  const [business, businessModules] = await Promise.all([
+    getRequestBusiness(account.business_id),
     getRequestBusinessModules(account.business_id),
   ])
 

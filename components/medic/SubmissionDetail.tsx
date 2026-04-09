@@ -2,6 +2,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { getExportErrorMessage } from '@/lib/export-feedback'
 import { encodeQueue } from '@/lib/queue-params'
 import type { WorkerSnapshot, Decision, SubmissionStatus, ScriptUpload, MedicComment } from '@/lib/types'
 
@@ -223,7 +224,10 @@ export default function SubmissionDetail({ submission, siteName, businessName, c
     try {
       const res = await fetch(`/api/declarations/${submission.id}/pdf`)
       if (!res.ok) {
-        setPdfError(`Export failed (${res.status}). Please try again.`)
+        setPdfError(await getExportErrorMessage(
+          res,
+          'The declaration PDF could not be exported.',
+        ))
         return
       }
       const blob = await res.blob()

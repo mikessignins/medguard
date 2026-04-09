@@ -93,13 +93,14 @@ export default function MedicNav({
           <Link
             key={module.key}
             href={getMedicModuleHref(module.key)}
+            prefetch={false}
             className={mobileClass(isModuleActive(pathname, module.key))}
           >
             <span className="h-5 w-5">{MODULE_ICON[module.key]}</span>
             <span className="text-[11px] font-medium">{module.title.split(' ')[0]}</span>
           </Link>
         ))}
-        <Link href="/account" className={mobileClass(isUtilityActive(pathname, '/account'))}>
+        <Link href="/account" prefetch={false} className={mobileClass(isUtilityActive(pathname, '/account'))}>
           <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
           </svg>
@@ -114,7 +115,12 @@ export default function MedicNav({
       <div className="space-y-1">
         <p className="medic-rail-section-label">Modules</p>
         {visibleModules.map((module) => (
-          <Link key={module.key} href={getMedicModuleHref(module.key)} className={navClass(isModuleActive(pathname, module.key))}>
+          <Link
+            key={module.key}
+            href={getMedicModuleHref(module.key)}
+            prefetch={false}
+            className={navClass(isModuleActive(pathname, module.key))}
+          >
             {MODULE_ICON[module.key]}
             <div className="min-w-0 flex-1">
               <p className="truncate">{module.title}</p>
@@ -126,7 +132,7 @@ export default function MedicNav({
 
       <div className="space-y-1">
         <p className="medic-rail-section-label">Utilities</p>
-        <Link href="/medic/exports" className={navClass(isUtilityActive(pathname, '/medic/exports'))}>
+        <Link href="/medic/exports" prefetch={false} className={navClass(isUtilityActive(pathname, '/medic/exports'))}>
           <svg className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 16V4m0 12l-4-4m4 4l4-4M4 18v1a2 2 0 002 2h12a2 2 0 002-2v-1" />
           </svg>

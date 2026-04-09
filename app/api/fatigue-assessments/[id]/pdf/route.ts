@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerClient } from '@supabase/ssr'
-import { createClient } from '@supabase/supabase-js'
-import { cookies } from 'next/headers'
 import PDFDocument from 'pdfkit'
 import { resolveBusinessLogoUrl } from '@/lib/business-logo'
 import { hasMedicScopeAccess } from '@/lib/medic-scope'
+import { parseUuidParam } from '@/lib/api-validation'
+import { markExportedIfNeeded } from '@/lib/export-stamp'
 import type { FatigueAssessment, FatigueMedicReviewPayload, FatigueModulePayload } from '@/lib/types'
 import { enforceActionRateLimit } from '@/lib/rate-limit'
 import { safeLogServerEvent } from '@/lib/app-event-log'
@@ -20,6 +19,7 @@ import {
   F_BOLD,
   MARGIN,
   CONTENT_W,
+  getAuthenticatedMedic,
 } from '@/lib/pdf-helpers'
 
 export const runtime = 'nodejs'
@@ -28,8 +28,11 @@ export async function GET(
   _request: NextRequest,
   { params }: { params: { id: string } },
 ) {
+  const parsedId = parseUuidParam(params.id, 'Fatigue assessment id')
+  if (!parsedId.success) return parsedId.response
+
   try {
-    return await generateFatiguePdf(params.id)
+    return await generateFatiguePdf(parsedId.value)
   } catch (err) {
     console.error('[fatigue/pdf] unhandled error:', err)
     return new NextResponse(
@@ -108,34 +111,12 @@ function formatBool(value: boolean | null | undefined) {
 }
 
 async function generateFatiguePdf(id: string) {
-  const cookieStore = await cookies()
-  const authClient = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll: () => cookieStore.getAll(),
-        setAll: (toSet) => {
-          try { toSet.forEach(({ name, value, options }) => cookieStore.set(name, value, options)) } catch {}
-        },
-      },
-    },
-  )
-
-  const { data: { user } } = await authClient.auth.getUser()
-  if (!user) return new NextResponse('Unauthorized', { status: 401 })
-
-  const { data: account } = await authClient
-    .from('user_accounts')
-    .select('role, display_name, business_id, site_ids')
-    .eq('id', user.id)
-    .single()
-
-  if (!account || account.role !== 'medic') {
-    return new NextResponse('Forbidden', { status: 403 })
-  }
+  const auth = await getAuthenticatedMedic()
+  if (!auth) return new NextResponse('Unauthorized', { status: 401 })
+  const { user, account, authClient } = auth
 
   const rateLimited = await enforceActionRateLimit({
+    authClient,
     action: 'fatigue_pdf_exported',
     actorUserId: user.id,
     actorRole: account.role,
@@ -150,10 +131,7 @@ async function generateFatiguePdf(id: string) {
   })
   if (rateLimited) return rateLimited
 
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  )
+  const supabase = authClient
 
   const { data: raw, error } = await supabase
     .from('module_submissions')
@@ -219,7 +197,13 @@ async function generateFatiguePdf(id: string) {
     try {
       const logoRes = await fetch(businessLogoUrl)
       if (logoRes.ok) logoBuffer = Buffer.from(await logoRes.arrayBuffer())
-    } catch {}
+    } catch (error) {
+      console.warn('[fatigue/pdf] failed to fetch business logo', {
+        assessmentId: id,
+        businessId: raw.business_id,
+        error: error instanceof Error ? error.message : String(error),
+      })
+    }
   }
 
   const worker = payload.workerAssessment
@@ -285,17 +269,40 @@ async function generateFatiguePdf(id: string) {
   doc.end()
 
   const pdfBuffer = await bufferPromise
+  let exportKind: 'first_export' | 're_export' = raw.exported_at ? 're_export' : 'first_export'
+  let firstExportedAt: string | null = raw.exported_at ?? null
 
   if (!raw.exported_at) {
-    const exportedAt = new Date().toISOString()
-    await supabase
-      .from('module_submissions')
-      .update({
-        exported_at: exportedAt,
-        exported_by_name: account.display_name,
+    const exportStamp = await markExportedIfNeeded({
+      supabase,
+      table: 'module_submissions',
+      id,
+      exportedByName: account.display_name,
+      moduleKey: 'fatigue_assessment',
+    })
+
+    if (exportStamp.error) {
+      await safeLogServerEvent({
+        source: 'web_api',
+        action: 'fatigue_pdf_exported',
+        result: 'failure',
+        actorUserId: user.id,
+        actorRole: account.role,
+        actorName: account.display_name,
+        businessId: account.business_id,
+        moduleKey: 'fatigue_assessment',
+        route: '/api/fatigue-assessments/[id]/pdf',
+        targetId: id,
+        errorMessage: exportStamp.error.message,
       })
-      .eq('id', id)
-      .eq('module_key', 'fatigue_assessment')
+      return new NextResponse('Failed to record export audit state. Please try again.', { status: 500 })
+    }
+
+    if (exportStamp.stamped) {
+      firstExportedAt = exportStamp.exportedAt
+    } else {
+      exportKind = 're_export'
+    }
   }
 
   await safeLogServerEvent({
@@ -309,6 +316,10 @@ async function generateFatiguePdf(id: string) {
     moduleKey: 'fatigue_assessment',
     route: '/api/fatigue-assessments/[id]/pdf',
     targetId: id,
+    context: {
+      export_kind: exportKind,
+      first_exported_at: firstExportedAt,
+    },
   })
 
   return new NextResponse(new Uint8Array(pdfBuffer), {

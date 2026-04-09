@@ -1,7 +1,8 @@
-import { createClient } from '@/lib/supabase/server'
 import { redirect, notFound } from 'next/navigation'
 import FatigueDetail from '@/components/medic/FatigueDetail'
+import { hasMedicScopeAccess } from '@/lib/medic-scope'
 import { parseQueue } from '@/lib/queue-params'
+import { getRequestClient, getRequestUser, getRequestUserAccount } from '@/lib/supabase/request-cache'
 import type { FatigueAssessment } from '@/lib/types'
 
 function parseFatigueAssessment(raw: Record<string, unknown>): FatigueAssessment {
@@ -31,17 +32,14 @@ export default async function MedicFatiguePage({
   params: { id: string }
   searchParams: { queue?: string; pos?: string; site?: string }
 }) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getRequestUser()
   if (!user) redirect('/login')
 
-  const { data: account } = await supabase
-    .from('user_accounts')
-    .select('role, display_name')
-    .eq('id', user.id)
-    .single()
-
+  const account = await getRequestUserAccount(user.id)
   if (!account || account.role !== 'medic') redirect('/')
+  if (account.contract_end_date && new Date(account.contract_end_date) < new Date()) redirect('/expired')
+
+  const supabase = await getRequestClient()
 
   const { data: raw } = await supabase
     .from('module_submissions')
@@ -51,6 +49,7 @@ export default async function MedicFatiguePage({
     .single()
 
   if (!raw) notFound()
+  if (!hasMedicScopeAccess(account, raw)) notFound()
 
   if (raw.status === 'awaiting_medic_review') {
     await supabase

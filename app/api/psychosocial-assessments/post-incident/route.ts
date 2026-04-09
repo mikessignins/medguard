@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
-import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
 import { requireAuthenticatedUser, requireMedicScope, requireRole } from '@/lib/route-access'
 import type { PsychosocialModulePayload, PsychosocialPostIncidentEventType } from '@/lib/types'
 import { parseJsonBody } from '@/lib/api-validation'
+import { requireSameOrigin } from '@/lib/api-security'
 import { psychosocialPostIncidentRequestSchema } from '@/lib/review-request-schemas'
 import { safeLogServerEvent } from '@/lib/app-event-log'
 import { enforceActionRateLimit } from '@/lib/rate-limit'
@@ -12,13 +12,13 @@ import { enforceActionRateLimit } from '@/lib/rate-limit'
 export const runtime = 'nodejs'
 
 async function resolveWorkerId({
-  supabase,
+  authClient,
   businessId,
   siteId,
   workerId,
   workerNameSnapshot,
 }: {
-  supabase: SupabaseClient
+  authClient: ReturnType<typeof createServerClient>
   businessId: string
   siteId: string
   workerId: string | null
@@ -26,15 +26,13 @@ async function resolveWorkerId({
 }) {
   if (workerId) return { workerId }
 
-  const { data, error } = await supabase
-    .from('user_accounts')
-    .select('id, display_name')
-    .eq('business_id', businessId)
-    .eq('role', 'worker')
-    .contains('site_ids', [siteId])
-    .ilike('display_name', workerNameSnapshot)
-    .limit(2)
-  const workers = (data ?? []) as Array<{ id: string; display_name: string | null }>
+  const { data, error } = await authClient.rpc('resolve_scoped_worker_account', {
+    p_business_id: businessId,
+    p_site_id: siteId,
+    p_worker_id: workerId,
+    p_worker_name: workerNameSnapshot,
+  })
+  const workers = (data ?? []) as Array<{ worker_id: string; display_name: string | null }>
 
   if (error) {
     return { error: 'Unable to validate the worker account for this welfare case.' }
@@ -48,10 +46,13 @@ async function resolveWorkerId({
     return { error: 'More than one worker account matched that name at this site. Please enter the worker account ID fallback to identify the correct worker.' }
   }
 
-  return { workerId: workers[0].id }
+  return { workerId: workers[0].worker_id }
 }
 
 export async function POST(request: NextRequest) {
+  const csrfError = requireSameOrigin(request)
+  if (csrfError) return csrfError
+
   const cookieStore = await cookies()
   const authClient = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -82,6 +83,7 @@ export async function POST(request: NextRequest) {
   const medicAccount = account!
 
   const rateLimited = await enforceActionRateLimit({
+    authClient,
     action: 'psychosocial_post_incident_created',
     actorUserId: userId!,
     actorRole: medicAccount.role,
@@ -120,13 +122,8 @@ export async function POST(request: NextRequest) {
   const scopeError = requireMedicScope(medicAccount, { business_id: medicAccount.business_id, site_id })
   if (scopeError) return NextResponse.json({ error: scopeError.error }, { status: scopeError.status })
 
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  )
-
   const resolvedWorker = await resolveWorkerId({
-    supabase,
+    authClient,
     businessId: medicAccount.business_id,
     siteId: site_id,
     workerId: workerId ?? null,
@@ -182,7 +179,7 @@ export async function POST(request: NextRequest) {
     externalPsychologyReferralOffered,
   }
 
-  const { data, error } = await supabase
+  const { data, error } = await authClient
     .from('module_submissions')
     .insert({
       business_id: medicAccount.business_id,

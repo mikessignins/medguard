@@ -1,8 +1,8 @@
 import { createClient } from '@/lib/supabase/server'
-import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import { requireAuthenticatedUser, requireRole } from '@/lib/route-access'
-import { parseJsonBody } from '@/lib/api-validation'
+import { parseBusinessIdParam, parseJsonBody } from '@/lib/api-validation'
+import { requireSameOrigin } from '@/lib/api-security'
 import { z } from 'zod'
 
 const trialSchema = z.object({
@@ -14,6 +14,12 @@ const trialSchema = z.object({
 // Superuser only. Sets or clears the trial period for a business.
 // While trial_until > NOW(), the DB trigger auto-tags all new submissions as is_test = true.
 export async function PATCH(req: Request, { params }: { params: { id: string } }) {
+  const parsedBusinessId = parseBusinessIdParam(params.id)
+  if (!parsedBusinessId.success) return parsedBusinessId.response
+
+  const csrfError = requireSameOrigin(req)
+  if (csrfError) return csrfError
+
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   const userId = user?.id ?? null
@@ -33,15 +39,10 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   if (!parsed.success) return parsed.response
   const { trial_until } = parsed.data
 
-  const service = createServiceClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  )
-
-  const { error } = await service
+  const { error } = await supabase
     .from('businesses')
     .update({ trial_until: trial_until ?? null })
-    .eq('id', params.id)
+    .eq('id', parsedBusinessId.value)
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ ok: true })

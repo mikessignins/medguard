@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
-import { createClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
 import { parseJsonBody } from '@/lib/api-validation'
+import { requireSameOrigin } from '@/lib/api-security'
 import { safeLogServerEvent } from '@/lib/app-event-log'
 import { adminAuditRequestSchema } from '@/lib/review-request-schemas'
 import { enforceActionRateLimit } from '@/lib/rate-limit'
@@ -10,6 +10,9 @@ import { enforceActionRateLimit } from '@/lib/rate-limit'
 export const runtime = 'nodejs'
 
 export async function POST(request: NextRequest) {
+  const csrfError = requireSameOrigin(request)
+  if (csrfError) return csrfError
+
   const cookieStore = await cookies()
   const authClient = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -38,6 +41,7 @@ export async function POST(request: NextRequest) {
   }
 
   const rateLimited = await enforceActionRateLimit({
+    authClient,
     action: 'admin_audit_recorded',
     actorUserId: user.id,
     actorRole: account.role,
@@ -54,12 +58,23 @@ export async function POST(request: NextRequest) {
   if (!parsed.success) return parsed.response
   const body = parsed.data
 
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  )
+  if (body.target_user_id) {
+    const { data: targetAccount, error: targetAccountError } = await authClient
+      .from('user_accounts')
+      .select('id, business_id')
+      .eq('id', body.target_user_id)
+      .maybeSingle()
 
-  const { error } = await supabase.from('admin_action_log').insert({
+    if (targetAccountError) {
+      return new NextResponse('Unable to validate target user', { status: 500 })
+    }
+
+    if (!targetAccount || targetAccount.business_id !== account.business_id) {
+      return new NextResponse('Target user must belong to the same business', { status: 400 })
+    }
+  }
+
+  const { error } = await authClient.from('admin_action_log').insert({
     business_id:    account.business_id,
     actor_user_id:  user.id,
     actor_name:     account.display_name as string,

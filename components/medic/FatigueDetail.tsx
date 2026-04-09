@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { getExportErrorMessage } from '@/lib/export-feedback'
 import type {
   FatigueAssessment,
   FatigueReviewDecision,
@@ -187,8 +188,10 @@ export default function FatigueDetail({ assessment, siteName, businessName, curr
     try {
       const response = await fetch(`/api/fatigue-assessments/${assessment.id}/pdf`)
       if (!response.ok) {
-        const text = await response.text().catch(() => '')
-        setError(text || 'Failed to export fatigue PDF.')
+        setError(await getExportErrorMessage(
+          response,
+          'The fatigue assessment PDF could not be exported.',
+        ))
         return false
       }
 

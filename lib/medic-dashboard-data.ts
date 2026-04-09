@@ -6,6 +6,7 @@ import {
   getConfiguredBusinessModules,
   type BusinessModule,
 } from '@/lib/modules'
+import { logRequestTiming, startRequestTimer } from '@/lib/request-timing'
 import type { FatigueAssessment } from '@/lib/types'
 
 export interface MedicDashboardData {
@@ -17,7 +18,10 @@ export interface MedicDashboardData {
   fatigueEnabled: boolean
 }
 
-export async function getMedicDashboardData(): Promise<MedicDashboardData> {
+export type MedicDashboardModuleView = 'emergency' | 'medication' | 'fatigue'
+
+export async function getMedicDashboardData(moduleView: MedicDashboardModuleView): Promise<MedicDashboardData> {
+  const startedAt = startRequestTimer()
   // Cached: deduplicates with the layout's auth + account + modules queries
   // within the same server render — avoids triple-fetching on every tab change.
   const user = await getRequestUser()
@@ -42,14 +46,17 @@ export async function getMedicDashboardData(): Promise<MedicDashboardData> {
   const fatigueSelect =
     'id,business_id,site_id,worker_id,module_key,module_version,status,payload,review_payload,submitted_at,reviewed_at,reviewed_by,exported_at,phi_purged_at'
 
-  const [{ data: sites }, { data: submissions }] = await Promise.all([
+  const [{ data: sites }, submissionsResult] = await Promise.all([
     supabase.from('sites').select(siteSelect).in('id', siteIds.length ? siteIds : ['__none__']),
-    supabase
-      .from('submissions')
-      .select(submissionSelect)
-      .in('site_id', siteIds.length ? siteIds : ['__none__'])
-      .order('submitted_at', { ascending: false }),
+    moduleView === 'emergency'
+      ? supabase
+          .from('submissions')
+          .select(submissionSelect)
+          .in('site_id', siteIds.length ? siteIds : ['__none__'])
+          .order('submitted_at', { ascending: false })
+      : Promise.resolve({ data: [] as Array<Record<string, unknown>> }),
   ])
+  const submissions = submissionsResult.data ?? []
 
   const configuredModules = getConfiguredBusinessModules(businessModules as BusinessModule[], {
     surface: 'medic_queue',
@@ -62,7 +69,7 @@ export async function getMedicDashboardData(): Promise<MedicDashboardData> {
   )
 
   let medDeclarations: Array<Record<string, unknown>> = []
-  if (medDecEnabled && siteIds.length > 0) {
+  if (moduleView === 'medication' && medDecEnabled && siteIds.length > 0) {
     const { data } = await supabase
       .from('medication_declarations')
       .select(medDecSelect)
@@ -72,7 +79,7 @@ export async function getMedicDashboardData(): Promise<MedicDashboardData> {
   }
 
   let fatigueAssessments: FatigueAssessment[] = []
-  if (fatigueEnabled && siteIds.length > 0) {
+  if (moduleView === 'fatigue' && fatigueEnabled && siteIds.length > 0) {
     const { data } = await supabase
       .from('module_submissions')
       .select(fatigueSelect)
@@ -81,6 +88,13 @@ export async function getMedicDashboardData(): Promise<MedicDashboardData> {
       .order('submitted_at', { ascending: false })
     fatigueAssessments = (data as FatigueAssessment[] | null) ?? []
   }
+
+  await logRequestTiming('medic_dashboard_page_data', startedAt, {
+    site_count: sites?.length ?? 0,
+    submission_count: submissions?.length ?? 0,
+    med_declaration_count: medDeclarations.length,
+    fatigue_assessment_count: fatigueAssessments.length,
+  })
 
   return {
     sites: sites ?? [],

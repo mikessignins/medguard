@@ -9,6 +9,8 @@
  */
 
 import { cache } from 'react'
+import { unstable_cache } from 'next/cache'
+import { logRequestTiming, startRequestTimer } from '@/lib/request-timing'
 import { createClient } from '@/lib/supabase/server'
 
 // ---------------------------------------------------------------------------
@@ -20,10 +22,26 @@ export const getRequestClient = cache(async () => {
 })
 
 export const getRequestUser = cache(async () => {
+  const startedAt = startRequestTimer()
   const supabase = await getRequestClient()
+  const { data: claimsData, error: claimsError } = await supabase.auth.getClaims()
+  const claimUserId = claimsData?.claims?.sub
+
+  if (!claimsError && typeof claimUserId === 'string' && claimUserId.length > 0) {
+    await logRequestTiming('request_user', startedAt, {
+      authenticated: true,
+      source: 'claims',
+    })
+    return { id: claimUserId }
+  }
+
   const {
     data: { user },
   } = await supabase.auth.getUser()
+  await logRequestTiming('request_user', startedAt, {
+    authenticated: Boolean(user),
+    source: 'getUser',
+  })
   return user
 })
 
@@ -32,12 +50,16 @@ export const getRequestUser = cache(async () => {
 // ---------------------------------------------------------------------------
 
 export const getRequestUserAccount = cache(async (userId: string) => {
+  const startedAt = startRequestTimer()
   const supabase = await getRequestClient()
   const { data } = await supabase
     .from('user_accounts')
     .select('display_name, role, business_id, site_ids, contract_end_date')
     .eq('id', userId)
     .single()
+  await logRequestTiming('request_user_account', startedAt, {
+    found: Boolean(data),
+  })
   return data
 })
 
@@ -46,10 +68,51 @@ export const getRequestUserAccount = cache(async (userId: string) => {
 // ---------------------------------------------------------------------------
 
 export const getRequestBusinessModules = cache(async (businessId: string) => {
-  const supabase = await getRequestClient()
-  const { data } = await supabase
-    .from('business_modules')
-    .select('business_id, module_key, enabled, config')
-    .eq('business_id', businessId)
+  const startedAt = startRequestTimer()
+  const loadBusinessModules = unstable_cache(
+    async () => {
+      const supabase = await getRequestClient()
+      const { data } = await supabase
+        .from('business_modules')
+        .select('business_id, module_key, enabled, config')
+        .eq('business_id', businessId)
+      return data ?? []
+    },
+    ['business-modules', businessId],
+    {
+      revalidate: 60,
+      tags: [`business-modules:${businessId}`],
+    },
+  )
+  const data = await loadBusinessModules()
+  await logRequestTiming('request_business_modules', startedAt, {
+    module_count: data?.length ?? 0,
+  })
   return data ?? []
+})
+
+export const getRequestBusiness = cache(async (businessId: string) => {
+  const startedAt = startRequestTimer()
+  const loadBusiness = unstable_cache(
+    async () => {
+      const supabase = await getRequestClient()
+      const { data } = await supabase
+        .from('businesses')
+        .select('name, logo_url, logo_url_light, logo_url_dark, is_suspended')
+        .eq('id', businessId)
+        .single()
+      return data
+    },
+    ['business-profile', businessId],
+    {
+      revalidate: 60,
+      tags: [`business-profile:${businessId}`],
+    },
+  )
+  const data = await loadBusiness()
+  await logRequestTiming('request_business', startedAt, {
+    found: Boolean(data),
+    suspended: Boolean(data?.is_suspended),
+  })
+  return data
 })

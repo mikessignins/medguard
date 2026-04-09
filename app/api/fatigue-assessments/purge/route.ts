@@ -1,16 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
-import { createClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
 import { requireAuthenticatedUser, requireMedicScope, requireRole } from '@/lib/route-access'
 import { safeLogServerEvent } from '@/lib/app-event-log'
 import { parseJsonBody } from '@/lib/api-validation'
+import { requireSameOrigin } from '@/lib/api-security'
 import { fatiguePurgeRequestSchema } from '@/lib/review-request-schemas'
 import { enforceActionRateLimit } from '@/lib/rate-limit'
 
 export const runtime = 'nodejs'
 
 export async function POST(request: NextRequest) {
+  const csrfError = requireSameOrigin(request)
+  if (csrfError) return csrfError
+
   const cookieStore = await cookies()
   const authClient = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -40,6 +43,7 @@ export async function POST(request: NextRequest) {
   const medicAccount = account!
 
   const rateLimited = await enforceActionRateLimit({
+    authClient,
     action: 'fatigue_purge_completed',
     actorUserId: userId!,
     actorRole: medicAccount.role,
@@ -59,12 +63,7 @@ export async function POST(request: NextRequest) {
 
   if (ids.length === 0) return NextResponse.json({ purged: 0 })
 
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  )
-
-  const { data: assessments } = await supabase
+  const { data: assessments } = await authClient
     .from('module_submissions')
     .select('id, business_id, site_id, payload, review_payload, exported_at, exported_by_name, reviewed_at')
     .eq('module_key', 'fatigue_assessment')
@@ -121,11 +120,11 @@ export async function POST(request: NextRequest) {
   })
 
   if (auditRows.length > 0) {
-    const { error: auditError } = await supabase.from('purge_audit_log').insert(auditRows)
+    const { error: auditError } = await authClient.from('purge_audit_log').insert(auditRows)
     if (auditError) console.error('[fatigue/purge] audit log error:', auditError)
   }
 
-  const { error } = await supabase
+  const { error } = await authClient
     .from('module_submissions')
     .update({
       phi_purged_at: purgedAt,

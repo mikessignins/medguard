@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
-import { createClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
 import type { FatigueMedicReviewPayload } from '@/lib/types'
 import { requireAuthenticatedUser, requireMedicScope, requireRole } from '@/lib/route-access'
 import { safeLogServerEvent } from '@/lib/app-event-log'
-import { parseJsonBody } from '@/lib/api-validation'
+import { parseJsonBody, parseUuidParam } from '@/lib/api-validation'
+import { requireSameOrigin } from '@/lib/api-security'
 import { fatigueReviewRequestSchema } from '@/lib/review-request-schemas'
 import { enforceActionRateLimit } from '@/lib/rate-limit'
 
@@ -15,6 +15,12 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: { id: string } },
 ) {
+  const parsedId = parseUuidParam(params.id, 'Fatigue assessment id')
+  if (!parsedId.success) return parsedId.response
+
+  const csrfError = requireSameOrigin(request)
+  if (csrfError) return csrfError
+
   const cookieStore = await cookies()
   const authClient = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -45,6 +51,7 @@ export async function PATCH(
   const medicAccount = account!
 
   const rateLimited = await enforceActionRateLimit({
+    authClient,
     action: 'fatigue_review_saved',
     actorUserId: userId!,
     actorRole: medicAccount.role,
@@ -52,7 +59,7 @@ export async function PATCH(
     businessId: medicAccount.business_id,
     moduleKey: 'fatigue_assessment',
     route: '/api/fatigue-assessments/[id]/review',
-    targetId: params.id,
+    targetId: parsedId.value,
     limit: 20,
     windowMs: 5 * 60_000,
     errorMessage: 'Too many fatigue review updates were submitted. Please wait a moment and try again.',
@@ -63,15 +70,10 @@ export async function PATCH(
   if (!parsed.success) return parsed.response
   const body: FatigueMedicReviewPayload = parsed.data
 
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  )
-
-  const { data: current } = await supabase
+  const { data: current } = await authClient
     .from('module_submissions')
     .select('id, business_id, site_id, status, review_payload, reviewed_by')
-    .eq('id', params.id)
+    .eq('id', parsedId.value)
     .eq('module_key', 'fatigue_assessment')
     .single()
 
@@ -111,7 +113,7 @@ export async function PATCH(
     reviewedByName: medicAccount.display_name,
   }
 
-  const { error } = await supabase
+  const { error } = await authClient
     .from('module_submissions')
     .update({
       status: 'resolved',
@@ -119,7 +121,7 @@ export async function PATCH(
       reviewed_at: now,
       reviewed_by: userId,
     })
-    .eq('id', params.id)
+    .eq('id', parsedId.value)
     .eq('module_key', 'fatigue_assessment')
 
   if (error) {
@@ -133,7 +135,7 @@ export async function PATCH(
       businessId: medicAccount.business_id,
       moduleKey: 'fatigue_assessment',
       route: '/api/fatigue-assessments/[id]/review',
-      targetId: params.id,
+      targetId: parsedId.value,
       errorMessage: error.message,
       context: { fit_for_work_decision: body.fitForWorkDecision },
     })
@@ -150,7 +152,7 @@ export async function PATCH(
     businessId: medicAccount.business_id,
     moduleKey: 'fatigue_assessment',
     route: '/api/fatigue-assessments/[id]/review',
-    targetId: params.id,
+    targetId: parsedId.value,
     context: { fit_for_work_decision: body.fitForWorkDecision },
   })
 

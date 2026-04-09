@@ -2,6 +2,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { getExportErrorMessage } from '@/lib/export-feedback'
 import type { MedicationDeclaration, MedDecReviewStatus, ScriptUpload } from '@/lib/types'
 import { encodeQueue } from '@/lib/queue-params'
 import { isFinalMedicationReviewStatus } from '@/lib/medication-review-guards'
@@ -52,6 +53,7 @@ export default function MedDecDetail({ medDec, siteName, businessName, queueCont
   const [saveError, setSaveError] = useState('')
   const [saveSuccess, setSaveSuccess] = useState(false)
   const [exporting, setExporting] = useState(false)
+  const [exportError, setExportError] = useState('')
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
 
   const isPurged = !!medDec.phi_purged_at
@@ -96,10 +98,14 @@ export default function MedDecDetail({ medDec, siteName, businessName, queueCont
 
   async function handleExportPdf() {
     setExporting(true)
+    setExportError('')
     try {
       const res = await fetch(`/api/medication-declarations/${medDec.id}/pdf`)
       if (!res.ok) {
-        alert('Failed to generate PDF')
+        setExportError(await getExportErrorMessage(
+          res,
+          'The medication declaration PDF could not be exported.',
+        ))
         return
       }
       const blob = await res.blob()
@@ -113,7 +119,7 @@ export default function MedDecDetail({ medDec, siteName, businessName, queueCont
       URL.revokeObjectURL(url)
       router.refresh()
     } catch {
-      alert('Export failed')
+      setExportError('Network error. Please try again.')
     } finally {
       setExporting(false)
     }
@@ -384,6 +390,7 @@ export default function MedDecDetail({ medDec, siteName, businessName, queueCont
                   <p className="text-slate-500 italic">Not yet exported</p>
                 )}
               </div>
+              {exportError && <p className="text-sm text-red-400 mb-3">{exportError}</p>}
               <button
                 onClick={handleExportPdf}
                 disabled={exporting}

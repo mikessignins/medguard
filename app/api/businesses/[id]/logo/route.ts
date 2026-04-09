@@ -1,7 +1,8 @@
 import { createClient } from '@/lib/supabase/server'
-import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuthenticatedUser, requireRole } from '@/lib/route-access'
+import { parseBusinessIdParam } from '@/lib/api-validation'
+import { requireSameOrigin } from '@/lib/api-security'
 import { z } from 'zod'
 
 const MAX_SIZE = 2 * 1024 * 1024 // 2 MB
@@ -10,6 +11,12 @@ type LogoVariant = 'default' | 'light' | 'dark'
 const logoVariantSchema = z.enum(['default', 'light', 'dark'])
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+  const parsedBusinessId = parseBusinessIdParam(params.id)
+  if (!parsedBusinessId.success) return parsedBusinessId.response
+
+  const csrfError = requireSameOrigin(req)
+  if (csrfError) return csrfError
+
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   const userId = user?.id ?? null
@@ -43,21 +50,16 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
   const buffer = Buffer.from(await file.arrayBuffer())
   const ext = file.type === 'image/webp' ? 'webp' : file.type === 'image/png' ? 'png' : 'jpg'
-  const baseName = variant === 'default' ? params.id : `${params.id}-${variant}`
+  const baseName = variant === 'default' ? parsedBusinessId.value : `${parsedBusinessId.value}-${variant}`
   const storagePath = `${baseName}.${ext}`
-
-  const service = createServiceClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  )
 
   // Remove any existing logo files for this business
   const extensions = ['jpg', 'png', 'webp']
   await Promise.all(
-    extensions.map(e => service.storage.from('business-logos').remove([`${baseName}.${e}`]))
+    extensions.map((e) => supabase.storage.from('business-logos').remove([`${baseName}.${e}`]))
   )
 
-  const { error: uploadError } = await service.storage
+  const { error: uploadError } = await supabase.storage
     .from('business-logos')
     .upload(storagePath, buffer, { contentType: file.type, upsert: true })
 
@@ -65,7 +67,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     return NextResponse.json({ error: uploadError.message }, { status: 500 })
   }
 
-  const { data: urlData } = service.storage.from('business-logos').getPublicUrl(storagePath)
+  const { data: urlData } = supabase.storage.from('business-logos').getPublicUrl(storagePath)
   const publicUrl = urlData.publicUrl
   const updatePayload =
     variant === 'light'
@@ -74,10 +76,10 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         ? { logo_url_dark: publicUrl }
         : { logo_url: publicUrl }
 
-  const { error: dbError } = await service
+  const { error: dbError } = await supabase
     .from('businesses')
     .update(updatePayload)
-    .eq('id', params.id)
+    .eq('id', parsedBusinessId.value)
 
   if (dbError) return NextResponse.json({ error: dbError.message }, { status: 500 })
 

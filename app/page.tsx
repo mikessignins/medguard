@@ -22,7 +22,7 @@ export default async function Home() {
   }
 
   if (role === 'pending_medic') redirect('/pending')
-  if (role === 'medic') redirect('/medic')
+  if (role === 'medic') redirect('/medic/emergency')
   if (role === 'admin') redirect('/admin')
   if (role === 'superuser') redirect('/superuser')
 

@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
-import { createClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
 import { requireAuthenticatedUser, requireMedicScope, requireRole } from '@/lib/route-access'
 import {
@@ -8,7 +7,8 @@ import {
   validateReviewTransition,
 } from '@/lib/review-guards'
 import { safeLogServerEvent } from '@/lib/app-event-log'
-import { parseJsonBody } from '@/lib/api-validation'
+import { parseJsonBody, parseUuidParam } from '@/lib/api-validation'
+import { requireSameOrigin } from '@/lib/api-security'
 import { emergencyReviewRequestSchema } from '@/lib/review-request-schemas'
 import { enforceActionRateLimit } from '@/lib/rate-limit'
 
@@ -18,6 +18,12 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  const parsedId = parseUuidParam(params.id, 'Declaration id')
+  if (!parsedId.success) return parsedId.response
+
+  const csrfError = requireSameOrigin(request)
+  if (csrfError) return csrfError
+
   const cookieStore = await cookies()
   const authClient = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -44,6 +50,7 @@ export async function PATCH(
   const medicAccount = account!
 
   const rateLimited = await enforceActionRateLimit({
+    authClient,
     action: 'emergency_review_saved',
     actorUserId: userId!,
     actorRole: medicAccount.role,
@@ -51,7 +58,7 @@ export async function PATCH(
     businessId: medicAccount.business_id,
     moduleKey: 'emergency_declaration',
     route: '/api/declarations/[id]/review',
-    targetId: params.id,
+    targetId: parsedId.value,
     limit: 20,
     windowMs: 5 * 60_000,
     errorMessage: 'Too many emergency review updates were submitted. Please wait a moment and try again.',
@@ -68,16 +75,11 @@ export async function PATCH(
     return NextResponse.json({ error: invalidStatus.error }, { status: invalidStatus.status })
   }
 
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  )
-
   // Fetch current row for optimistic lock check and transition validation
-  const { data: current } = await supabase
+  const { data: current } = await authClient
     .from('submissions')
     .select('status, version, decision, business_id, site_id')
-    .eq('id', params.id)
+    .eq('id', parsedId.value)
     .single()
 
   if (!current) return NextResponse.json({ error: 'Submission not found' }, { status: 404 })
@@ -115,10 +117,10 @@ export async function PATCH(
         }
       : (current.decision ?? null)
 
-  const { error } = await supabase
+  const { error } = await authClient
     .from('submissions')
     .update({ status, decision })
-    .eq('id', params.id)
+    .eq('id', parsedId.value)
 
   if (error) {
     await safeLogServerEvent({
@@ -131,7 +133,7 @@ export async function PATCH(
       businessId: medicAccount.business_id,
       moduleKey: 'emergency_declaration',
       route: '/api/declarations/[id]/review',
-      targetId: params.id,
+      targetId: parsedId.value,
       errorMessage: error.message,
       context: { status },
     })
@@ -148,7 +150,7 @@ export async function PATCH(
     businessId: medicAccount.business_id,
     moduleKey: 'emergency_declaration',
     route: '/api/declarations/[id]/review',
-    targetId: params.id,
+    targetId: parsedId.value,
     context: { status },
   })
 

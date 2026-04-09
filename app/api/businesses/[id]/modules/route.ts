@@ -1,9 +1,9 @@
 import { createClient } from '@/lib/supabase/server'
-import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import { isKnownModuleKey, MODULE_REGISTRY, type ModuleKey } from '@/lib/modules'
 import { requireAuthenticatedUser, requireRole } from '@/lib/route-access'
-import { parseJsonBody } from '@/lib/api-validation'
+import { parseBusinessIdParam, parseJsonBody } from '@/lib/api-validation'
+import { requireSameOrigin } from '@/lib/api-security'
 import { z } from 'zod'
 
 const businessModuleSchema = z.object({
@@ -12,6 +12,12 @@ const businessModuleSchema = z.object({
 })
 
 export async function PATCH(req: Request, { params }: { params: { id: string } }) {
+  const parsedBusinessId = parseBusinessIdParam(params.id)
+  if (!parsedBusinessId.success) return parsedBusinessId.response
+
+  const csrfError = requireSameOrigin(req)
+  if (csrfError) return csrfError
+
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   const userId = user?.id ?? null
@@ -48,24 +54,19 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     return NextResponse.json({ error: 'This module is not ready to activate yet' }, { status: 400 })
   }
 
-  const service = createServiceClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  )
-
   const nextEnabled = body.enabled
 
-  const { data: existingRow } = await service
+  const { data: existingRow } = await supabase
     .from('business_modules')
     .select('config, enabled_at')
-    .eq('business_id', params.id)
+    .eq('business_id', parsedBusinessId.value)
     .eq('module_key', moduleKey)
     .maybeSingle()
 
-  const { error: moduleError } = await service
+  const { error: moduleError } = await supabase
     .from('business_modules')
     .upsert({
-      business_id: params.id,
+      business_id: parsedBusinessId.value,
       module_key: moduleKey,
       enabled: nextEnabled,
       enabled_at: existingRow?.enabled_at ?? new Date().toISOString(),
