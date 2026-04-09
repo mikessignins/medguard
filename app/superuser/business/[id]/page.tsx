@@ -5,12 +5,12 @@ import Link from 'next/link'
 import { format } from 'date-fns'
 import ReminderIntervalPicker from '@/components/superuser/ReminderIntervalPicker'
 import ModulesToggle from '@/components/superuser/ModulesToggle'
-import ModuleCatalog from '@/components/superuser/ModuleCatalog'
 import LogoUpload from '@/components/superuser/LogoUpload'
 import TrialPeriodManager from '@/components/superuser/TrialPeriodManager'
 import IsTestOverride from '@/components/superuser/IsTestOverride'
 import AdminManager from '@/components/superuser/AdminManager'
 import { getConfiguredBusinessModules, type BusinessModule } from '@/lib/modules'
+import { requireScopedBusinessAccess } from '@/lib/route-access'
 
 interface DeidentifiedConditionMetric {
   metric_key: string
@@ -28,11 +28,12 @@ export default async function BusinessDetailPage({ params }: { params: { id: str
 
   const { data: account } = await supabase
     .from('user_accounts')
-    .select('role')
+    .select('role, business_id')
     .eq('id', user.id)
     .single()
 
-  if (!account || account.role !== 'superuser') redirect('/')
+  const accessError = requireScopedBusinessAccess(account, params.id)
+  if (accessError) redirect('/')
 
   const service = createServiceClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -149,8 +150,6 @@ export default async function BusinessDetailPage({ params }: { params: { id: str
           businessId={business.id}
           initialModules={configuredModules}
         />
-
-        <ModuleCatalog modules={configuredModules} />
 
         {/* Business Logo */}
         <LogoUpload

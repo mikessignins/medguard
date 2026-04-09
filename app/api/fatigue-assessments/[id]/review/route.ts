@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import type { FatigueMedicReviewPayload } from '@/lib/types'
-import { requireAuthenticatedUser, requireMedicScope, requireRole } from '@/lib/route-access'
+import { requireActiveMedic, requireAuthenticatedUser, requireMedicScope } from '@/lib/route-access'
 import { safeLogServerEvent } from '@/lib/app-event-log'
 import { parseJsonBody, parseUuidParam } from '@/lib/api-validation'
 import { requireSameOrigin } from '@/lib/api-security'
@@ -42,11 +42,11 @@ export async function PATCH(
 
   const { data: account } = await authClient
     .from('user_accounts')
-    .select('role, display_name, business_id, site_ids')
+    .select('role, display_name, business_id, site_ids, is_inactive')
     .eq('id', userId)
     .single()
 
-  const roleError = requireRole(account, 'medic')
+  const roleError = requireActiveMedic(account)
   if (roleError) return NextResponse.json({ error: roleError.error }, { status: roleError.status })
   const medicAccount = account!
 
@@ -113,7 +113,7 @@ export async function PATCH(
     reviewedByName: medicAccount.display_name,
   }
 
-  const { error } = await authClient
+  let updateQuery = authClient
     .from('module_submissions')
     .update({
       status: 'resolved',
@@ -123,6 +123,15 @@ export async function PATCH(
     })
     .eq('id', parsedId.value)
     .eq('module_key', 'fatigue_assessment')
+    .eq('status', current.status)
+
+  updateQuery = current.reviewed_by
+    ? updateQuery.eq('reviewed_by', current.reviewed_by)
+    : updateQuery.is('reviewed_by', null)
+
+  const { data: updatedAssessment, error } = await updateQuery
+    .select('id')
+    .maybeSingle()
 
   if (error) {
     await safeLogServerEvent({
@@ -140,6 +149,13 @@ export async function PATCH(
       context: { fit_for_work_decision: body.fitForWorkDecision },
     })
     return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+
+  if (!updatedAssessment) {
+    return NextResponse.json(
+      { error: 'This fatigue review was updated by another medic. Please refresh and try again.' },
+      { status: 409 },
+    )
   }
 
   await safeLogServerEvent({

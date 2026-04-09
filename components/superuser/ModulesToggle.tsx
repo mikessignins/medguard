@@ -52,11 +52,11 @@ export default function ModulesToggle({ businessId, initialModules }: Props) {
 
   return (
     <div className="rounded-xl border border-[var(--border-md)] bg-[var(--bg-card)] p-5">
-      <div className="flex items-center gap-2 mb-1">
-        <svg className="w-4 h-4 text-[var(--text-3)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <div className="mb-1 flex items-center gap-2">
+        <svg className="h-4 w-4" style={{ color: 'var(--text-2)' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h7" />
         </svg>
-        <h2 className="text-base font-semibold text-[var(--text-1)]">Modules</h2>
+        <h2 className="text-base font-semibold" style={{ color: 'var(--text-1)' }}>Modules</h2>
       </div>
       <p className="text-xs text-[var(--text-2)] mb-4">
         Enable or disable features for this business. Workers will only see enabled modules on their dashboard.

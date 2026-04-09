@@ -6,6 +6,9 @@ import {
 
 interface Props {
   modules: ConfiguredBusinessModule[]
+  title?: string
+  description?: string
+  showBusinessEnabledState?: boolean
 }
 
 function badgeClass(readiness: ConfiguredBusinessModule['readiness']) {
@@ -19,14 +22,17 @@ function badgeClass(readiness: ConfiguredBusinessModule['readiness']) {
   }
 }
 
-export default function ModuleCatalog({ modules }: Props) {
+export default function ModuleCatalog({
+  modules,
+  title = 'Module Catalogue',
+  description = 'See which modules are live, seeded, or still planned before turning them on for a business.',
+  showBusinessEnabledState = true,
+}: Props) {
   return (
     <div className="rounded-xl border border-[var(--border-md)] bg-[var(--bg-card)] p-5">
       <div className="mb-4">
-        <h2 className="text-base font-semibold text-[var(--text-1)]">Module Catalog</h2>
-        <p className="mt-1 text-xs text-[var(--text-2)]">
-          See which modules are live, seeded, or still planned before turning them on for a business.
-        </p>
+        <h2 className="text-base font-semibold text-[var(--text-1)]">{title}</h2>
+        <p className="mt-1 text-xs text-[var(--text-2)]">{description}</p>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
@@ -55,9 +61,11 @@ export default function ModuleCatalog({ modules }: Props) {
               <span className="rounded-full bg-[var(--bg-card)] px-2 py-1">
                 {module.supportsPurge ? 'Purge managed' : 'No purge'}
               </span>
-              <span className="rounded-full bg-[var(--bg-card)] px-2 py-1">
-                {module.enabled ? 'Enabled for business' : 'Not enabled'}
-              </span>
+              {showBusinessEnabledState && (
+                <span className="rounded-full bg-[var(--bg-card)] px-2 py-1">
+                  {module.enabled ? 'Enabled for business' : 'Not enabled'}
+                </span>
+              )}
             </div>
 
             <div className="mt-4">

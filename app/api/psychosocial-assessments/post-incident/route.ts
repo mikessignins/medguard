@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
-import { requireAuthenticatedUser, requireMedicScope, requireRole } from '@/lib/route-access'
+import { requireActiveMedic, requireAuthenticatedUser, requireMedicScope } from '@/lib/route-access'
 import type { PsychosocialModulePayload, PsychosocialPostIncidentEventType } from '@/lib/types'
 import { parseJsonBody } from '@/lib/api-validation'
 import { requireSameOrigin } from '@/lib/api-security'
@@ -74,11 +74,11 @@ export async function POST(request: NextRequest) {
 
   const { data: account } = await authClient
     .from('user_accounts')
-    .select('role, display_name, business_id, site_ids')
+    .select('role, display_name, business_id, site_ids, is_inactive')
     .eq('id', userId)
     .single()
 
-  const roleError = requireRole(account, 'medic')
+  const roleError = requireActiveMedic(account)
   if (roleError) return NextResponse.json({ error: roleError.error }, { status: roleError.status })
   const medicAccount = account!
 
@@ -135,12 +135,18 @@ export async function POST(request: NextRequest) {
   }
 
   const resolvedWorkerId = resolvedWorker.workerId
+  const { data: resolvedWorkerAccount } = await authClient
+    .from('user_accounts')
+    .select('display_name')
+    .eq('id', resolvedWorkerId)
+    .maybeSingle()
+  const canonicalWorkerName = resolvedWorkerAccount?.display_name?.trim() || workerNameSnapshot.trim()
 
   const payload: PsychosocialModulePayload = {
     postIncidentWelfare: {
       linkedIncidentOrCaseId,
       workerId: resolvedWorkerId,
-      workerNameSnapshot,
+      workerNameSnapshot: canonicalWorkerName,
       jobRole,
       eventType: eventType as PsychosocialPostIncidentEventType,
       eventDateTime,

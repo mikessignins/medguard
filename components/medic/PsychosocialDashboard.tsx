@@ -97,6 +97,12 @@ function hazardLabels(entry: PsychosocialAssessment) {
     .map((key) => labelMap.get(key) ?? key)
 }
 
+function displayWorkerName(entry: PsychosocialAssessment) {
+  const trimmed = getPsychosocialWorkerName(entry).trim()
+  if (trimmed) return trimmed
+  return entry.worker_id ? `Worker ${entry.worker_id.slice(0, 8)}` : 'Unknown worker'
+}
+
 interface Props {
   sites: Array<Pick<Site, 'id' | 'name' | 'is_office'>>
   supportCheckIns: PsychosocialAssessment[]
@@ -177,18 +183,18 @@ export default function PsychosocialDashboard({
               <Link
                 key={entry.id}
                 href={`/medic/psychosocial/${entry.id}?${encodeQueue(queueIds, index)}&site=${encodeURIComponent(activeSite)}`}
-                className={`block px-5 py-4 transition-colors hover:bg-[var(--medic-panel-muted)] ${index > 0 ? 'border-t border-[var(--medic-border)]' : ''}`}
+                className={`medic-queue-link block px-5 py-4 transition-colors hover:bg-[var(--medic-panel-muted)] ${index > 0 ? 'border-t border-[var(--medic-border)]' : ''}`}
               >
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
-                      <h3 className="text-base font-semibold text-[var(--medic-text)]">
-                        {getPsychosocialWorkerName(entry)}
+                      <h3 className="medic-queue-name text-base font-semibold">
+                        {displayWorkerName(entry)}
                       </h3>
                       <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${STATUS_STYLES[entry.status]}`}>
                         {formatPsychosocialStatus(entry.status)}
                       </span>
-                      <span className="rounded-full border border-slate-700 bg-slate-900/70 px-2.5 py-1 text-xs font-medium text-slate-300">
+                      <span className="rounded-full border border-[var(--medic-border)] bg-[var(--medic-card-soft)] px-2.5 py-1 text-xs font-medium text-[var(--medic-muted)]">
                         {formatPsychosocialWorkflowKind(getPsychosocialWorkflowKind(entry) || 'support_check_in')}
                       </span>
                       <span className={`rounded-full border px-2.5 py-1 text-xs font-medium ${RISK_STYLES[entry.payload.scoreSummary.derivedPulseRiskLevel]}`}>
@@ -210,7 +216,7 @@ export default function PsychosocialDashboard({
                     {hazardLabels(entry).length > 0 && (
                       <div className="mt-3 flex flex-wrap gap-2">
                         {hazardLabels(entry).map((label) => (
-                          <span key={label} className="rounded-full border border-slate-700 bg-slate-900/70 px-2.5 py-1 text-xs text-slate-300">
+                          <span key={label} className="rounded-full border border-[var(--medic-border)] bg-[var(--medic-card-soft)] px-2.5 py-1 text-xs text-[var(--medic-muted)]">
                             {label}
                           </span>
                         ))}
@@ -241,11 +247,11 @@ export default function PsychosocialDashboard({
               <Link
                 key={entry.id}
                 href={`/medic/psychosocial/${entry.id}?site=${encodeURIComponent(activeSite)}`}
-                className={`block px-5 py-4 transition-colors hover:bg-[var(--medic-panel-muted)] ${index > 0 ? 'border-t border-[var(--medic-border)]' : ''}`}
+                className={`medic-queue-link block px-5 py-4 transition-colors hover:bg-[var(--medic-panel-muted)] ${index > 0 ? 'border-t border-[var(--medic-border)]' : ''}`}
               >
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <p className="font-medium text-[var(--medic-text)]">{getPsychosocialWorkerName(entry)}</p>
+                    <p className="medic-queue-name font-medium">{displayWorkerName(entry)}</p>
                     <p className="mt-1 text-sm text-[var(--medic-muted)]">
                       {fmtDateTime(entry.submitted_at)} · {formatPsychosocialWorkflowKind(getPsychosocialWorkflowKind(entry) || 'support_check_in')} · {entry.review_payload.outcomeSummary || 'Outcome recorded'}
                     </p>

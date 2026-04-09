@@ -4,6 +4,8 @@
 
 This session started from the 2026-04-07 platform review and the follow-up priority list for the MedGuard web app and companion iOS app.
 
+For the next round of open findings from the 2026-04-09 review, use `docs/security-remediation-checklist-2026-04-09.md` as the active fix tracker.
+
 Primary concerns raised:
 
 - possible service-role secret exposure
@@ -133,6 +135,7 @@ Primary concerns raised:
 4. The rate-limit fallback no longer uses the service-role key to query `app_event_log`. Completed on 2026-04-08 by switching the fallback to the authenticated `count_my_recent_app_events(...)` RPC.
 5. `/api/cron/*` now has middleware-level `CRON_SECRET` verification. Completed on 2026-04-08 as a second layer on top of the existing route checks.
 6. `app/api/admin/audit/route.ts` now validates that `target_user_id` belongs to the same business before writing an audit row. Completed on 2026-04-08.
+7. `app/api/cron/purge-exports/route.ts` now writes purge audit rows only after the PHI mutation succeeds for each form type, aligning the cron flow with the manual purge hardening completed on 2026-04-09.
 
 ### Open iOS items
 
@@ -193,6 +196,7 @@ Those call sites have now been replaced with `Logger` and `.private` privacy han
 - Supabase-backed networking no longer relies on the default shared session. The app now uses a dedicated configured session through `SupabaseClientOptions.GlobalOptions`.
 - Worker-facing lifecycle/history fetches still degrade gracefully to partial/empty states when individual requests fail, but they now emit `OSLog` entries so failures are diagnosable.
 - Auth, fatigue, and psychosocial flows now preserve the existing non-blocking behavior for observability writes while recording logging failures instead of dropping them silently.
+- If a third-party crash reporter is added later, submission IDs, worker IDs, and similar identifiers must be removed or further redacted before logging on any health-data path. `OSLog` `.private` annotations are not enough protection once raw messages are exported outside the system log pipeline.
 
 ## Notes
 

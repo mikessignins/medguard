@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { validatePurgeSelection } from '@/lib/purge-guards'
-import { requireAuthenticatedUser, requireMedicScope, requireRole } from '@/lib/route-access'
+import { requireActiveMedic, requireAuthenticatedUser, requireMedicScope } from '@/lib/route-access'
 import { safeLogServerEvent } from '@/lib/app-event-log'
 import { parseJsonBody } from '@/lib/api-validation'
 import { requireSameOrigin } from '@/lib/api-security'
@@ -35,8 +35,8 @@ export async function POST(request: NextRequest) {
   if (authError) return new NextResponse(authError.error, { status: authError.status })
 
   const { data: account } = await authClient
-    .from('user_accounts').select('role, display_name, business_id, site_ids').eq('id', userId).single()
-  const roleError = requireRole(account, 'medic')
+    .from('user_accounts').select('role, display_name, business_id, site_ids, is_inactive').eq('id', userId).single()
+  const roleError = requireActiveMedic(account)
   if (roleError) return new NextResponse(roleError.error, { status: roleError.status })
   const medicAccount = account!
 
@@ -103,13 +103,7 @@ export async function POST(request: NextRequest) {
     }
   })
 
-  // 6. Write audit log
-  if (auditRows.length > 0) {
-    const { error: auditError } = await authClient.from('purge_audit_log').insert(auditRows)
-    if (auditError) console.error('[purge/route] audit log error:', auditError)
-  }
-
-  // 7. Wipe PHI
+  // 6. Wipe PHI first so the audit log never records a purge that did not happen.
   const { error } = await authClient
     .from('submissions')
     .update({
@@ -135,6 +129,11 @@ export async function POST(request: NextRequest) {
       context: { purge_count: ids.length },
     })
     return new NextResponse(`Purge failed: ${error.message}`, { status: 500 })
+  }
+
+  if (auditRows.length > 0) {
+    const { error: auditError } = await authClient.from('purge_audit_log').insert(auditRows)
+    if (auditError) console.error('[purge/route] audit log error after purge:', auditError)
   }
 
   await safeLogServerEvent({

@@ -36,7 +36,7 @@ export default function LoginPage() {
 
     const { data: account } = await supabase
       .from('user_accounts')
-      .select('role, contract_end_date, business_id')
+      .select('role, contract_end_date, business_id, is_inactive')
       .eq('id', user.id)
       .single()
 
@@ -51,6 +51,7 @@ export default function LoginPage() {
     const destination = resolveWebPortalDestination({
       role: account.role,
       contractEndDate: account.contract_end_date,
+      isInactive: account.is_inactive ?? false,
       isSuspended: business?.is_suspended ?? false,
     })
 

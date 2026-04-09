@@ -1,9 +1,11 @@
 import { notFound, redirect } from 'next/navigation'
 import PsychosocialDetail from '@/components/medic/PsychosocialDetail'
 import { hasMedicScopeAccess } from '@/lib/medic-scope'
+import { withPsychosocialWorkerNameFallback } from '@/lib/psychosocial'
 import { parseQueue } from '@/lib/queue-params'
 import { getRequestClient, getRequestUser, getRequestUserAccount } from '@/lib/supabase/request-cache'
 import type { PsychosocialAssessment } from '@/lib/types'
+import { getWorkerDisplayNameById } from '@/lib/worker-account-names'
 
 function parsePsychosocialAssessment(raw: Record<string, unknown>): PsychosocialAssessment {
   return {
@@ -37,7 +39,7 @@ export default async function MedicPsychosocialPage({
   if (!user) redirect('/login')
 
   const account = await getRequestUserAccount(user.id)
-  if (!account || account.role !== 'medic') redirect('/')
+  if (!account || account.role !== 'medic' || account.is_inactive) redirect('/')
   if (account.contract_end_date && new Date(account.contract_end_date) < new Date()) redirect('/expired')
 
   const supabase = await getRequestClient()
@@ -95,13 +97,18 @@ export default async function MedicPsychosocialPage({
     supabase.from('sites').select('name').eq('id', raw.site_id).single(),
     supabase.from('businesses').select('name').eq('id', raw.business_id).single(),
   ])
+  const workerDisplayName = await getWorkerDisplayNameById(String(raw.worker_id ?? ''))
 
   const queueContext = parseQueue(searchParams)
   const backHref = `/medic/psychosocial?site=${encodeURIComponent(searchParams.site || String(raw.site_id || ''))}`
+  const assessment = withPsychosocialWorkerNameFallback(
+    parsePsychosocialAssessment(raw),
+    workerDisplayName,
+  )
 
   return (
     <PsychosocialDetail
-      assessment={parsePsychosocialAssessment(raw)}
+      assessment={assessment}
       siteName={site?.name || String(raw.site_id)}
       businessName={business?.name || String(raw.business_id)}
       currentUserId={user.id}

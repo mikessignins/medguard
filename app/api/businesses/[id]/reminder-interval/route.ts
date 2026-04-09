@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
-import { requireAuthenticatedUser, requireRole } from '@/lib/route-access'
+import { requireAuthenticatedUser, requireScopedBusinessAccess } from '@/lib/route-access'
 import { parseBusinessIdParam, parseJsonBody } from '@/lib/api-validation'
 import { requireSameOrigin } from '@/lib/api-security'
 import { z } from 'zod'
@@ -30,11 +30,11 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
 
   const { data: account } = await supabase
     .from('user_accounts')
-    .select('role')
+    .select('role, business_id')
     .eq('id', userId)
     .single()
 
-  const roleError = requireRole(account, 'superuser')
+  const roleError = requireScopedBusinessAccess(account, parsedBusinessId.value)
   if (roleError) return NextResponse.json({ error: roleError.error }, { status: roleError.status })
 
   const parsed = await parseJsonBody(req, reminderIntervalSchema)

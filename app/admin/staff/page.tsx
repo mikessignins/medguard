@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import StaffManager from '@/components/admin/StaffManager'
+import { expireMedicContracts } from '@/lib/admin-medics'
 
 export default async function AdminStaffPage() {
   const supabase = await createClient()
@@ -16,8 +17,9 @@ export default async function AdminStaffPage() {
   if (!account) redirect('/login')
 
   const businessId = account.business_id
+  await expireMedicContracts(businessId)
 
-  const [{ data: pendingMedics }, { data: activeMedics }, { data: sites }] = await Promise.all([
+  const [{ data: pendingMedics }, { data: activeMedics }, { data: inactiveMedics }, { data: sites }] = await Promise.all([
     supabase
       .from('user_accounts')
       .select('*')
@@ -27,7 +29,14 @@ export default async function AdminStaffPage() {
       .from('user_accounts')
       .select('*')
       .eq('business_id', businessId)
-      .eq('role', 'medic'),
+      .eq('role', 'medic')
+      .eq('is_inactive', false),
+    supabase
+      .from('user_accounts')
+      .select('*')
+      .eq('business_id', businessId)
+      .eq('role', 'medic')
+      .eq('is_inactive', true),
     supabase
       .from('sites')
       .select('*')
@@ -38,6 +47,7 @@ export default async function AdminStaffPage() {
     <StaffManager
       pendingMedics={pendingMedics || []}
       activeMedics={activeMedics || []}
+      inactiveMedics={inactiveMedics || []}
       sites={sites || []}
       businessId={businessId}
     />

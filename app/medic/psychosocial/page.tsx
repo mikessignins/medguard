@@ -5,9 +5,11 @@ import {
   PSYCHOSOCIAL_HEALTH_MODULE_KEY,
   type BusinessModule,
 } from '@/lib/modules'
+import { withPsychosocialWorkerNameFallback } from '@/lib/psychosocial'
 import { logRequestTiming, startRequestTimer } from '@/lib/request-timing'
 import { getRequestClient, getRequestUser, getRequestUserAccount, getRequestBusinessModules } from '@/lib/supabase/request-cache'
 import type { PsychosocialAssessment } from '@/lib/types'
+import { getWorkerDisplayNamesByIds } from '@/lib/worker-account-names'
 
 function parsePsychosocialAssessment(raw: Record<string, unknown>): PsychosocialAssessment {
   return {
@@ -41,7 +43,7 @@ export default async function MedicPsychosocialDashboardPage({
   if (!user) redirect('/login')
 
   const account = await getRequestUserAccount(user.id)
-  if (!account || account.role !== 'medic') redirect('/')
+  if (!account || account.role !== 'medic' || account.is_inactive) redirect('/')
   if (account.contract_end_date && new Date(account.contract_end_date) < new Date()) redirect('/expired')
 
   const siteIds: string[] = account.site_ids || []
@@ -71,7 +73,14 @@ export default async function MedicPsychosocialDashboardPage({
       .order('submitted_at', { ascending: false })
 
     const entries = ((data as Record<string, unknown>[] | null) ?? []).map(parsePsychosocialAssessment)
-    supportCheckIns = entries.filter(
+    const workerIds = Array.from(new Set(entries.map((entry) => entry.worker_id).filter(Boolean)))
+    const workerNameById = await getWorkerDisplayNamesByIds(workerIds)
+    const hydratedEntries = entries.map((entry) => withPsychosocialWorkerNameFallback(
+      entry,
+      workerNameById.get(entry.worker_id) ?? null,
+    ))
+
+    supportCheckIns = hydratedEntries.filter(
       (entry) => {
         const workflowKind = entry.payload?.workerPulse?.workflowKind
           ?? (entry.payload?.postIncidentWelfare ? 'post_incident_psychological_welfare' : null)
@@ -80,7 +89,7 @@ export default async function MedicPsychosocialDashboardPage({
           && !entry.is_test
       },
     )
-    pulseCount = entries.filter(
+    pulseCount = hydratedEntries.filter(
       (entry) => entry.payload?.workerPulse?.workflowKind === 'wellbeing_pulse' && !entry.is_test,
     ).length
   }

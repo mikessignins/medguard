@@ -89,8 +89,8 @@ export default function FeedbackReview({
   return (
     <div>
       <div className="mb-6">
-        <h1 className="text-xl font-bold text-slate-100">Feedback</h1>
-        <p className="text-sm text-slate-500 mt-0.5">
+        <h1 className="text-xl font-bold text-[var(--text-1)]">Feedback</h1>
+        <p className="mt-0.5 text-sm text-[var(--text-2)]">
           {totalCount} {totalCount === 1 ? 'submission' : 'submissions'} in this view
           {unreadCount > 0 && <span className="ml-2 text-amber-400 font-medium">· {unreadCount} unread</span>}
         </p>
@@ -105,7 +105,7 @@ export default function FeedbackReview({
             className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${
               currentStatus === s
                 ? 'bg-cyan-500/10 border-cyan-500/40 text-cyan-400'
-                : 'bg-slate-800 border-slate-700 text-slate-400 hover:border-slate-600'
+                : 'border-[var(--border-md)] bg-[var(--bg-surface)] text-[var(--text-2)] hover:bg-[var(--bg-input)]'
             }`}
           >
             {s}
@@ -127,7 +127,7 @@ export default function FeedbackReview({
             <button
               key={item.id}
               onClick={() => openItem(item)}
-              className="w-full text-left bg-slate-800/60 border border-slate-700/50 rounded-xl px-5 py-4 hover:border-slate-600 transition-colors"
+              className="dashboard-panel w-full px-5 py-4 text-left transition-colors hover:bg-[var(--bg-surface)]"
             >
               <div className="flex items-start justify-between gap-4">
                 <div className="flex-1 min-w-0">
@@ -139,7 +139,7 @@ export default function FeedbackReview({
                       {item.status}
                     </span>
                   </div>
-                  <p className="text-sm text-slate-300 line-clamp-2">{item.message}</p>
+                  <p className="line-clamp-2 text-sm text-[var(--text-2)]">{item.message}</p>
                   <p className="text-xs text-[var(--text-3)] mt-1.5">
                     {item.submitted_by_name ?? 'Unknown'} · {item.submitted_by_role} · {
                       (() => { try { return format(new Date(item.submitted_at), 'dd MMM yyyy, HH:mm') } catch { return item.submitted_at } })()
@@ -171,15 +171,15 @@ export default function FeedbackReview({
       {/* Detail modal */}
       {selected && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-          <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-lg shadow-2xl">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800">
+          <div className="dashboard-modal w-full max-w-lg">
+            <div className="flex items-center justify-between border-b border-[var(--border)] px-6 py-4">
               <div className="flex items-center gap-2">
                 <span className={`text-xs font-medium px-2 py-0.5 rounded-full border ${CATEGORY_COLORS[selected.category] ?? ''}`}>
                   {selected.category}
                 </span>
-                <h2 className="text-base font-semibold text-slate-100">Feedback Detail</h2>
+                <h2 className="text-base font-semibold text-[var(--text-1)]">Feedback Detail</h2>
               </div>
-              <button onClick={() => setSelected(null)} className="text-slate-500 hover:text-slate-300">
+              <button onClick={() => setSelected(null)} className="text-[var(--text-3)] transition-colors hover:text-[var(--text-1)]">
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
@@ -188,8 +188,8 @@ export default function FeedbackReview({
 
             <div className="px-6 py-5 space-y-5">
               <div>
-                <p className="text-xs text-slate-500 mb-1">Submitted by</p>
-                <p className="text-sm text-slate-300">
+                <p className="mb-1 text-xs text-[var(--text-3)]">Submitted by</p>
+                <p className="text-sm text-[var(--text-2)]">
                   {selected.submitted_by_name ?? 'Unknown'} · <span className="capitalize">{selected.submitted_by_role}</span>
                 </p>
                 <p className="text-xs text-[var(--text-3)] mt-0.5">
@@ -198,16 +198,16 @@ export default function FeedbackReview({
               </div>
 
               <div>
-                <p className="text-xs text-slate-500 mb-1">Message</p>
-                <p className="text-sm text-slate-200 whitespace-pre-wrap leading-relaxed">{selected.message}</p>
+                <p className="mb-1 text-xs text-[var(--text-3)]">Message</p>
+                <p className="whitespace-pre-wrap text-sm leading-relaxed text-[var(--text-1)]">{selected.message}</p>
               </div>
 
               <div>
-                <label className="block text-xs text-slate-500 mb-1">Status</label>
+                <label className="mb-1 block text-xs text-[var(--text-3)]">Status</label>
                 <select
                   value={editStatus}
                   onChange={e => setEditStatus(e.target.value as FeedbackStatus)}
-                  className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-slate-200 focus:outline-none focus:border-cyan-500 transition-colors"
+                  className="dashboard-input w-full px-3 py-2 text-sm"
                 >
                   {ALL_STATUSES.map(s => (
                     <option key={s} value={s}>{s}</option>
@@ -216,13 +216,13 @@ export default function FeedbackReview({
               </div>
 
               <div>
-                <label className="block text-xs text-slate-500 mb-1">Internal Notes</label>
+                <label className="mb-1 block text-xs text-[var(--text-3)]">Internal Notes</label>
                 <textarea
                   value={editNote}
                   onChange={e => setEditNote(e.target.value)}
                   placeholder="Add notes for the team…"
                   rows={3}
-                  className="w-full px-3 py-2.5 bg-slate-800 border border-slate-700 rounded-lg text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-cyan-500 transition-colors resize-none"
+                  className="dashboard-input w-full resize-none px-3 py-2.5 text-sm"
                 />
               </div>
             </div>
@@ -230,7 +230,7 @@ export default function FeedbackReview({
             <div className="flex justify-end gap-3 px-6 pb-5">
               <button
                 onClick={() => setSelected(null)}
-                className="px-4 py-2 rounded-lg text-sm font-medium text-slate-400 hover:text-slate-200 transition-colors"
+                className="px-4 py-2 text-sm font-medium text-[var(--text-2)] transition-colors hover:text-[var(--text-1)]"
               >
                 Cancel
               </button>

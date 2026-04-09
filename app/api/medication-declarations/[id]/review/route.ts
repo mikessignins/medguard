@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import type { MedDecReviewStatus } from '@/lib/types'
-import { requireAuthenticatedUser, requireMedicScope, requireRole } from '@/lib/route-access'
+import { requireActiveMedic, requireAuthenticatedUser, requireMedicScope } from '@/lib/route-access'
 import { validateMedicationReviewTransition } from '@/lib/medication-review-guards'
 import { safeLogServerEvent } from '@/lib/app-event-log'
 import { parseJsonBody, parseUuidParam } from '@/lib/api-validation'
@@ -42,8 +42,8 @@ export async function PATCH(
   if (authError) return NextResponse.json({ error: authError.error }, { status: authError.status })
 
   const { data: account } = await authClient
-    .from('user_accounts').select('role, display_name, business_id, site_ids').eq('id', userId).single()
-  const roleError = requireRole(account, 'medic')
+    .from('user_accounts').select('role, display_name, business_id, site_ids, is_inactive').eq('id', userId).single()
+  const roleError = requireActiveMedic(account)
   if (roleError) return NextResponse.json({ error: roleError.error }, { status: roleError.status })
   const medicAccount = account!
 
@@ -83,10 +83,7 @@ export async function PATCH(
   const scopeError = requireMedicScope(medicAccount, current)
   if (scopeError) return NextResponse.json({ error: scopeError.error }, { status: scopeError.status })
 
-  const transitionError = validateMedicationReviewTransition(
-    current.medic_review_status,
-    medic_review_status
-  )
+  const transitionError = validateMedicationReviewTransition(current.medic_review_status)
   if (transitionError) {
     return NextResponse.json(
       { error: transitionError.error },
@@ -94,7 +91,7 @@ export async function PATCH(
     )
   }
 
-  const { error } = await authClient
+  const { data: updatedDeclaration, error } = await authClient
     .from('medication_declarations')
     .update({
       medic_review_status,
@@ -104,6 +101,9 @@ export async function PATCH(
       medic_reviewed_at: new Date().toISOString(),
     })
     .eq('id', parsedId.value)
+    .eq('medic_review_status', current.medic_review_status)
+    .select('id')
+    .maybeSingle()
 
   if (error) {
     await safeLogServerEvent({
@@ -121,6 +121,13 @@ export async function PATCH(
       context: { medic_review_status },
     })
     return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+
+  if (!updatedDeclaration) {
+    return NextResponse.json(
+      { error: 'This medication review was updated by another medic. Please refresh and try again.' },
+      { status: 409 }
+    )
   }
 
   await safeLogServerEvent({

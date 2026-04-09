@@ -72,7 +72,8 @@ body {
 }
 [data-theme="light"] .bg-slate-900\/60,
 [data-theme="light"] .bg-slate-900\/50,
-[data-theme="light"] .bg-slate-900\/40 {
+[data-theme="light"] .bg-slate-900\/40,
+[data-theme="light"] .bg-slate-900\/70 {
   background-color: #f8fafc !important;
 }
 [data-theme="light"] .shadow,
@@ -103,6 +104,10 @@ body {
 [data-theme="light"] .bg-slate-800\/50,
 [data-theme="light"] .bg-slate-800\/40,
 [data-theme="light"] .bg-slate-800\/30 {
+  background-color: #ffffff !important;
+}
+[data-theme="light"] .bg-slate-950\/80,
+[data-theme="light"] .bg-slate-950\/70 {
   background-color: #ffffff !important;
 }
 [data-theme="light"] .border-slate-700\/50,
@@ -284,6 +289,55 @@ body {
 }
 
 @layer components {
+  .dashboard-sidebar {
+    background-color: var(--bg-surface);
+    border-color: var(--border-md);
+  }
+  .dashboard-sidebar-logo {
+    border-color: var(--border-md);
+  }
+  .dashboard-nav-link {
+    @apply flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150;
+    color: var(--text-2);
+  }
+  .dashboard-nav-link:hover {
+    background-color: var(--bg-surface);
+    color: var(--text-1);
+  }
+  .dashboard-nav-link-active {
+    @apply flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium border transition-all duration-150;
+    background-color: rgba(6, 182, 212, 0.1);
+    border-color: rgba(6, 182, 212, 0.2);
+    color: #06b6d4;
+  }
+  .dashboard-panel {
+    background-color: var(--bg-card);
+    border: 1px solid var(--border-md);
+    @apply rounded-xl;
+  }
+  .dashboard-panel-soft {
+    background-color: var(--bg-surface);
+    border: 1px solid var(--border);
+    @apply rounded-xl;
+  }
+  .dashboard-modal {
+    background-color: var(--bg-card);
+    border: 1px solid var(--border-md);
+    @apply rounded-2xl shadow-2xl;
+  }
+  .dashboard-input {
+    background-color: var(--bg-input);
+    border: 1px solid var(--border-md);
+    color: var(--text-1);
+    @apply rounded-lg transition-colors;
+  }
+  .dashboard-input::placeholder {
+    color: var(--text-3);
+  }
+  .dashboard-input:focus {
+    border-color: rgba(6, 182, 212, 0.5);
+    outline: none;
+  }
   .btn-primary {
     @apply bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg font-medium transition-all duration-200 px-4 py-2.5 text-sm;
   }
@@ -297,10 +351,10 @@ body {
     @apply bg-red-600 hover:bg-red-500 text-white rounded-lg font-medium transition-all duration-200 px-4 py-2.5 text-sm;
   }
   .sidebar-link {
-    @apply flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-400 hover:text-slate-100 hover:bg-slate-800 transition-all duration-150 cursor-pointer;
+    @apply dashboard-nav-link cursor-pointer;
   }
   .sidebar-link-active {
-    @apply flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-cyan-400 bg-cyan-500/10 border border-cyan-500/20 transition-all duration-150;
+    @apply dashboard-nav-link-active;
   }
   .stat-card {
     @apply bg-slate-800/60 backdrop-blur-sm border border-slate-700/50 rounded-xl p-5;
@@ -417,6 +471,19 @@ body {
   }
   .medic-list-row:hover {
     background: rgba(95, 186, 174, 0.06);
+  }
+  .medic-queue-link,
+  .medic-queue-link:link,
+  .medic-queue-link:visited,
+  .medic-queue-link:hover,
+  .medic-queue-link:active {
+    color: inherit;
+    text-decoration: none;
+  }
+  .medic-queue-name,
+  .medic-queue-link:visited .medic-queue-name,
+  .medic-queue-link:hover .medic-queue-name {
+    color: var(--medic-text) !important;
   }
   .medic-empty-state {
     @apply rounded-[24px] border px-6 py-8 text-center;

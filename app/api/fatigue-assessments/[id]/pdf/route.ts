@@ -15,6 +15,8 @@ import {
   pageFooter,
   sectionHeader,
   twoColTable,
+  renderAuditEntries,
+  renderExportAuditSummary,
   F_REGULAR,
   F_BOLD,
   MARGIN,
@@ -215,6 +217,9 @@ async function generateFatiguePdf(id: string) {
 
   const doc = new PDFDocument({ size: 'A4', margin: MARGIN, bufferPages: true, autoFirstPage: false })
   const bufferPromise = streamToBuffer(doc)
+  const exportRenderedAt = new Date().toISOString()
+  const exportKind = raw.exported_at ? 're_export' : 'first_export'
+  const firstExportedAt = raw.exported_at ?? exportRenderedAt
 
   doc.addPage()
   pageHeader(doc, logoBuffer, 'FATIGUE ASSESSMENT')
@@ -262,15 +267,27 @@ async function generateFatiguePdf(id: string) {
     ['TRANSPORT ARRANGED', formatBool(reviewPayload.transportArranged), 'SENT TO ROOM', formatBool(reviewPayload.sentToRoom)],
     ['SENT HOME', formatBool(reviewPayload.sentHome), 'HIGHER MEDICAL REVIEW', formatBool(reviewPayload.requiresHigherMedicalReview)],
     ['FOLLOW-UP REQUIRED', formatBool(reviewPayload.requiresFollowUp), 'RESTRICTIONS', reviewPayload.restrictions || '—'],
-    ['HANDOVER NOTES', reviewPayload.handoverNotes || '—', 'COMMENTS', reviewPayload.medicOrEsoComments || '—'],
+    ['HANDOVER NOTES', reviewPayload.handoverNotes || '—'],
   ])
+  renderAuditEntries(doc, 'MEDIC OR ESO COMMENTS', reviewPayload.medicOrEsoComments ? [{
+    authorName: reviewPayload.reviewedByName || account.display_name,
+    createdAt: raw.reviewed_at,
+    note: reviewPayload.medicOrEsoComments,
+    actionLabel: formatDecision(reviewPayload.fitForWorkDecision),
+  }] : [])
+  renderExportAuditSummary(doc, {
+    exportedByName: account.display_name,
+    exportedAt: exportRenderedAt,
+    exportKind,
+    firstExportedAt,
+  })
 
   pageFooter(doc, 1, 1)
   doc.end()
 
   const pdfBuffer = await bufferPromise
-  let exportKind: 'first_export' | 're_export' = raw.exported_at ? 're_export' : 'first_export'
-  let firstExportedAt: string | null = raw.exported_at ?? null
+  let persistedExportKind: 'first_export' | 're_export' = raw.exported_at ? 're_export' : 'first_export'
+  let persistedFirstExportedAt: string | null = raw.exported_at ?? null
 
   if (!raw.exported_at) {
     const exportStamp = await markExportedIfNeeded({
@@ -299,9 +316,9 @@ async function generateFatiguePdf(id: string) {
     }
 
     if (exportStamp.stamped) {
-      firstExportedAt = exportStamp.exportedAt
+      persistedFirstExportedAt = exportStamp.exportedAt
     } else {
-      exportKind = 're_export'
+      persistedExportKind = 're_export'
     }
   }
 
@@ -317,8 +334,8 @@ async function generateFatiguePdf(id: string) {
     route: '/api/fatigue-assessments/[id]/pdf',
     targetId: id,
     context: {
-      export_kind: exportKind,
-      first_exported_at: firstExportedAt,
+      export_kind: persistedExportKind,
+      first_exported_at: persistedFirstExportedAt,
     },
   })
 

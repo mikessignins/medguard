@@ -65,7 +65,7 @@ export function parseBusinessIdParam(
     .trim()
     .min(2, `${label} must be at least 2 characters`)
     .max(64, `${label} must be 64 characters or fewer`)
-    .regex(/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/, `${label} must contain only lowercase letters, numbers, or hyphens`)
+    .regex(/^[a-z0-9](?:[a-z0-9_-]*[a-z0-9])?$/, `${label} must contain only lowercase letters, numbers, hyphens, or underscores`)
     .safeParse(value)
 
   if (!result.success) {

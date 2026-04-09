@@ -10,8 +10,11 @@ export default function AccountSettingsPage() {
 
   const [displayName, setDisplayName] = useState('')
   const [email, setEmail] = useState('')
+  const [currentEmail, setCurrentEmail] = useState('')
+  const [emailCurrentPassword, setEmailCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
+  const [passwordCurrentPassword, setPasswordCurrentPassword] = useState('')
   const [role, setRole] = useState('')
   const [loading, setLoading] = useState<string | null>(null)
   const [success, setSuccess] = useState('')
@@ -32,6 +35,7 @@ export default function AccountSettingsPage() {
       if (account) {
         setDisplayName(account.display_name || '')
         setEmail(account.email || user.email || '')
+        setCurrentEmail(account.email || user.email || '')
         setRole(account.role || '')
       }
       setInitialLoad(false)
@@ -65,10 +69,21 @@ export default function AccountSettingsPage() {
   async function updateEmail(e: React.FormEvent) {
     e.preventDefault()
     clearMessages()
+    if (!emailCurrentPassword) { setError('Enter your current password to update your email.'); return }
     setLoading('email')
+    const { error: reauthError } = await supabase.auth.signInWithPassword({
+      email: currentEmail,
+      password: emailCurrentPassword,
+    })
+    if (reauthError) {
+      setLoading(null)
+      setError('Current password is incorrect.')
+      return
+    }
     const { error: err } = await supabase.auth.updateUser({ email })
     setLoading(null)
     if (err) { setError(err.message); return }
+    setEmailCurrentPassword('')
     setSuccess('Confirmation sent to your new email address.')
   }
 
@@ -77,12 +92,23 @@ export default function AccountSettingsPage() {
     clearMessages()
     if (newPassword !== confirmPassword) { setError('Passwords do not match.'); return }
     if (newPassword.length < 8) { setError('Password must be at least 8 characters.'); return }
+    if (!passwordCurrentPassword) { setError('Enter your current password to update your password.'); return }
     setLoading('password')
+    const { error: reauthError } = await supabase.auth.signInWithPassword({
+      email: currentEmail,
+      password: passwordCurrentPassword,
+    })
+    if (reauthError) {
+      setLoading(null)
+      setError('Current password is incorrect.')
+      return
+    }
     const { error: err } = await supabase.auth.updateUser({ password: newPassword })
     setLoading(null)
     if (err) { setError(err.message); return }
     setNewPassword('')
     setConfirmPassword('')
+    setPasswordCurrentPassword('')
     setSuccess('Password updated.')
   }
 
@@ -159,6 +185,14 @@ export default function AccountSettingsPage() {
               required
               className="w-full px-4 py-2.5 bg-slate-900/60 border border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500 text-slate-100 placeholder-slate-500 text-sm transition-colors"
             />
+            <input
+              type="password"
+              value={emailCurrentPassword}
+              onChange={e => setEmailCurrentPassword(e.target.value)}
+              required
+              placeholder="Current password"
+              className="w-full px-4 py-2.5 bg-slate-900/60 border border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500 text-slate-100 placeholder-slate-500 text-sm transition-colors"
+            />
             <button
               type="submit"
               disabled={loading === 'email'}
@@ -173,6 +207,14 @@ export default function AccountSettingsPage() {
         <div className="bg-slate-800/60 backdrop-blur-sm border border-slate-700/50 rounded-xl p-6">
           <h2 className="text-base font-semibold text-slate-100 mb-4">Password</h2>
           <form onSubmit={updatePassword} className="space-y-3">
+            <input
+              type="password"
+              value={passwordCurrentPassword}
+              onChange={e => setPasswordCurrentPassword(e.target.value)}
+              required
+              placeholder="Current password"
+              className="w-full px-4 py-2.5 bg-slate-900/60 border border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500 text-slate-100 placeholder-slate-500 text-sm transition-colors"
+            />
             <input
               type="password"
               value={newPassword}

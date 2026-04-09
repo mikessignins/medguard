@@ -9,14 +9,17 @@ import {
   formatPsychosocialContext,
   formatPsychosocialRiskLevel,
   formatPsychosocialWorkflowKind,
+  getPsychosocialReviewHistory,
   getPsychosocialHazardSignals,
   getPsychosocialJobRole,
   getPsychosocialWorkerName,
   PSYCHOSOCIAL_HAZARDS,
+  withPsychosocialWorkerNameFallback,
 } from '@/lib/psychosocial'
 import type { PsychosocialAssessment, PsychosocialReviewPayload } from '@/lib/types'
 import { enforceActionRateLimit } from '@/lib/rate-limit'
 import { safeLogServerEvent } from '@/lib/app-event-log'
+import { getWorkerDisplayNameById } from '@/lib/worker-account-names'
 import {
   streamToBuffer,
   sanitize,
@@ -25,6 +28,8 @@ import {
   pageFooter,
   sectionHeader,
   twoColTable,
+  renderAuditEntries,
+  renderExportAuditSummary,
   F_REGULAR,
   F_BOLD,
   MARGIN,
@@ -146,6 +151,7 @@ async function generatePsychosocialPdf(id: string) {
 
   const siteName = site?.name || raw.site_id || ''
   const businessName = business?.name || raw.business_id || ''
+  const fallbackWorkerName = await getWorkerDisplayNameById(String(raw.worker_id ?? ''))
 
   let logoBuffer: Buffer | null = null
   const businessLogoUrl = resolveBusinessLogoUrl(business, 'light')
@@ -162,24 +168,46 @@ async function generatePsychosocialPdf(id: string) {
     }
   }
 
-  const worker = payload.workerPulse ?? null
-  const welfare = payload.postIncidentWelfare ?? null
+  const assessment = withPsychosocialWorkerNameFallback({
+    id: String(raw.id ?? ''),
+    business_id: String(raw.business_id ?? ''),
+    site_id: String(raw.site_id ?? ''),
+    worker_id: String(raw.worker_id ?? ''),
+    module_key: 'psychosocial_health',
+    module_version: Number(raw.module_version ?? 1),
+    status: raw.status as PsychosocialAssessment['status'],
+    payload,
+    review_payload: reviewPayload,
+    submitted_at: String(raw.submitted_at ?? ''),
+    reviewed_at: raw.reviewed_at ? String(raw.reviewed_at) : null,
+    reviewed_by: raw.reviewed_by ? String(raw.reviewed_by) : null,
+    exported_at: raw.exported_at ? String(raw.exported_at) : null,
+    exported_by_name: raw.exported_by_name ? String(raw.exported_by_name) : null,
+    phi_purged_at: raw.phi_purged_at ? String(raw.phi_purged_at) : null,
+    is_test: typeof raw.is_test === 'boolean' ? raw.is_test : null,
+  }, fallbackWorkerName)
+
+  const worker = assessment.payload.workerPulse ?? null
+  const welfare = assessment.payload.postIncidentWelfare ?? null
   if (!worker && !welfare) {
     return new NextResponse('Psychosocial workflow payload not found for export.', { status: 422 })
   }
-  const summary = payload.scoreSummary
+  const summary = assessment.payload.scoreSummary
   const hazardLabels = getPsychosocialHazardSignals({
-    payload,
+    payload: assessment.payload,
   } as Pick<PsychosocialAssessment, 'payload'>).map(
     (key) => PSYCHOSOCIAL_HAZARDS.find((hazard) => hazard.key === key)?.label ?? key,
   )
 
-  const fullName = getPsychosocialWorkerName({ payload } as Pick<PsychosocialAssessment, 'payload'>).trim() || 'Unknown'
+  const fullName = getPsychosocialWorkerName(assessment).trim() || 'Unknown'
   const dateStr = raw.submitted_at ? String(raw.submitted_at).slice(0, 10) : new Date().toISOString().slice(0, 10)
   const filename = sanitize(`${fullName} - ${formatPsychosocialWorkflowKind(workflowKind as NonNullable<typeof workflowKind>)} - ${dateStr} - ${siteName} - ${businessName}`) + '.pdf'
 
   const doc = new PDFDocument({ size: 'A4', margin: MARGIN, bufferPages: true, autoFirstPage: false })
   const bufferPromise = streamToBuffer(doc)
+  const exportRenderedAt = new Date().toISOString()
+  const exportKind = raw.exported_at ? 're_export' : 'first_export'
+  const firstExportedAt = raw.exported_at ?? exportRenderedAt
 
   doc.addPage()
   pageHeader(doc, logoBuffer, formatPsychosocialWorkflowKind(workflowKind as NonNullable<typeof workflowKind>).toUpperCase())
@@ -218,7 +246,7 @@ async function generatePsychosocialPdf(id: string) {
     ])
   } else if (welfare) {
     twoColTable(doc, [
-      ['WORKER', welfare.workerNameSnapshot || '—', 'JOB ROLE', welfare.jobRole || getPsychosocialJobRole({ payload } as Pick<PsychosocialAssessment, 'payload'>) || '—'],
+      ['WORKER', welfare.workerNameSnapshot || '—', 'JOB ROLE', welfare.jobRole || getPsychosocialJobRole(assessment) || '—'],
       ['SITE', siteName || '—', 'BUSINESS', businessName || '—'],
       ['EVENT TYPE', formatPsychosocialPostIncidentEventType(welfare.eventType), 'EVENT TIME', fmtDateTime(welfare.eventDateTime)],
       ['LINKED INCIDENT', welfare.linkedIncidentOrCaseId || '—', 'FOLLOW-UP SCHEDULED', fmtDateTime(welfare.followUpScheduledAt)],
@@ -244,15 +272,27 @@ async function generatePsychosocialPdf(id: string) {
     ['REVIEWER', reviewPayload.reviewedByName || account.display_name || '—', 'FOLLOW-UP REQUIRED', formatBool(reviewPayload.followUpRequired)],
     ['OUTCOME SUMMARY', reviewPayload.outcomeSummary || '—', 'SUPPORT ACTIONS', reviewPayload.supportActions || '—'],
     ['CONTACT OUTCOME', reviewPayload.contactOutcome || '—', 'FOLLOW-UP SCHEDULED', fmtDateTime(reviewPayload.followUpScheduledAt)],
-    ['COMMENTS', reviewPayload.reviewComments || '—', 'STATUS', String(raw.status ?? 'resolved')],
+    ['STATUS', String(raw.status ?? 'resolved')],
   ])
+  renderAuditEntries(doc, 'REVIEW COMMENTS', getPsychosocialReviewHistory(assessment).map((entry) => ({
+    authorName: entry.createdByName,
+    createdAt: entry.createdAt,
+    note: entry.note,
+    actionLabel: entry.actionLabel,
+  })))
+  renderExportAuditSummary(doc, {
+    exportedByName: account.display_name,
+    exportedAt: exportRenderedAt,
+    exportKind,
+    firstExportedAt,
+  })
 
   pageFooter(doc, 1, 1)
   doc.end()
 
   const pdfBuffer = await bufferPromise
-  let exportKind: 'first_export' | 're_export' = raw.exported_at ? 're_export' : 'first_export'
-  let firstExportedAt: string | null = raw.exported_at ?? null
+  let persistedExportKind: 'first_export' | 're_export' = raw.exported_at ? 're_export' : 'first_export'
+  let persistedFirstExportedAt: string | null = raw.exported_at ?? null
 
   if (!raw.exported_at) {
     const exportStamp = await markExportedIfNeeded({
@@ -281,9 +321,9 @@ async function generatePsychosocialPdf(id: string) {
     }
 
     if (exportStamp.stamped) {
-      firstExportedAt = exportStamp.exportedAt
+      persistedFirstExportedAt = exportStamp.exportedAt
     } else {
-      exportKind = 're_export'
+      persistedExportKind = 're_export'
     }
   }
 
@@ -299,8 +339,8 @@ async function generatePsychosocialPdf(id: string) {
     route: '/api/psychosocial-assessments/[id]/pdf',
     targetId: id,
     context: {
-      export_kind: exportKind,
-      first_exported_at: firstExportedAt,
+      export_kind: persistedExportKind,
+      first_exported_at: persistedFirstExportedAt,
     },
   })
 
