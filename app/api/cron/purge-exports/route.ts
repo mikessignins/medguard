@@ -43,7 +43,6 @@ export async function GET(request: Request) {
 
   let subsPurged = 0
   if (subTargets && subTargets.length > 0) {
-    // Write audit log entries before wiping — captures full chain: approved → exported → purged
     const subAuditRows = subTargets.map(sub => {
       const ws       = sub.worker_snapshot as Record<string, unknown> | null
       const decision = sub.decision as Record<string, unknown> | null
@@ -64,7 +63,6 @@ export async function GET(request: Request) {
         approved_at:       (decision?.decided_at as string) ?? null,
       }
     })
-    await supabase.from('purge_audit_log').insert(subAuditRows)
 
     const { error: subUpdateError } = await supabase
       .from('submissions')
@@ -77,6 +75,13 @@ export async function GET(request: Request) {
 
     if (subUpdateError) {
       return NextResponse.json({ error: subUpdateError.message }, { status: 500 })
+    }
+
+    if (subAuditRows.length > 0) {
+      const { error: subAuditError } = await supabase.from('purge_audit_log').insert(subAuditRows)
+      if (subAuditError) {
+        return NextResponse.json({ error: subAuditError.message }, { status: 500 })
+      }
     }
     subsPurged = subTargets.length
   }
@@ -110,7 +115,6 @@ export async function GET(request: Request) {
       approved_by_name:  m.medic_name ?? null,
       approved_at:       m.medic_reviewed_at ?? null,
     }))
-    await supabase.from('purge_audit_log').insert(medAuditRows)
 
     const { error: medUpdateError } = await supabase
       .from('medication_declarations')
@@ -128,6 +132,13 @@ export async function GET(request: Request) {
 
     if (medUpdateError) {
       return NextResponse.json({ error: medUpdateError.message }, { status: 500 })
+    }
+
+    if (medAuditRows.length > 0) {
+      const { error: medAuditError } = await supabase.from('purge_audit_log').insert(medAuditRows)
+      if (medAuditError) {
+        return NextResponse.json({ error: medAuditError.message }, { status: 500 })
+      }
     }
     medsPurged = medTargets.length
   }
@@ -177,9 +188,6 @@ export async function GET(request: Request) {
         approved_at: entry.reviewed_at ?? null,
       }
     })
-
-    await supabase.from('purge_audit_log').insert(fatigueAuditRows)
-
     const { error: fatigueUpdateError } = await supabase
       .from('module_submissions')
       .update({
@@ -192,6 +200,13 @@ export async function GET(request: Request) {
 
     if (fatigueUpdateError) {
       return NextResponse.json({ error: fatigueUpdateError.message }, { status: 500 })
+    }
+
+    if (fatigueAuditRows.length > 0) {
+      const { error: fatigueAuditError } = await supabase.from('purge_audit_log').insert(fatigueAuditRows)
+      if (fatigueAuditError) {
+        return NextResponse.json({ error: fatigueAuditError.message }, { status: 500 })
+      }
     }
     fatiguePurged = fatigueTargets.length
   }
@@ -249,9 +264,6 @@ export async function GET(request: Request) {
         approved_at: entry.reviewed_at ?? null,
       }
     })
-
-    await supabase.from('purge_audit_log').insert(psychosocialAuditRows)
-
     const { error: psychosocialUpdateError } = await supabase
       .from('module_submissions')
       .update({
@@ -264,6 +276,13 @@ export async function GET(request: Request) {
 
     if (psychosocialUpdateError) {
       return NextResponse.json({ error: psychosocialUpdateError.message }, { status: 500 })
+    }
+
+    if (psychosocialAuditRows.length > 0) {
+      const { error: psychosocialAuditError } = await supabase.from('purge_audit_log').insert(psychosocialAuditRows)
+      if (psychosocialAuditError) {
+        return NextResponse.json({ error: psychosocialAuditError.message }, { status: 500 })
+      }
     }
     psychosocialPurged = psychosocialSupportTargets.length
   }

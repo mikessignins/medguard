@@ -219,7 +219,7 @@ Status legend:
 
 ### 14. OSLog privacy may not survive third-party crash reporters
 
-- Status: [ ]
+- Status: [x]
 - Scope: iOS
 - Issue:
   `.private` protects system logs, but future crash-reporting integrations may capture the raw strings before redaction.
@@ -229,6 +229,8 @@ Status legend:
   Document this as a logging rule and re-review if Sentry, Bugsnag, or similar tooling is added.
 - Note:
   No crash-reporting SDK is present in the current iOS app source, so this remains a forward-looking hardening rule rather than an immediate code change.
+- Evidence:
+  Added an explicit logging rule to `docs/security-memory-2026-04-08-app-hardening.md` stating that identifiers must be removed or further redacted before any future crash-reporting integration exports health-path logs.
 
 ### 15. Web CSRF relies on per-route `requireSameOrigin()`
 
