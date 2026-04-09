@@ -151,7 +151,7 @@ export async function PATCH(
     reviewComments: newReviewComment || existingReviewPayload?.reviewComments || null,
   }
 
-  const { error } = await authClient
+  let updateQuery = authClient
     .from('module_submissions')
     .update({
       status: nextStatus,
@@ -161,6 +161,15 @@ export async function PATCH(
     })
     .eq('id', parsedId.value)
     .eq('module_key', 'psychosocial_health')
+    .eq('status', current.status)
+
+  updateQuery = current.reviewed_by
+    ? updateQuery.eq('reviewed_by', current.reviewed_by)
+    : updateQuery.is('reviewed_by', null)
+
+  const { data: updatedAssessment, error } = await updateQuery
+    .select('id')
+    .maybeSingle()
 
   if (error) {
     await safeLogServerEvent({
@@ -178,6 +187,13 @@ export async function PATCH(
       context: { next_status: nextStatus, workflow_kind: workflowKind },
     })
     return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+
+  if (!updatedAssessment) {
+    return NextResponse.json(
+      { error: 'This psychosocial review was updated by another medic. Please refresh and try again.' },
+      { status: 409 },
+    )
   }
 
   await safeLogServerEvent({

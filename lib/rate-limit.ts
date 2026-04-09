@@ -22,6 +22,13 @@ interface UpstashCommandResult {
   error?: string
 }
 
+class RateLimitUnavailableError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'RateLimitUnavailableError'
+  }
+}
+
 function createRateLimitResponse(errorMessage: string, retryAfterSeconds: number) {
   return NextResponse.json(
     {
@@ -138,8 +145,7 @@ async function enforceUpstashRateLimit(options: ActionRateLimitOptions) {
 
 async function enforceDatabaseRateLimit(options: ActionRateLimitOptions) {
   if (!options.authClient) {
-    console.error('[rate-limit] missing authenticated Supabase client for fallback rate limit')
-    return null
+    throw new RateLimitUnavailableError('Missing authenticated Supabase client for fallback rate limit')
   }
 
   const windowStart = new Date(Date.now() - options.windowMs).toISOString()
@@ -151,8 +157,7 @@ async function enforceDatabaseRateLimit(options: ActionRateLimitOptions) {
   })
 
   if (error) {
-    console.error('[rate-limit] authenticated fallback count error:', error)
-    return null
+    throw new RateLimitUnavailableError(`Authenticated fallback count error: ${error.message}`)
   }
 
   const count = Number(data ?? 0)
@@ -194,6 +199,15 @@ export async function enforceActionRateLimit(options: ActionRateLimitOptions) {
     return await enforceDatabaseRateLimit(options)
   } catch (error) {
     console.error('[rate-limit] unexpected error:', error)
-    return enforceDatabaseRateLimit(options)
+    if (error instanceof RateLimitUnavailableError) {
+      return createRateLimitResponse(options.errorMessage, getConfiguredRetryAfterSeconds(options.windowMs))
+    }
+
+    try {
+      return await enforceDatabaseRateLimit(options)
+    } catch (fallbackError) {
+      console.error('[rate-limit] fallback unavailable:', fallbackError)
+      return createRateLimitResponse(options.errorMessage, getConfiguredRetryAfterSeconds(options.windowMs))
+    }
   }
 }

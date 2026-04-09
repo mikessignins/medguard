@@ -128,11 +128,6 @@ export async function POST(request: NextRequest) {
     }
   })
 
-  if (auditRows.length > 0) {
-    const { error: auditError } = await authClient.from('purge_audit_log').insert(auditRows)
-    if (auditError) console.error('[psychosocial/purge] audit log error:', auditError)
-  }
-
   const { error } = await authClient
     .from('module_submissions')
     .update({
@@ -159,6 +154,11 @@ export async function POST(request: NextRequest) {
       context: { purge_count: ids.length },
     })
     return new NextResponse(`Purge failed: ${error.message}`, { status: 500 })
+  }
+
+  if (auditRows.length > 0) {
+    const { error: auditError } = await authClient.from('purge_audit_log').insert(auditRows)
+    if (auditError) console.error('[psychosocial/purge] audit log error after purge:', auditError)
   }
 
   await safeLogServerEvent({

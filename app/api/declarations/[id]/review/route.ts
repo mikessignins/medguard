@@ -117,10 +117,13 @@ export async function PATCH(
         }
       : (current.decision ?? null)
 
-  const { error } = await authClient
+  const { data: updatedSubmission, error } = await authClient
     .from('submissions')
     .update({ status, decision })
     .eq('id', parsedId.value)
+    .eq('version', current.version)
+    .select('id')
+    .maybeSingle()
 
   if (error) {
     await safeLogServerEvent({
@@ -138,6 +141,16 @@ export async function PATCH(
       context: { status },
     })
     return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+
+  if (!updatedSubmission) {
+    return NextResponse.json(
+      {
+        error: 'This form was updated by another user. Please refresh and try again.',
+        current_version: current.version,
+      },
+      { status: 409 }
+    )
   }
 
   await safeLogServerEvent({

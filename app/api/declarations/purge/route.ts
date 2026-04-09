@@ -103,13 +103,7 @@ export async function POST(request: NextRequest) {
     }
   })
 
-  // 6. Write audit log
-  if (auditRows.length > 0) {
-    const { error: auditError } = await authClient.from('purge_audit_log').insert(auditRows)
-    if (auditError) console.error('[purge/route] audit log error:', auditError)
-  }
-
-  // 7. Wipe PHI
+  // 6. Wipe PHI first so the audit log never records a purge that did not happen.
   const { error } = await authClient
     .from('submissions')
     .update({
@@ -135,6 +129,11 @@ export async function POST(request: NextRequest) {
       context: { purge_count: ids.length },
     })
     return new NextResponse(`Purge failed: ${error.message}`, { status: 500 })
+  }
+
+  if (auditRows.length > 0) {
+    const { error: auditError } = await authClient.from('purge_audit_log').insert(auditRows)
+    if (auditError) console.error('[purge/route] audit log error after purge:', auditError)
   }
 
   await safeLogServerEvent({

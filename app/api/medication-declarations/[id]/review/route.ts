@@ -94,7 +94,7 @@ export async function PATCH(
     )
   }
 
-  const { error } = await authClient
+  const { data: updatedDeclaration, error } = await authClient
     .from('medication_declarations')
     .update({
       medic_review_status,
@@ -104,6 +104,9 @@ export async function PATCH(
       medic_reviewed_at: new Date().toISOString(),
     })
     .eq('id', parsedId.value)
+    .eq('medic_review_status', current.medic_review_status)
+    .select('id')
+    .maybeSingle()
 
   if (error) {
     await safeLogServerEvent({
@@ -121,6 +124,13 @@ export async function PATCH(
       context: { medic_review_status },
     })
     return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+
+  if (!updatedDeclaration) {
+    return NextResponse.json(
+      { error: 'This medication review was updated by another medic. Please refresh and try again.' },
+      { status: 409 }
+    )
   }
 
   await safeLogServerEvent({

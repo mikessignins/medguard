@@ -4,6 +4,8 @@
 
 This session started from the 2026-04-07 platform review and the follow-up priority list for the MedGuard web app and companion iOS app.
 
+For the next round of open findings from the 2026-04-09 review, use `docs/security-remediation-checklist-2026-04-09.md` as the active fix tracker.
+
 Primary concerns raised:
 
 - possible service-role secret exposure

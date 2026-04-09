@@ -19,10 +19,6 @@ describe('validateMedicationReviewTransition', () => {
     expect(validateMedicationReviewTransition('In Review', 'Normal Duties')).toBeNull()
   })
 
-  it('allows comment-only updates that keep the same final outcome', () => {
-    expect(validateMedicationReviewTransition('Restricted Duties', 'Restricted Duties')).toBeNull()
-  })
-
   it('blocks changing a final medication decision to another outcome', () => {
     expect(validateMedicationReviewTransition('Restricted Duties', 'Normal Duties')).toEqual({
       error: "Cannot change outcome from terminal state 'Restricted Duties'.",
@@ -33,6 +29,13 @@ describe('validateMedicationReviewTransition', () => {
   it('blocks reverting a final medication decision to an earlier state', () => {
     expect(validateMedicationReviewTransition('Unfit for Work', 'In Review')).toEqual({
       error: "Cannot change outcome from terminal state 'Unfit for Work'.",
+      status: 422,
+    })
+  })
+
+  it('blocks any write once the medication decision is final, even if the status is unchanged', () => {
+    expect(validateMedicationReviewTransition('Restricted Duties', 'Restricted Duties')).toEqual({
+      error: "Cannot change outcome from terminal state 'Restricted Duties'.",
       status: 422,
     })
   })
