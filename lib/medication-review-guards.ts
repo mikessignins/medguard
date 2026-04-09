@@ -17,7 +17,7 @@ export function isFinalMedicationReviewStatus(status: MedDecReviewStatus): boole
 
 export function validateMedicationReviewTransition(
   currentStatus: MedDecReviewStatus,
-  requestedStatus: MedDecReviewStatus
+  _requestedStatus: MedDecReviewStatus
 ): MedicationReviewGuardFailure | null {
   if (isFinalMedicationReviewStatus(currentStatus)) {
     return {
