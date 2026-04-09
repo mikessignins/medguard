@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { redirect } from 'next/navigation'
 import { formatDistanceToNow } from 'date-fns'
+import { expireMedicContracts } from '@/lib/admin-medics'
 
 function MetricCard({
   title,
@@ -54,6 +55,7 @@ export default async function AdminPage() {
   if (!account) redirect('/login')
 
   const businessId = account.business_id
+  await expireMedicContracts(businessId)
   const now = new Date()
   const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
   const currentMonthKey = firstOfMonth.slice(0, 10)
@@ -69,14 +71,16 @@ export default async function AdminPage() {
     { count: workerCount },
     { count: medicCount },
     { count: pendingCount },
+    { count: inactiveMedicCount },
     { count: siteCount },
     { data: thisMonthBillingRow },
     { count: staleForms },
     { data: cronHealth },
   ] = await Promise.all([
     supabase.from('user_accounts').select('*', { count: 'exact', head: true }).eq('business_id', businessId).eq('role', 'worker'),
-    supabase.from('user_accounts').select('*', { count: 'exact', head: true }).eq('business_id', businessId).eq('role', 'medic'),
+    supabase.from('user_accounts').select('*', { count: 'exact', head: true }).eq('business_id', businessId).eq('role', 'medic').eq('is_inactive', false),
     supabase.from('user_accounts').select('*', { count: 'exact', head: true }).eq('business_id', businessId).eq('role', 'pending_medic'),
+    supabase.from('user_accounts').select('*', { count: 'exact', head: true }).eq('business_id', businessId).eq('role', 'medic').eq('is_inactive', true),
     supabase.from('sites').select('*', { count: 'exact', head: true }).eq('business_id', businessId),
     service
       .from('business_monthly_billables')
@@ -105,6 +109,7 @@ export default async function AdminPage() {
     { title: 'Workers', value: workerCount ?? 0, color: 'text-blue-400', alert: false },
     { title: 'Active Medics', value: medicCount ?? 0, color: 'text-emerald-400', alert: false },
     { title: 'Pending Medics', value: pendingCount ?? 0, color: 'text-amber-400', alert: false },
+    { title: 'Inactive Medics', value: inactiveMedicCount ?? 0, color: 'text-slate-400', alert: false },
     { title: 'Sites', value: siteCount ?? 0, color: 'text-violet-400', alert: false },
     { title: 'Declarations This Month', value: submissionsThisMonth, color: 'text-cyan-400', alert: false },
     {

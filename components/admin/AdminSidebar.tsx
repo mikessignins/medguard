@@ -83,10 +83,7 @@ export default function AdminSidebar() {
           <Link
             key={item.href}
             href={item.href}
-            className={isActive
-              ? 'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-cyan-400 bg-cyan-500/10 border border-cyan-500/20 transition-all duration-150'
-              : 'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-400 hover:text-slate-100 hover:bg-slate-800 transition-all duration-150'
-            }
+            className={isActive ? 'dashboard-nav-link-active' : 'dashboard-nav-link'}
           >
             {item.icon}
             {item.label}

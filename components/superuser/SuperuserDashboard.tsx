@@ -54,8 +54,8 @@ export default function SuperuserDashboard({ businesses: initialBusinesses }: Pr
     <div>
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-xl font-bold text-slate-100">Businesses</h1>
-          <p className="text-sm text-slate-500 mt-0.5">Manage client organisations</p>
+          <h1 className="text-xl font-bold text-[var(--text-1)]">Businesses</h1>
+          <p className="mt-0.5 text-sm text-[var(--text-2)]">Manage client organisations</p>
         </div>
         <button
           onClick={() => setShowModal(true)}
@@ -65,19 +65,19 @@ export default function SuperuserDashboard({ businesses: initialBusinesses }: Pr
         </button>
       </div>
 
-      <div className="bg-slate-800/60 backdrop-blur-sm border border-slate-700/50 rounded-xl overflow-hidden">
+      <div className="dashboard-panel overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="bg-slate-900/60 border-b border-slate-700/50">
-                <th className="text-left px-5 py-3 font-medium text-slate-400">Business</th>
-                <th className="text-center px-4 py-3 font-medium text-slate-400">Admins</th>
-                <th className="text-center px-4 py-3 font-medium text-slate-400">Medics</th>
-                <th className="text-center px-4 py-3 font-medium text-slate-400">Workers</th>
-                <th className="text-center px-4 py-3 font-medium text-slate-400">Sites</th>
-                <th className="text-center px-4 py-3 font-medium text-slate-400">Declarations</th>
-                <th className="text-left px-4 py-3 font-medium text-slate-400">Last Declaration</th>
-                <th className="text-center px-4 py-3 font-medium text-slate-400">Status</th>
+              <tr className="border-b border-[var(--border)] bg-[var(--bg-surface)]">
+                <th className="px-5 py-3 text-left font-medium text-[var(--text-2)]">Business</th>
+                <th className="px-4 py-3 text-center font-medium text-[var(--text-2)]">Admins</th>
+                <th className="px-4 py-3 text-center font-medium text-[var(--text-2)]">Medics</th>
+                <th className="px-4 py-3 text-center font-medium text-[var(--text-2)]">Workers</th>
+                <th className="px-4 py-3 text-center font-medium text-[var(--text-2)]">Sites</th>
+                <th className="px-4 py-3 text-center font-medium text-[var(--text-2)]">Declarations</th>
+                <th className="px-4 py-3 text-left font-medium text-[var(--text-2)]">Last Declaration</th>
+                <th className="px-4 py-3 text-center font-medium text-[var(--text-2)]">Status</th>
                 <th className="px-4 py-3"></th>
               </tr>
             </thead>
@@ -92,19 +92,19 @@ export default function SuperuserDashboard({ businesses: initialBusinesses }: Pr
                 businesses.map((biz, i) => (
                   <tr
                     key={biz.id}
-                    className={`hover:bg-slate-700/30 transition-colors cursor-pointer ${i > 0 ? 'border-t border-slate-700/50' : ''} ${biz.is_suspended ? 'opacity-50' : ''}`}
+                    className={`cursor-pointer transition-colors hover:bg-[var(--bg-surface)] ${i > 0 ? 'border-t border-[var(--border)]' : ''} ${biz.is_suspended ? 'opacity-50' : ''}`}
                     onClick={() => router.push(`/superuser/business/${biz.id}`)}
                   >
                     <td className="px-5 py-3.5">
-                      <p className="font-medium text-slate-100">{biz.name}</p>
+                      <p className="font-medium text-[var(--text-1)]">{biz.name}</p>
                       <p className="text-xs text-[var(--text-3)]">{biz.id}</p>
                     </td>
-                    <td className="px-4 py-3.5 text-center text-slate-300">{biz.adminCount}</td>
-                    <td className="px-4 py-3.5 text-center text-slate-300">{biz.medicCount}</td>
-                    <td className="px-4 py-3.5 text-center text-slate-300">{biz.workerCount}</td>
-                    <td className="px-4 py-3.5 text-center text-slate-300">{biz.siteCount}</td>
-                    <td className="px-4 py-3.5 text-center text-slate-300">{biz.totalDeclarations}</td>
-                    <td className="px-4 py-3.5 text-slate-500 text-xs">
+                    <td className="px-4 py-3.5 text-center text-[var(--text-2)]">{biz.adminCount}</td>
+                    <td className="px-4 py-3.5 text-center text-[var(--text-2)]">{biz.medicCount}</td>
+                    <td className="px-4 py-3.5 text-center text-[var(--text-2)]">{biz.workerCount}</td>
+                    <td className="px-4 py-3.5 text-center text-[var(--text-2)]">{biz.siteCount}</td>
+                    <td className="px-4 py-3.5 text-center text-[var(--text-2)]">{biz.totalDeclarations}</td>
+                    <td className="px-4 py-3.5 text-xs text-[var(--text-3)]">
                       {biz.lastDeclaration
                         ? format(new Date(biz.lastDeclaration), 'dd MMM yyyy')
                         : '—'}

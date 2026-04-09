@@ -22,12 +22,14 @@ export default async function MedicLayout({ children }: { children: React.ReactN
   const initialDestination = resolveWebPortalDestination({
     role: account.role,
     contractEndDate: account.contract_end_date,
+    isInactive: account.is_inactive ?? false,
     isSuspended: false,
   })
 
   if (!canAccessMedicPortal({
     role: account.role,
     contractEndDate: account.contract_end_date,
+    isInactive: account.is_inactive ?? false,
     isSuspended: false,
   })) {
     redirect(initialDestination ?? '/')
@@ -41,6 +43,7 @@ export default async function MedicLayout({ children }: { children: React.ReactN
   const finalDestination = resolveWebPortalDestination({
     role: account.role,
     contractEndDate: account.contract_end_date,
+    isInactive: account.is_inactive ?? false,
     isSuspended: business?.is_suspended ?? false,
   })
 

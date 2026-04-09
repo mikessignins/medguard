@@ -43,7 +43,7 @@ export default function ThemeToggle({ compact = false }: Props) {
     return (
       <button
         onClick={toggle}
-        className="p-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-800 transition-all duration-150 shrink-0"
+        className="dashboard-nav-link p-2 shrink-0"
         aria-label="Toggle colour theme"
         title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
       >
@@ -63,7 +63,7 @@ export default function ThemeToggle({ compact = false }: Props) {
   return (
     <button
       onClick={toggle}
-      className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-400 hover:text-slate-100 hover:bg-slate-800 transition-all duration-150 w-full"
+      className="dashboard-nav-link w-full"
       aria-label="Toggle colour theme"
     >
       {theme === 'dark' ? (

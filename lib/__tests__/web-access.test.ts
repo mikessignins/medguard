@@ -38,6 +38,14 @@ describe('resolveWebPortalDestination', () => {
     })).toBe('/expired')
   })
 
+  it('blocks inactive medics from any web portal destination', () => {
+    expect(resolveWebPortalDestination({
+      role: 'medic',
+      isInactive: true,
+      now,
+    })).toBeNull()
+  })
+
   it('routes supported roles to their expected portals', () => {
     expect(resolveWebPortalDestination({ role: 'pending_medic', now })).toBe('/pending')
     expect(resolveWebPortalDestination({ role: 'medic', now })).toBe('/medic')
@@ -64,5 +72,9 @@ describe('canAccessMedicPortal', () => {
       contractEndDate: '2026-04-04T00:00:00.000Z',
       now,
     })).toBe(false)
+  })
+
+  it('denies inactive medics', () => {
+    expect(canAccessMedicPortal({ role: 'medic', isInactive: true, now })).toBe(false)
   })
 })

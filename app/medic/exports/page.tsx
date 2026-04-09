@@ -16,7 +16,7 @@ export default async function MedicExportsPage({ searchParams }: { searchParams:
   if (!user) redirect('/login')
 
   const account = await getRequestUserAccount(user.id)
-  if (!account || account.role !== 'medic') redirect('/')
+  if (!account || account.role !== 'medic' || account.is_inactive) redirect('/')
   if (account.contract_end_date && new Date(account.contract_end_date) < new Date()) redirect('/expired')
 
   const supabase = await getRequestClient()

@@ -96,10 +96,10 @@ export default function LogoUpload({
   return (
     <div className="rounded-xl border border-[var(--border-md)] bg-[var(--bg-card)] p-5">
       <div className="mb-1 flex items-center gap-2">
-        <svg className="h-4 w-4 text-[var(--text-3)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg className="h-4 w-4" style={{ color: 'var(--text-2)' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
         </svg>
-        <h2 className="text-base font-semibold text-[var(--text-1)]">Business Logos</h2>
+        <h2 className="text-base font-semibold" style={{ color: 'var(--text-1)' }}>Business Logos</h2>
       </div>
       <p className="mb-4 text-xs text-[var(--text-2)]">
         Upload separate logos for light and dark mode. Each device will automatically choose the correct version for its current theme. JPEG, PNG, or WebP. Max 2 MB.

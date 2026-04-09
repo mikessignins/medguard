@@ -1,15 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 import PDFDocument from 'pdfkit'
-import type { WorkerSnapshot, Decision, ScriptUpload } from '@/lib/types'
+import type { WorkerSnapshot, Decision, ScriptUpload, MedicComment } from '@/lib/types'
 import { resolveBusinessLogoUrl } from '@/lib/business-logo'
 import { hasMedicScopeAccess } from '@/lib/medic-scope'
 import { parseUuidParam } from '@/lib/api-validation'
 import { markExportedIfNeeded } from '@/lib/export-stamp'
 import { enforceActionRateLimit } from '@/lib/rate-limit'
 import { safeLogServerEvent } from '@/lib/app-event-log'
+import { parseSubmissionComments } from '@/lib/submission-comments'
 import {
   streamToBuffer, sanitize, fmtDate, fmtDateTime, parseJson, parseArray,
-  pageHeader, pageFooter, sectionHeader, twoColTable, questionBlock,
+  pageHeader, pageFooter, sectionHeader, twoColTable, questionBlock, renderAuditEntries, renderExportAuditSummary,
   F_REGULAR, F_BOLD, F_ITALIC,
   MARGIN, CONTENT_W, BORDER, MUTED, ACCENT,
   getAuthenticatedMedic,
@@ -85,6 +86,12 @@ async function generatePdf(id: string) {
 
   const siteName     = site?.name     || raw.site_id     || ''
   const businessName = business?.name || raw.business_id || ''
+  const { data: commentRows } = await supabase
+    .from('submission_comments')
+    .select('id, medic_user_id, medic_name, note, outcome, created_at, edited_at')
+    .eq('submission_id', id)
+    .order('created_at', { ascending: true })
+  const comments = parseSubmissionComments(commentRows ?? []) as MedicComment[]
 
   // Fetch business logo for PDF header
   let logoBuffer: Buffer | null = null
@@ -166,6 +173,23 @@ async function generatePdf(id: string) {
   const condCol1        = conditions.slice(0, conditionHalf)
   const condCol2        = conditions.slice(conditionHalf)
   const disclosed       = conditions.filter(([, v]) => v?.answer === true)
+  const exportRenderedAt = new Date().toISOString()
+  const exportKind = raw.exported_at ? 're_export' : 'first_export'
+  const firstExportedAt = raw.exported_at ?? exportRenderedAt
+  const reviewNotes = [
+    ...(decision?.note ? [{
+      authorName: decision.decided_by_name || auth.account.display_name,
+      createdAt: decision.decided_at,
+      note: decision.note,
+      actionLabel: decision.outcome,
+    }] : []),
+    ...comments.map((comment) => ({
+      authorName: comment.medic_name,
+      createdAt: comment.created_at,
+      note: comment.note,
+      actionLabel: comment.outcome,
+    })),
+  ]
 
   // ── PAGE 1 ──────────────────────────────────────────────────────────────────
   doc.addPage()
@@ -362,8 +386,8 @@ async function generatePdf(id: string) {
     )
   doc.y = declY + 28
   twoColTable(doc, [
-    ['FULL NAME',  ws?.fullName || '—',     'SIGNATURE', ''],
-    ['DATE',       fmtDate(raw.visit_date || raw.submitted_at), 'EMPLOYEE ID', ws?.employeeId || '—'],
+    ['FULL NAME', ws?.fullName || '—', 'DATE', fmtDate(raw.visit_date || raw.submitted_at)],
+    ['EMPLOYEE ID', ws?.employeeId || '—'],
   ])
 
   // MEDIC REVIEW
@@ -371,21 +395,18 @@ async function generatePdf(id: string) {
   twoColTable(doc, [
     ['SITE',       siteName,                     'BUSINESS',  businessName],
     ['VISIT DATE', fmtDate(raw.visit_date),      'SHIFT',     raw.shift_type || '—'],
-    ['STATUS',     raw.status || '—',            'EXPORTED',  fmtDateTime(raw.exported_at || new Date().toISOString())],
+    ['STATUS',     raw.status || '—',            'REVIEWED',  fmtDateTime(decision?.decided_at)],
     ...(decision ? [
-      ['DECISION', decision.outcome, 'REVIEWED', fmtDateTime(decision.decided_at)] as [string, string, string, string],
+      ['DECISION', decision.outcome, 'REVIEWER', decision.decided_by_name || auth.account.display_name] as [string, string, string, string],
     ] : []),
   ])
-  if (decision?.note) {
-    const noteY = doc.y
-    const noteH = 26
-    doc.rect(MARGIN, noteY, CONTENT_W, noteH).fillAndStroke('#FDF2F2', BORDER)
-    doc.fillColor(ACCENT).font(F_BOLD).fontSize(7.5)
-      .text('FOLLOW-UP NOTE', MARGIN + 5, noteY + 5, { width: CONTENT_W - 10, lineBreak: false })
-    doc.fillColor('#000').font(F_REGULAR).fontSize(8.5)
-      .text(decision.note, MARGIN + 5, noteY + 13, { width: CONTENT_W - 10 })
-    doc.y = noteY + noteH
-  }
+  renderAuditEntries(doc, 'MEDIC NOTES', reviewNotes)
+  renderExportAuditSummary(doc, {
+    exportedByName: auth.account.display_name,
+    exportedAt: exportRenderedAt,
+    exportKind,
+    firstExportedAt,
+  })
 
   pageFooter(doc, 2, totalPages)
 
@@ -446,8 +467,8 @@ async function generatePdf(id: string) {
 
   doc.end()
   const pdfBuffer = await bufferPromise
-  let exportKind: 'first_export' | 're_export' = raw.exported_at ? 're_export' : 'first_export'
-  let firstExportedAt: string | null = raw.exported_at ?? null
+  let persistedExportKind: 'first_export' | 're_export' = raw.exported_at ? 're_export' : 'first_export'
+  let persistedFirstExportedAt: string | null = raw.exported_at ?? null
 
   // Mark exported_at and exported_by_name only after PDF generation succeeds.
   // This prevents the countdown starting on a form whose PDF was never delivered.
@@ -477,9 +498,9 @@ async function generatePdf(id: string) {
     }
 
     if (exportStamp.stamped) {
-      firstExportedAt = exportStamp.exportedAt
+      persistedFirstExportedAt = exportStamp.exportedAt
     } else {
-      exportKind = 're_export'
+      persistedExportKind = 're_export'
     }
   }
 
@@ -495,8 +516,8 @@ async function generatePdf(id: string) {
     route: '/api/declarations/[id]/pdf',
     targetId: id,
     context: {
-      export_kind: exportKind,
-      first_exported_at: firstExportedAt,
+      export_kind: persistedExportKind,
+      first_exported_at: persistedFirstExportedAt,
     },
   })
 

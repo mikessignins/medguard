@@ -2,6 +2,14 @@
 
 These are product and implementation issues to review after the current hardening pass.
 
+## Status — 2026-04-09
+
+- Implemented a safer worker search-and-select flow on the current web branch.
+- Post-incident case creation now requires selecting an exact MedGuard worker account from site-scoped results instead of relying on free-text name matching.
+- The selected worker's canonical display name is now written into the post-incident payload server-side, which keeps new dashboard and detail records consistent.
+- Existing psychosocial queue, detail, and PDF views now fall back to the linked worker account display name when an older payload is missing the worker snapshot.
+- Differentiators currently available in the existing schema are worker email and MedGuard account ID. If the product still needs DOB, employee ID, company, or role in the picker, that will require additional worker profile fields to be exposed in the web app or database.
+
 ## Current issues reported
 
 - The post-incident workflow does not reliably let medics look up workers who already exist in the database.
@@ -38,3 +46,7 @@ These are product and implementation issues to review after the current hardenin
 - The selected worker is unambiguous before the case is created.
 - Error messages explain what the medic needs to do next when no unique match is available.
 - Submitted psychosocial cases show the correct worker name in the medic dashboard and detail views.
+
+## Remaining UI follow-up
+
+- Review the remaining hard-coded dark styling in the psychosocial incident follow-up views for light mode.

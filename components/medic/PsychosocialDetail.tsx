@@ -12,6 +12,7 @@ import {
   formatPsychosocialRiskLevel,
   formatPsychosocialStatus,
   formatPsychosocialWorkflowKind,
+  getPsychosocialReviewHistory,
   getPsychosocialHazardSignals,
   getPsychosocialJobRole,
   getPsychosocialWorkerName,
@@ -89,27 +90,6 @@ function InfoRow({ label, value }: { label: string; value: string }) {
   )
 }
 
-function reviewHistory(assessment: PsychosocialAssessment) {
-  const entries = Array.isArray(assessment.review_payload.reviewEntries)
-    ? assessment.review_payload.reviewEntries
-    : []
-
-  if (entries.length > 0) return entries
-
-  if (assessment.review_payload.reviewComments?.trim()) {
-    return [{
-      id: 'legacy-review-comment',
-      createdAt: assessment.reviewed_at ?? assessment.submitted_at,
-      createdByUserId: assessment.reviewed_by ?? 'legacy',
-      createdByName: assessment.review_payload.reviewedByName ?? 'Previous reviewer',
-      actionLabel: assessment.review_payload.supportActions ?? null,
-      note: assessment.review_payload.reviewComments,
-    } satisfies PsychosocialReviewEntry]
-  }
-
-  return []
-}
-
 function formatScaleValue(kind: 'mood' | 'stress' | 'sleep', value: number) {
   if (kind === 'mood') {
     return ['Very low', 'Low', 'Mixed', 'Good', 'Very good'][Math.max(0, Math.min(4, value - 1))] + ` (${value}/5)`
@@ -168,7 +148,7 @@ export default function PsychosocialDetail({
   const [error, setError] = useState('')
   const [success, setSuccess] = useState(false)
   const [exportedAt, setExportedAt] = useState<string | null>(assessment.exported_at ?? null)
-  const history = reviewHistory(assessment)
+  const history = getPsychosocialReviewHistory(assessment) as PsychosocialReviewEntry[]
 
   const hazardLabels = getPsychosocialHazardSignals(assessment)
     .map((key) => PSYCHOSOCIAL_HAZARDS.find((hazard) => hazard.key === key)?.label ?? key)

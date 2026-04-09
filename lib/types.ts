@@ -28,6 +28,7 @@ export interface UserAccount {
   role: UserRole
   site_ids: string[]
   contract_end_date: string | null
+  is_inactive?: boolean
   preferred_language?: string | null
 }
 

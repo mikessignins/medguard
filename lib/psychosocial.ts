@@ -114,10 +114,70 @@ export function getPsychosocialWorkerName(assessment: Pick<PsychosocialAssessmen
     || 'Unknown worker'
 }
 
+export function withPsychosocialWorkerNameFallback(
+  assessment: PsychosocialAssessment,
+  fallbackName: string | null | undefined,
+) {
+  const nextName = fallbackName?.trim()
+  if (!nextName) return assessment
+
+  const currentName = getPsychosocialWorkerName(assessment).trim()
+  if (currentName && currentName !== 'Unknown worker') return assessment
+
+  if (assessment.payload.workerPulse) {
+    return {
+      ...assessment,
+      payload: {
+        ...assessment.payload,
+        workerPulse: {
+          ...assessment.payload.workerPulse,
+          workerNameSnapshot: nextName,
+        },
+      },
+    }
+  }
+
+  if (assessment.payload.postIncidentWelfare) {
+    return {
+      ...assessment,
+      payload: {
+        ...assessment.payload,
+        postIncidentWelfare: {
+          ...assessment.payload.postIncidentWelfare,
+          workerNameSnapshot: nextName,
+        },
+      },
+    }
+  }
+
+  return assessment
+}
+
 export function getPsychosocialJobRole(assessment: Pick<PsychosocialAssessment, 'payload'>) {
   return assessment.payload.workerPulse?.jobRole
     || assessment.payload.postIncidentWelfare?.jobRole
     || ''
+}
+
+export function getPsychosocialReviewHistory(assessment: PsychosocialAssessment) {
+  const entries = Array.isArray(assessment.review_payload.reviewEntries)
+    ? assessment.review_payload.reviewEntries
+    : []
+
+  if (entries.length > 0) return entries
+
+  if (assessment.review_payload.reviewComments?.trim()) {
+    return [{
+      id: 'legacy-review-comment',
+      createdAt: assessment.reviewed_at ?? assessment.submitted_at,
+      createdByUserId: assessment.reviewed_by ?? 'legacy',
+      createdByName: assessment.review_payload.reviewedByName ?? 'Previous reviewer',
+      actionLabel: assessment.review_payload.supportActions ?? null,
+      note: assessment.review_payload.reviewComments,
+    }]
+  }
+
+  return []
 }
 
 export function formatPsychosocialAssignedReviewPath(value: PsychosocialAssignedReviewPath | null | undefined) {

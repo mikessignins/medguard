@@ -23,6 +23,16 @@ const NAV_ITEMS: Omit<NavItem, 'badge'>[] = [
     ),
   },
   {
+    label: 'Module Catalogue',
+    href: '/superuser/module-catalogue',
+    exact: false,
+    icon: (
+      <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5 4.462 5 2 6.462 2 8.267v8.466C2 18.538 4.462 20 7.5 20c1.746 0 3.332-.477 4.5-1.253m0-12.494C13.168 5.477 14.754 5 16.5 5 19.538 5 22 6.462 22 8.267v8.466C22 18.538 19.538 20 16.5 20c-1.746 0-3.332-.477-4.5-1.253" />
+      </svg>
+    ),
+  },
+  {
     label: 'Reports',
     href: '/superuser/reports',
     exact: false,
@@ -84,10 +94,7 @@ export default function SuperuserSidebar({ unreadFeedback }: Props) {
           <Link
             key={item.href}
             href={item.href}
-            className={isActive
-              ? 'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-cyan-400 bg-cyan-500/10 border border-cyan-500/20 transition-all duration-150'
-              : 'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-400 hover:text-slate-100 hover:bg-slate-800 transition-all duration-150'
-            }
+            className={isActive ? 'dashboard-nav-link-active' : 'dashboard-nav-link'}
           >
             {item.icon}
             <span className="flex-1">{item.label}</span>

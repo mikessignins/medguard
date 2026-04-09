@@ -2,6 +2,14 @@
 
 These are product and implementation follow-ups to review after the current hardening pass is complete.
 
+## Status — 2026-04-09
+
+- Implemented on the current web branch.
+- Emergency declaration PDF now removes the signature field and shows medic notes with author and timestamp.
+- Medication, fatigue, and psychosocial PDFs now include explicit medic comment sections where review comments exist.
+- All four PDF variants now include an export audit section showing the medic who performed the export and the export timestamp.
+- Existing export stamp behaviour remains unchanged because `exported_at` and `exported_by_name` are still written only after PDF generation succeeds.
+
 ## Requested review items
 
 - Ensure exported PDFs clearly show the medic who performed the export.

@@ -4,6 +4,7 @@ interface WebPortalAccessInput {
   role: UserRole | string
   contractEndDate?: string | null
   isSuspended?: boolean | null
+  isInactive?: boolean | null
   now?: Date
 }
 
@@ -28,6 +29,7 @@ export function resolveWebPortalDestination(
 ): WebPortalDestination {
   if (input.isSuspended) return '/suspended'
   if (isExpiredContract(input.contractEndDate, input.now)) return '/expired'
+  if (input.isInactive) return null
 
   if (input.role === 'pending_medic') return '/pending'
   if (input.role === 'medic') return '/medic'

@@ -80,21 +80,21 @@ export default function NewBusinessModal({ onClose, onSuccess }: Props) {
     setLoading(false)
   }
 
-  const inputClass = "w-full px-4 py-2.5 bg-slate-900/60 border border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500 text-slate-100 placeholder-slate-500 text-sm transition-colors"
-  const labelClass = "block text-xs font-medium text-slate-400 uppercase tracking-wide mb-1.5"
+  const inputClass = "dashboard-input w-full px-4 py-2.5 text-sm"
+  const labelClass = "mb-1.5 block text-xs font-medium uppercase tracking-wide text-[var(--text-2)]"
 
   if (inviteCode) {
     return (
       <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-        <div className="bg-slate-800 border border-slate-700 rounded-2xl shadow-2xl w-full max-w-md p-6 text-center">
+        <div className="dashboard-modal w-full max-w-md p-6 text-center">
           <div className="w-12 h-12 bg-emerald-500/10 border border-emerald-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
             <svg className="w-6 h-6 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
             </svg>
           </div>
-          <h3 className="text-lg font-semibold text-slate-100 mb-2">Business Created!</h3>
-          <p className="text-sm text-slate-400 mb-5">Share this invite code with the medics:</p>
-          <div className="bg-slate-950 border border-slate-700 text-cyan-400 text-3xl font-mono font-bold tracking-widest px-6 py-5 rounded-xl mb-5">
+          <h3 className="mb-2 text-lg font-semibold text-[var(--text-1)]">Business Created!</h3>
+          <p className="mb-5 text-sm text-[var(--text-2)]">Share this invite code with the medics:</p>
+          <div className="mb-5 rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] px-6 py-5 font-mono text-3xl font-bold tracking-widest text-cyan-400">
             {inviteCode}
           </div>
           <button
@@ -110,11 +110,11 @@ export default function NewBusinessModal({ onClose, onSuccess }: Props) {
 
   return (
     <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-slate-800 border border-slate-700 rounded-2xl shadow-2xl w-full max-w-lg p-6 max-h-[90vh] overflow-y-auto">
-        <h3 className="text-lg font-semibold text-slate-100 mb-5">New Business</h3>
+      <div className="dashboard-modal max-h-[90vh] w-full max-w-lg overflow-y-auto p-6">
+        <h3 className="mb-5 text-lg font-semibold text-[var(--text-1)]">New Business</h3>
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="border-b border-slate-700/50 pb-4">
-            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Business Details</p>
+          <div className="border-b border-[var(--border)] pb-4">
+            <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-[var(--text-3)]">Business Details</p>
             <div className="space-y-3">
               <div>
                 <label className={labelClass}>Business ID *</label>
@@ -132,7 +132,7 @@ export default function NewBusinessModal({ onClose, onSuccess }: Props) {
           </div>
 
           <div>
-            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Admin Account</p>
+            <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-[var(--text-3)]">Admin Account</p>
             <div className="space-y-3">
               <div>
                 <label className={labelClass}>Admin Name *</label>
@@ -159,7 +159,7 @@ export default function NewBusinessModal({ onClose, onSuccess }: Props) {
             <button type="submit" disabled={loading} className="flex-1 px-4 py-2.5 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg font-medium text-sm transition-colors disabled:opacity-50">
               {loading ? 'Creating...' : 'Create Business'}
             </button>
-            <button type="button" onClick={onClose} disabled={loading} className="px-4 py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-300 border border-slate-600 rounded-lg font-medium text-sm transition-colors">
+            <button type="button" onClick={onClose} disabled={loading} className="rounded-lg border border-[var(--border-md)] bg-[var(--bg-surface)] px-4 py-2.5 text-sm font-medium text-[var(--text-2)] transition-colors hover:bg-[var(--bg-input)]">
               Cancel
             </button>
           </div>

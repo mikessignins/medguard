@@ -9,7 +9,7 @@ import { enforceActionRateLimit } from '@/lib/rate-limit'
 import { safeLogServerEvent } from '@/lib/app-event-log'
 import {
   streamToBuffer, sanitize, fmtDate, fmtDateTime, parseArray,
-  pageHeader, pageFooter, sectionHeader, twoColTable,
+  pageHeader, pageFooter, sectionHeader, twoColTable, renderAuditEntries, renderExportAuditSummary,
   F_REGULAR, F_BOLD, F_ITALIC,
   MARGIN, CONTENT_W, BORDER, MUTED, ACCENT, CHARCOAL,
   getAuthenticatedMedic,
@@ -155,6 +155,9 @@ async function generateMedDecPdf(id: string) {
   const totalPages = scriptImages.length > 0 ? 3 : 2
   const doc = new PDFDocument({ size: 'A4', margin: MARGIN, bufferPages: true, autoFirstPage: false })
   const bufferPromise = streamToBuffer(doc)
+  const exportRenderedAt = new Date().toISOString()
+  const exportKind = raw.exported_at ? 're_export' : 'first_export'
+  const firstExportedAt = raw.exported_at ?? exportRenderedAt
 
   // ── PAGE 1 ──────────────────────────────────────────────────────────────────
   doc.addPage()
@@ -291,17 +294,14 @@ async function generateMedDecPdf(id: string) {
   twoColTable(doc, [
     ['OUTCOME',      reviewStatus,                    'MEDIC',         medicName],
     ['REVIEWED AT',  reviewedAt ? fmtDateTime(reviewedAt) : '—', 'FURTHER REVIEW', furtherReview],
-    ['EXPORTED',     fmtDateTime(raw.exported_at || new Date().toISOString())],
   ])
 
-  if (raw.medic_comments) {
-    sectionHeader(doc, 'MEDIC COMMENTS')
-    const commentY = doc.y
-    doc.rect(MARGIN, commentY, CONTENT_W, Math.max(40, 12 + raw.medic_comments.length * 0.4)).stroke(BORDER)
-    doc.font(F_REGULAR).fontSize(8.5).fillColor('#000')
-      .text(raw.medic_comments, MARGIN + 6, commentY + 6, { width: CONTENT_W - 12 })
-    doc.y = commentY + Math.max(40, 12 + raw.medic_comments.length * 0.4) + 5
-  }
+  renderAuditEntries(doc, 'MEDIC COMMENTS', raw.medic_comments ? [{
+    authorName: medicName,
+    createdAt: reviewedAt,
+    note: raw.medic_comments,
+    actionLabel: reviewStatus,
+  }] : [])
 
   // Outcome colour band
   const STATUS_COLORS: Record<string, string> = {
@@ -337,6 +337,12 @@ async function generateMedDecPdf(id: string) {
       MARGIN + 6, noticeY + 14, { width: CONTENT_W - 12 }
     )
   doc.y = noticeY + 30
+  renderExportAuditSummary(doc, {
+    exportedByName: auth.account.display_name,
+    exportedAt: exportRenderedAt,
+    exportKind,
+    firstExportedAt,
+  })
 
   pageFooter(doc, 2, totalPages)
 
@@ -392,8 +398,8 @@ async function generateMedDecPdf(id: string) {
 
   doc.end()
   const pdfBuffer = await bufferPromise
-  let exportKind: 'first_export' | 're_export' = raw.exported_at ? 're_export' : 'first_export'
-  let firstExportedAt: string | null = raw.exported_at ?? null
+  let persistedExportKind: 'first_export' | 're_export' = raw.exported_at ? 're_export' : 'first_export'
+  let persistedFirstExportedAt: string | null = raw.exported_at ?? null
 
   // Mark exported_at and exported_by_name only after PDF generation succeeds.
   if (!raw.exported_at) {
@@ -422,9 +428,9 @@ async function generateMedDecPdf(id: string) {
     }
 
     if (exportStamp.stamped) {
-      firstExportedAt = exportStamp.exportedAt
+      persistedFirstExportedAt = exportStamp.exportedAt
     } else {
-      exportKind = 're_export'
+      persistedExportKind = 're_export'
     }
   }
 
@@ -440,8 +446,8 @@ async function generateMedDecPdf(id: string) {
     route: '/api/medication-declarations/[id]/pdf',
     targetId: id,
     context: {
-      export_kind: exportKind,
-      first_exported_at: firstExportedAt,
+      export_kind: persistedExportKind,
+      first_exported_at: persistedFirstExportedAt,
     },
   })
 

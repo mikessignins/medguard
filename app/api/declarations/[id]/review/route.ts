@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
-import { requireAuthenticatedUser, requireMedicScope, requireRole } from '@/lib/route-access'
+import { requireActiveMedic, requireAuthenticatedUser, requireMedicScope } from '@/lib/route-access'
 import {
   validateRequestedReviewStatus,
   validateReviewTransition,
@@ -44,8 +44,8 @@ export async function PATCH(
   if (authError) return NextResponse.json({ error: authError.error }, { status: authError.status })
 
   const { data: account } = await authClient
-    .from('user_accounts').select('role, display_name, business_id, site_ids').eq('id', userId).single()
-  const roleError = requireRole(account, 'medic')
+    .from('user_accounts').select('role, display_name, business_id, site_ids, is_inactive').eq('id', userId).single()
+  const roleError = requireActiveMedic(account)
   if (roleError) return NextResponse.json({ error: roleError.error }, { status: roleError.status })
   const medicAccount = account!
 

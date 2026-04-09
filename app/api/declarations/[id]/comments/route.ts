@@ -46,11 +46,11 @@ async function getAuthenticatedMedic() {
 
   const { data: account } = await authClient
     .from('user_accounts')
-    .select('role, display_name, business_id, site_ids')
+    .select('role, display_name, business_id, site_ids, is_inactive')
     .eq('id', user.id)
     .single()
 
-  if (!account || account.role !== 'medic') return null
+  if (!account || account.role !== 'medic' || account.is_inactive) return null
 
   return {
     id: user.id,

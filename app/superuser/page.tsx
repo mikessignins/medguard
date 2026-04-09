@@ -21,7 +21,7 @@ export default async function SuperuserPage() {
 
   const { data: account } = await supabase
     .from('user_accounts')
-    .select('role')
+    .select('role, business_id')
     .eq('id', user.id)
     .single()
 
@@ -32,10 +32,16 @@ export default async function SuperuserPage() {
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
   )
 
-  const { data: businesses } = await service
+  let businessesQuery = service
     .from('businesses')
     .select('*')
     .order('name')
+
+  if (account.business_id) {
+    businessesQuery = businessesQuery.eq('id', account.business_id)
+  }
+
+  const { data: businesses } = await businessesQuery
 
   const { data: allUsers } = await service
     .from('user_accounts')

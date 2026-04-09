@@ -74,16 +74,16 @@ export default function SuperuserBilling({ businesses, monthlyBillables }: Props
   return (
     <div>
       <div className="mb-8">
-        <h1 className="text-xl font-bold text-slate-100">Billing Overview</h1>
-        <p className="text-sm text-slate-500 mt-0.5">Source of truth: business_monthly_billables. One billing path for admin and superuser invoicing.</p>
+        <h1 className="text-xl font-bold text-[var(--text-1)]">Billing Overview</h1>
+        <p className="mt-0.5 text-sm text-[var(--text-2)]">Source of truth: business_monthly_billables. One billing path for admin and superuser invoicing.</p>
       </div>
 
       <div className="mb-8">
-        <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Filter by Business</label>
+        <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-[var(--text-3)]">Filter by Business</label>
         <select
           value={selectedBiz}
           onChange={(event) => setSelectedBiz(event.target.value)}
-          className="w-full max-w-xs px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-slate-200 focus:outline-none focus:border-cyan-500 transition-colors"
+          className="dashboard-input w-full max-w-xs px-3 py-2 text-sm"
         >
           <option value="all">All Businesses</option>
           {businesses.map((biz) => (
@@ -93,8 +93,8 @@ export default function SuperuserBilling({ businesses, monthlyBillables }: Props
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-8">
-        <div className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-5">
-          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">This Month</p>
+        <div className="dashboard-panel p-5">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--text-3)]">This Month</p>
           <p className="text-3xl font-bold text-cyan-400">{thisMonthTotal}</p>
         </div>
 
@@ -104,9 +104,9 @@ export default function SuperuserBilling({ businesses, monthlyBillables }: Props
           <p className="text-xs text-cyan-700 mt-1">All time</p>
         </div>
 
-        <div className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-5">
-          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Months with Activity</p>
-          <p className="text-3xl font-bold text-slate-100">{monthTotals.length}</p>
+        <div className="dashboard-panel p-5">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--text-3)]">Months with Activity</p>
+          <p className="text-3xl font-bold text-[var(--text-1)]">{monthTotals.length}</p>
         </div>
       </div>
 
@@ -114,36 +114,36 @@ export default function SuperuserBilling({ businesses, monthlyBillables }: Props
         <p className="text-center py-16 text-[var(--text-3)]">No billable submissions yet.</p>
       ) : (
         <div className="space-y-6">
-          <div className="bg-slate-800/60 border border-slate-700/50 rounded-xl overflow-hidden">
-            <div className="px-5 py-4 border-b border-slate-700/50">
-              <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-widest">Monthly Breakdown</h2>
+          <div className="dashboard-panel overflow-hidden">
+            <div className="border-b border-[var(--border)] px-5 py-4">
+              <h2 className="text-xs font-semibold uppercase tracking-widest text-[var(--text-2)]">Monthly Breakdown</h2>
             </div>
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-slate-700/50">
-                  <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Month</th>
-                  <th className="text-right px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Billable Forms</th>
+                <tr className="border-b border-[var(--border)]">
+                  <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-[var(--text-3)]">Month</th>
+                  <th className="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wide text-[var(--text-3)]">Billable Forms</th>
                 </tr>
               </thead>
               <tbody>
                 {monthTotals.map((row, i) => {
                   const isCurrentMonth = row.bill_month === currentMonth
                   return (
-                    <tr key={row.bill_month} className={`${i > 0 ? 'border-t border-slate-700/50' : ''} ${isCurrentMonth ? 'bg-cyan-500/5' : ''}`}>
-                      <td className="px-5 py-3 text-slate-300">
+                    <tr key={row.bill_month} className={`${i > 0 ? 'border-t border-[var(--border)]' : ''} ${isCurrentMonth ? 'bg-cyan-500/5' : ''}`}>
+                      <td className="px-5 py-3 text-[var(--text-2)]">
                         {formatMonth(row.bill_month)}
                         {isCurrentMonth && (
                           <span className="ml-2 text-xs text-cyan-600 font-medium">current</span>
                         )}
                       </td>
-                      <td className="px-5 py-3 text-right font-mono font-semibold text-slate-100">{row.total}</td>
+                      <td className="px-5 py-3 text-right font-mono font-semibold text-[var(--text-1)]">{row.total}</td>
                     </tr>
                   )
                 })}
               </tbody>
               <tfoot>
-                <tr className="border-t border-slate-600 bg-slate-800/40">
-                  <td className="px-5 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wide">Total</td>
+                <tr className="border-t border-[var(--border-md)] bg-[var(--bg-surface)]">
+                  <td className="px-5 py-3 text-xs font-semibold uppercase tracking-wide text-[var(--text-2)]">Total</td>
                   <td className="px-5 py-3 text-right font-mono font-bold text-cyan-400">{totalBillable}</td>
                 </tr>
               </tfoot>
@@ -151,22 +151,22 @@ export default function SuperuserBilling({ businesses, monthlyBillables }: Props
           </div>
 
           {selectedBiz === 'all' && businessTotals.length > 0 && (
-            <div className="bg-slate-800/60 border border-slate-700/50 rounded-xl overflow-hidden">
-              <div className="px-5 py-4 border-b border-slate-700/50">
-                <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-widest">By Business — All Time</h2>
+            <div className="dashboard-panel overflow-hidden">
+              <div className="border-b border-[var(--border)] px-5 py-4">
+                <h2 className="text-xs font-semibold uppercase tracking-widest text-[var(--text-2)]">By Business — All Time</h2>
               </div>
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-slate-700/50">
-                    <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Business</th>
-                    <th className="text-right px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Billable Forms</th>
+                  <tr className="border-b border-[var(--border)]">
+                    <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-[var(--text-3)]">Business</th>
+                    <th className="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wide text-[var(--text-3)]">Billable Forms</th>
                   </tr>
                 </thead>
                 <tbody>
                   {businessTotals.map((biz, i) => (
-                    <tr key={biz.businessId} className={i > 0 ? 'border-t border-slate-700/50' : ''}>
-                      <td className="px-5 py-3 text-slate-300">{biz.name}</td>
-                      <td className="px-5 py-3 text-right font-mono font-semibold text-slate-100">{biz.total}</td>
+                    <tr key={biz.businessId} className={i > 0 ? 'border-t border-[var(--border)]' : ''}>
+                      <td className="px-5 py-3 text-[var(--text-2)]">{biz.name}</td>
+                      <td className="px-5 py-3 text-right font-mono font-semibold text-[var(--text-1)]">{biz.total}</td>
                     </tr>
                   ))}
                 </tbody>
