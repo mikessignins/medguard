@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
 import PDFDocument from 'pdfkit'
 import type { WorkerSnapshot, Decision, ScriptUpload } from '@/lib/types'
 import { resolveBusinessLogoUrl } from '@/lib/business-logo'
+import { hasMedicScopeAccess } from '@/lib/medic-scope'
+import { parseUuidParam } from '@/lib/api-validation'
+import { markExportedIfNeeded } from '@/lib/export-stamp'
 import { enforceActionRateLimit } from '@/lib/rate-limit'
 import { safeLogServerEvent } from '@/lib/app-event-log'
 import {
@@ -22,8 +24,11 @@ export async function GET(
   _request: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  const parsedId = parseUuidParam(params.id, 'Declaration id')
+  if (!parsedId.success) return parsedId.response
+
   try {
-    return await generatePdf(params.id)
+    return await generatePdf(parsedId.value)
   } catch (err) {
     console.error('[pdf/route] unhandled error:', err)
     return new NextResponse(
@@ -41,6 +46,7 @@ async function generatePdf(id: string) {
   }
 
   const rateLimited = await enforceActionRateLimit({
+    authClient: auth.authClient,
     action: 'emergency_pdf_exported',
     actorUserId: auth.user.id,
     actorRole: auth.account.role,
@@ -55,11 +61,7 @@ async function generatePdf(id: string) {
   })
   if (rateLimited) return rateLimited
 
-  // 2. Fetch data using service role (bypasses RLS)
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  )
+  const supabase = auth.authClient
 
   const { data: raw, error } = await supabase
     .from('submissions')
@@ -69,6 +71,10 @@ async function generatePdf(id: string) {
 
   if (error || !raw) {
     return new NextResponse('Declaration not found', { status: 404 })
+  }
+
+  if (!hasMedicScopeAccess(auth.account, raw)) {
+    return new NextResponse('Forbidden', { status: 403 })
   }
 
   // 3. Parallel lookups
@@ -87,7 +93,13 @@ async function generatePdf(id: string) {
     try {
       const logoRes = await fetch(businessLogoUrl)
       if (logoRes.ok) logoBuffer = Buffer.from(await logoRes.arrayBuffer())
-    } catch { /* continue without logo */ }
+    } catch (error) {
+      console.warn('[pdf/route] failed to fetch business logo for declaration export', {
+        declarationId: id,
+        businessId: raw.business_id,
+        error: error instanceof Error ? error.message : String(error),
+      })
+    }
   }
 
   // 4. Export gates
@@ -124,8 +136,13 @@ async function generatePdf(id: string) {
           scriptImages.push({ name: upload.medicationName, buffer: Buffer.from(ab) })
         }
       }
-    } catch {
-      // Skip if image fetch fails — don't abort the whole PDF
+    } catch (error) {
+      console.warn('[pdf/route] failed to fetch prescription image for declaration export', {
+        declarationId: id,
+        storagePath: upload.storagePath,
+        medicationName: upload.medicationName,
+        error: error instanceof Error ? error.message : String(error),
+      })
     }
   }
 
@@ -398,7 +415,12 @@ async function generatePdf(id: string) {
       // Embed image
       try {
         doc.image(buffer, x, imgY, { fit: [imgW, 280] })
-      } catch {
+      } catch (error) {
+        console.warn('[pdf/route] failed to embed prescription image into declaration PDF', {
+          declarationId: id,
+          medicationName: name,
+          error: error instanceof Error ? error.message : String(error),
+        })
         doc.font(F_ITALIC).fontSize(8).fillColor(MUTED)
           .text('[Image could not be embedded]', x, imgY)
         doc.fillColor('#000')
@@ -424,17 +446,41 @@ async function generatePdf(id: string) {
 
   doc.end()
   const pdfBuffer = await bufferPromise
+  let exportKind: 'first_export' | 're_export' = raw.exported_at ? 're_export' : 'first_export'
+  let firstExportedAt: string | null = raw.exported_at ?? null
 
   // Mark exported_at and exported_by_name only after PDF generation succeeds.
   // This prevents the countdown starting on a form whose PDF was never delivered.
   if (!raw.exported_at) {
-    await supabase
-      .from('submissions')
-      .update({
-        exported_at: new Date().toISOString(),
-        exported_by_name: auth.account.display_name as string,
+    const exportStamp = await markExportedIfNeeded({
+      supabase,
+      table: 'submissions',
+      id: raw.id,
+      exportedByName: auth.account.display_name as string,
+    })
+
+    if (exportStamp.error) {
+      await safeLogServerEvent({
+        source: 'web_api',
+        action: 'emergency_pdf_exported',
+        result: 'failure',
+        actorUserId: auth.user.id,
+        actorRole: auth.account.role,
+        actorName: auth.account.display_name,
+        businessId: auth.account.business_id,
+        moduleKey: 'emergency_declaration',
+        route: '/api/declarations/[id]/pdf',
+        targetId: id,
+        errorMessage: exportStamp.error.message,
       })
-      .eq('id', raw.id)
+      return new NextResponse('Failed to record export audit state. Please try again.', { status: 500 })
+    }
+
+    if (exportStamp.stamped) {
+      firstExportedAt = exportStamp.exportedAt
+    } else {
+      exportKind = 're_export'
+    }
   }
 
   await safeLogServerEvent({
@@ -448,6 +494,10 @@ async function generatePdf(id: string) {
     moduleKey: 'emergency_declaration',
     route: '/api/declarations/[id]/pdf',
     targetId: id,
+    context: {
+      export_kind: exportKind,
+      first_exported_at: firstExportedAt,
+    },
   })
 
   return new NextResponse(pdfBuffer as unknown as BodyInit, {

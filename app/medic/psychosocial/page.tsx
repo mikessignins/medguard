@@ -5,6 +5,7 @@ import {
   PSYCHOSOCIAL_HEALTH_MODULE_KEY,
   type BusinessModule,
 } from '@/lib/modules'
+import { logRequestTiming, startRequestTimer } from '@/lib/request-timing'
 import { getRequestClient, getRequestUser, getRequestUserAccount, getRequestBusinessModules } from '@/lib/supabase/request-cache'
 import type { PsychosocialAssessment } from '@/lib/types'
 
@@ -34,6 +35,7 @@ export default async function MedicPsychosocialDashboardPage({
 }: {
   searchParams: { site?: string }
 }) {
+  const startedAt = startRequestTimer()
   // Cached helpers — deduplicated with layout's auth/account/modules queries
   const user = await getRequestUser()
   if (!user) redirect('/login')
@@ -82,6 +84,12 @@ export default async function MedicPsychosocialDashboardPage({
       (entry) => entry.payload?.workerPulse?.workflowKind === 'wellbeing_pulse' && !entry.is_test,
     ).length
   }
+
+  await logRequestTiming('medic_psychosocial_page_data', startedAt, {
+    site_count: sites?.length ?? 0,
+    support_check_in_count: supportCheckIns.length,
+    pulse_count: pulseCount,
+  })
 
   return (
     <PsychosocialDashboard

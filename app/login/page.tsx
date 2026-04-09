@@ -5,6 +5,10 @@ import Image from 'next/image'
 import { createClient } from '@/lib/supabase/client'
 import { resolveWebPortalDestination } from '@/lib/web-access'
 
+function getLoginDestination(destination: string) {
+  return destination === '/medic' ? '/medic/emergency' : destination
+}
+
 export default function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -51,7 +55,7 @@ export default function LoginPage() {
     })
 
     if (destination) {
-      router.push(destination)
+      router.push(getLoginDestination(destination))
       return
     }
 

@@ -1,8 +1,8 @@
 import { createClient } from '@/lib/supabase/server'
-import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import { requireAuthenticatedUser, requireRole } from '@/lib/route-access'
-import { parseJsonBody } from '@/lib/api-validation'
+import { parseBusinessIdParam, parseJsonBody } from '@/lib/api-validation'
+import { requireSameOrigin } from '@/lib/api-security'
 import { z } from 'zod'
 
 const reminderIntervalSchema = z.object({
@@ -16,6 +16,12 @@ const reminderIntervalSchema = z.object({
 })
 
 export async function PATCH(req: Request, { params }: { params: { id: string } }) {
+  const parsedBusinessId = parseBusinessIdParam(params.id)
+  if (!parsedBusinessId.success) return parsedBusinessId.response
+
+  const csrfError = requireSameOrigin(req)
+  if (csrfError) return csrfError
+
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   const userId = user?.id ?? null
@@ -35,15 +41,10 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   if (!parsed.success) return parsed.response
   const { months } = parsed.data
 
-  const service = createServiceClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  )
-
-  const { error } = await service
+  const { error } = await supabase
     .from('businesses')
     .update({ reminder_interval_months: months })
-    .eq('id', params.id)
+    .eq('id', parsedBusinessId.value)
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ ok: true })

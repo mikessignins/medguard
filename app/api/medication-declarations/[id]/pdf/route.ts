@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
 import PDFDocument from 'pdfkit'
 import type { ScriptUpload } from '@/lib/types'
 import { resolveBusinessLogoUrl } from '@/lib/business-logo'
+import { hasMedicScopeAccess } from '@/lib/medic-scope'
+import { parseUuidParam } from '@/lib/api-validation'
+import { markExportedIfNeeded } from '@/lib/export-stamp'
 import { enforceActionRateLimit } from '@/lib/rate-limit'
 import { safeLogServerEvent } from '@/lib/app-event-log'
 import {
@@ -19,8 +21,11 @@ export async function GET(
   _request: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  const parsedId = parseUuidParam(params.id, 'Medication declaration id')
+  if (!parsedId.success) return parsedId.response
+
   try {
-    return await generateMedDecPdf(params.id)
+    return await generateMedDecPdf(parsedId.value)
   } catch (err) {
     console.error('[med-dec/pdf] unhandled error:', err)
     return new NextResponse(
@@ -35,6 +40,7 @@ async function generateMedDecPdf(id: string) {
   if (!auth) return new NextResponse('Unauthorized', { status: 401 })
 
   const rateLimited = await enforceActionRateLimit({
+    authClient: auth.authClient,
     action: 'medication_pdf_exported',
     actorUserId: auth.user.id,
     actorRole: auth.account.role,
@@ -49,10 +55,7 @@ async function generateMedDecPdf(id: string) {
   })
   if (rateLimited) return rateLimited
 
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  )
+  const supabase = auth.authClient
 
   const { data: raw, error } = await supabase
     .from('medication_declarations')
@@ -61,6 +64,10 @@ async function generateMedDecPdf(id: string) {
     .single()
 
   if (error || !raw) return new NextResponse('Declaration not found', { status: 404 })
+
+  if (!hasMedicScopeAccess(auth.account, raw)) {
+    return new NextResponse('Forbidden', { status: 403 })
+  }
 
   const [{ data: site }, { data: business }] = await Promise.all([
     supabase.from('sites').select('name').eq('id', raw.site_id).single(),
@@ -77,7 +84,13 @@ async function generateMedDecPdf(id: string) {
     try {
       const logoRes = await fetch(businessLogoUrl)
       if (logoRes.ok) logoBuffer = Buffer.from(await logoRes.arrayBuffer())
-    } catch { /* continue without logo */ }
+    } catch (error) {
+      console.warn('[med-dec/pdf] failed to fetch business logo for medication export', {
+        declarationId: id,
+        businessId: raw.business_id,
+        error: error instanceof Error ? error.message : String(error),
+      })
+    }
   }
 
   // Export gates
@@ -115,8 +128,13 @@ async function generateMedDecPdf(id: string) {
           scriptImages.push({ name: upload.medicationName, buffer: Buffer.from(ab) })
         }
       }
-    } catch {
-      // Skip failed images
+    } catch (error) {
+      console.warn('[med-dec/pdf] failed to fetch prescription image for medication export', {
+        declarationId: id,
+        storagePath: upload.storagePath,
+        medicationName: upload.medicationName,
+        error: error instanceof Error ? error.message : String(error),
+      })
     }
   }
 
@@ -346,7 +364,12 @@ async function generateMedDecPdf(id: string) {
 
       try {
         doc.image(buffer, x, imgY, { fit: [imgW, 280] })
-      } catch {
+      } catch (error) {
+        console.warn('[med-dec/pdf] failed to embed prescription image into medication PDF', {
+          declarationId: id,
+          medicationName: name,
+          error: error instanceof Error ? error.message : String(error),
+        })
         doc.font(F_ITALIC).fontSize(8).fillColor(MUTED)
           .text('[Image could not be embedded]', x, imgY)
         doc.fillColor('#000')
@@ -369,16 +392,40 @@ async function generateMedDecPdf(id: string) {
 
   doc.end()
   const pdfBuffer = await bufferPromise
+  let exportKind: 'first_export' | 're_export' = raw.exported_at ? 're_export' : 'first_export'
+  let firstExportedAt: string | null = raw.exported_at ?? null
 
   // Mark exported_at and exported_by_name only after PDF generation succeeds.
   if (!raw.exported_at) {
-    await supabase
-      .from('medication_declarations')
-      .update({
-        exported_at: new Date().toISOString(),
-        exported_by_name: auth.account.display_name as string,
+    const exportStamp = await markExportedIfNeeded({
+      supabase,
+      table: 'medication_declarations',
+      id,
+      exportedByName: auth.account.display_name as string,
+    })
+
+    if (exportStamp.error) {
+      await safeLogServerEvent({
+        source: 'web_api',
+        action: 'medication_pdf_exported',
+        result: 'failure',
+        actorUserId: auth.user.id,
+        actorRole: auth.account.role,
+        actorName: auth.account.display_name,
+        businessId: auth.account.business_id,
+        moduleKey: 'confidential_medication',
+        route: '/api/medication-declarations/[id]/pdf',
+        targetId: id,
+        errorMessage: exportStamp.error.message,
       })
-      .eq('id', id)
+      return new NextResponse('Failed to record export audit state. Please try again.', { status: 500 })
+    }
+
+    if (exportStamp.stamped) {
+      firstExportedAt = exportStamp.exportedAt
+    } else {
+      exportKind = 're_export'
+    }
   }
 
   await safeLogServerEvent({
@@ -392,6 +439,10 @@ async function generateMedDecPdf(id: string) {
     moduleKey: 'confidential_medication',
     route: '/api/medication-declarations/[id]/pdf',
     targetId: id,
+    context: {
+      export_kind: exportKind,
+      first_exported_at: firstExportedAt,
+    },
   })
 
   return new NextResponse(pdfBuffer as unknown as BodyInit, {

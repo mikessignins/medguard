@@ -1,17 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
-import { createClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
 import { validatePurgeSelection } from '@/lib/purge-guards'
 import { requireAuthenticatedUser, requireMedicScope, requireRole } from '@/lib/route-access'
 import { safeLogServerEvent } from '@/lib/app-event-log'
 import { parseJsonBody } from '@/lib/api-validation'
+import { requireSameOrigin } from '@/lib/api-security'
 import { emergencyPurgeRequestSchema } from '@/lib/review-request-schemas'
 import { enforceActionRateLimit } from '@/lib/rate-limit'
 
 export const runtime = 'nodejs'
 
 export async function POST(request: NextRequest) {
+  const csrfError = requireSameOrigin(request)
+  if (csrfError) return csrfError
+
   // 1. Auth — must be a signed-in medic
   const cookieStore = await cookies()
   const authClient = createServerClient(
@@ -39,6 +42,7 @@ export async function POST(request: NextRequest) {
 
   // 2. Parse body
   const rateLimited = await enforceActionRateLimit({
+    authClient,
     action: 'emergency_purge_completed',
     actorUserId: userId!,
     actorRole: medicAccount.role,
@@ -60,13 +64,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ purged: 0 })
   }
 
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  )
-
   // 3. Fetch submission data before wiping — guard: all must be exported first
-  const { data: submissions } = await supabase
+  const { data: submissions } = await authClient
     .from('submissions')
     .select('id, business_id, site_id, site_name, worker_snapshot, exported_at, exported_by_name, decision')
     .in('id', ids)
@@ -106,12 +105,12 @@ export async function POST(request: NextRequest) {
 
   // 6. Write audit log
   if (auditRows.length > 0) {
-    const { error: auditError } = await supabase.from('purge_audit_log').insert(auditRows)
+    const { error: auditError } = await authClient.from('purge_audit_log').insert(auditRows)
     if (auditError) console.error('[purge/route] audit log error:', auditError)
   }
 
   // 7. Wipe PHI
-  const { error } = await supabase
+  const { error } = await authClient
     .from('submissions')
     .update({
       phi_purged_at: purgedAt,

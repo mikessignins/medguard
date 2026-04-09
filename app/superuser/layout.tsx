@@ -1,12 +1,41 @@
 import { createClient } from '@/lib/supabase/server'
-import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
+import { cookies, headers } from 'next/headers'
 import SignOutButton from '@/components/SignOutButton'
 import SuperuserSidebar from '@/components/superuser/SuperuserSidebar'
 import FeedbackBadgeRefresher from '@/components/superuser/FeedbackBadgeRefresher'
 import ThemeToggle from '@/components/ThemeToggle'
+
+async function getUnreadFeedbackCount() {
+  const headerStore = await headers()
+  const cookieStore = await cookies()
+  const host = headerStore.get('x-forwarded-host') ?? headerStore.get('host')
+
+  if (!host) return 0
+
+  const protocol = headerStore.get('x-forwarded-proto') ?? 'http'
+  const cookieHeader = cookieStore
+    .getAll()
+    .map(({ name, value }) => `${name}=${value}`)
+    .join('; ')
+
+  try {
+    const response = await fetch(`${protocol}://${host}/api/superuser/feedback/unread-count`, {
+      headers: cookieHeader ? { cookie: cookieHeader } : undefined,
+      cache: 'no-store',
+    })
+
+    if (!response.ok) return 0
+
+    const payload = (await response.json()) as { unread_count?: number }
+    return payload.unread_count ?? 0
+  } catch (error) {
+    console.warn('[superuser/layout] unread feedback count fetch failed:', error)
+    return 0
+  }
+}
 
 export default async function SuperuserLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient()
@@ -21,14 +50,7 @@ export default async function SuperuserLayout({ children }: { children: React.Re
 
   if (!account || account.role !== 'superuser') redirect('/')
 
-  const service = createServiceClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  )
-  const { count: unreadFeedback } = await service
-    .from('feedback')
-    .select('*', { count: 'exact', head: true })
-    .eq('status', 'Unread')
+  const unreadFeedback = await getUnreadFeedbackCount()
 
   return (
     <div className="flex min-h-screen bg-slate-950">
@@ -47,7 +69,7 @@ export default async function SuperuserLayout({ children }: { children: React.Re
         </div>
 
         {/* Nav */}
-        <SuperuserSidebar unreadFeedback={unreadFeedback ?? 0} />
+        <SuperuserSidebar unreadFeedback={unreadFeedback} />
 
         {/* User section */}
         <div className="px-3 py-4 border-t border-slate-800 space-y-1">
@@ -102,7 +124,7 @@ export default async function SuperuserLayout({ children }: { children: React.Re
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
           </svg>
-          {(unreadFeedback ?? 0) > 0 && (
+          {unreadFeedback > 0 && (
             <span className="absolute top-2 right-[calc(50%-14px)] w-2 h-2 rounded-full bg-amber-500" />
           )}
           <span className="text-xs">Feedback</span>

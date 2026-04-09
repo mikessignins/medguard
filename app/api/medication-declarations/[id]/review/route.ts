@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
-import { createClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
 import type { MedDecReviewStatus } from '@/lib/types'
 import { requireAuthenticatedUser, requireMedicScope, requireRole } from '@/lib/route-access'
 import { validateMedicationReviewTransition } from '@/lib/medication-review-guards'
 import { safeLogServerEvent } from '@/lib/app-event-log'
-import { parseJsonBody } from '@/lib/api-validation'
+import { parseJsonBody, parseUuidParam } from '@/lib/api-validation'
+import { requireSameOrigin } from '@/lib/api-security'
 import { medicationReviewRequestSchema } from '@/lib/review-request-schemas'
 import { enforceActionRateLimit } from '@/lib/rate-limit'
 
@@ -16,6 +16,12 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  const parsedId = parseUuidParam(params.id, 'Medication declaration id')
+  if (!parsedId.success) return parsedId.response
+
+  const csrfError = requireSameOrigin(request)
+  if (csrfError) return csrfError
+
   const cookieStore = await cookies()
   const authClient = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -42,6 +48,7 @@ export async function PATCH(
   const medicAccount = account!
 
   const rateLimited = await enforceActionRateLimit({
+    authClient,
     action: 'medication_review_saved',
     actorUserId: userId!,
     actorRole: medicAccount.role,
@@ -49,7 +56,7 @@ export async function PATCH(
     businessId: medicAccount.business_id,
     moduleKey: 'confidential_medication',
     route: '/api/medication-declarations/[id]/review',
-    targetId: params.id,
+    targetId: parsedId.value,
     limit: 20,
     windowMs: 5 * 60_000,
     errorMessage: 'Too many medication review updates were submitted. Please wait a moment and try again.',
@@ -65,16 +72,11 @@ export async function PATCH(
     return NextResponse.json({ error: 'Invalid status' }, { status: 400 })
   }
 
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  )
-
   // Fetch current status to enforce forward-only transitions
-  const { data: current } = await supabase
+  const { data: current } = await authClient
     .from('medication_declarations')
     .select('medic_review_status, business_id, site_id')
-    .eq('id', params.id)
+    .eq('id', parsedId.value)
     .single()
 
   if (!current) return NextResponse.json({ error: 'Declaration not found' }, { status: 404 })
@@ -92,7 +94,7 @@ export async function PATCH(
     )
   }
 
-  const { error } = await supabase
+  const { error } = await authClient
     .from('medication_declarations')
     .update({
       medic_review_status,
@@ -101,7 +103,7 @@ export async function PATCH(
       medic_name: medicAccount.display_name,
       medic_reviewed_at: new Date().toISOString(),
     })
-    .eq('id', params.id)
+    .eq('id', parsedId.value)
 
   if (error) {
     await safeLogServerEvent({
@@ -114,7 +116,7 @@ export async function PATCH(
       businessId: medicAccount.business_id,
       moduleKey: 'confidential_medication',
       route: '/api/medication-declarations/[id]/review',
-      targetId: params.id,
+      targetId: parsedId.value,
       errorMessage: error.message,
       context: { medic_review_status },
     })
@@ -131,7 +133,7 @@ export async function PATCH(
     businessId: medicAccount.business_id,
     moduleKey: 'confidential_medication',
     route: '/api/medication-declarations/[id]/review',
-    targetId: params.id,
+    targetId: parsedId.value,
     context: { medic_review_status },
   })
 

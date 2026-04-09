@@ -2,7 +2,7 @@ import MedicDashboard from '@/components/medic/MedicDashboard'
 import { getMedicDashboardData } from '@/lib/medic-dashboard-data'
 
 export default async function MedicMedicationPage({ searchParams }: { searchParams: { site?: string } }) {
-  const data = await getMedicDashboardData()
+  const data = await getMedicDashboardData('medication')
 
   return (
     <MedicDashboard

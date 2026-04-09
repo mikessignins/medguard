@@ -124,7 +124,11 @@ export const psychosocialReviewRequestSchema = z.object({
 export const psychosocialPostIncidentRequestSchema = z.object({
   site_id: requiredTrimmedString('Site is required.'),
   workerNameSnapshot: requiredTrimmedString('Worker name is required.'),
-  workerId: nullableTrimmedString().optional(),
+  workerId: z.union([
+    z.string().uuid('Worker account ID must be a valid ID.'),
+    z.null(),
+    z.undefined(),
+  ]).transform((value) => value ?? null).optional(),
   jobRole: nullableTrimmedString().optional(),
   linkedIncidentOrCaseId: nullableTrimmedString().optional(),
   eventType: z.enum(PSYCHOSOCIAL_POST_INCIDENT_EVENT_TYPES),

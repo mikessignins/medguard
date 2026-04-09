@@ -1,8 +1,9 @@
-import { createClient } from '@/lib/supabase/server'
 import { redirect, notFound } from 'next/navigation'
 import MedDecDetail from '@/components/medic/MedDecDetail'
 import type { MedDecMedication, MedDecReviewStatus, ScriptUpload } from '@/lib/types'
 import { parseQueue } from '@/lib/queue-params'
+import { hasMedicScopeAccess } from '@/lib/medic-scope'
+import { getRequestClient, getRequestUser, getRequestUserAccount } from '@/lib/supabase/request-cache'
 
 function parseMedications(raw: unknown): MedDecMedication[] {
   if (!raw) return []
@@ -25,9 +26,14 @@ function parseScriptUploads(raw: unknown): ScriptUpload[] {
 }
 
 export default async function MedDecPage({ params, searchParams }: { params: { id: string }; searchParams: { queue?: string; pos?: string; view?: string; site?: string } }) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getRequestUser()
   if (!user) redirect('/login')
+
+  const account = await getRequestUserAccount(user.id)
+  if (!account || account.role !== 'medic') redirect('/')
+  if (account.contract_end_date && new Date(account.contract_end_date) < new Date()) redirect('/expired')
+
+  const supabase = await getRequestClient()
 
   const { data: raw } = await supabase
     .from('medication_declarations')
@@ -36,6 +42,7 @@ export default async function MedDecPage({ params, searchParams }: { params: { i
     .single()
 
   if (!raw) notFound()
+  if (!hasMedicScopeAccess(account, raw)) notFound()
 
   // Auto-tag as In Review when a medic opens a Pending medication declaration
   if (!raw.medic_review_status || raw.medic_review_status === 'Pending') {

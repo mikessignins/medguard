@@ -1,6 +1,6 @@
-# MedPass Web App
+# MedGuard Web App
 
-The web app is the operations and governance portal for MedPass. It supports:
+The web app is the operations and governance portal for MedGuard. It supports:
 
 - medic review of emergency declarations, medication declarations, fatigue, and psychosocial cases
 - admin management of staff, sites, invite codes, billing, and purge logs
@@ -32,12 +32,13 @@ npm test
 npm run build
 ```
 
-The app expects Supabase environment variables in local env files:
+Copy `.env.example` to `.env.local` for local development and fill in:
 
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 - `SUPABASE_SERVICE_ROLE_KEY`
 - `CRON_SECRET`
+- `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` once Redis-backed rate limiting is enabled
 
 ## Main App Areas
 
@@ -90,5 +91,5 @@ High-value regression areas:
 ## Operational Notes
 
 - Apply database migrations before deploying code that depends on them.
-- `SUPABASE_SERVICE_ROLE_KEY` is used only in trusted server routes and server components.
-- The cron purge route is protected by `Authorization: Bearer <CRON_SECRET>`.
+- `SUPABASE_SERVICE_ROLE_KEY` must stay server-side only and should be rotated immediately if it is ever exposed.
+- The cron purge route is protected by `Authorization: Bearer <CRON_SECRET>`, and that secret should be at least 32 characters long.

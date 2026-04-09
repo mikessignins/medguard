@@ -1,8 +1,8 @@
 import { createClient } from '@/lib/supabase/server'
-import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import { requireAuthenticatedUser, requireOneOfRoles } from '@/lib/route-access'
 import { parseJsonBody } from '@/lib/api-validation'
+import { requireSameOrigin } from '@/lib/api-security'
 import { safeLogServerEvent } from '@/lib/app-event-log'
 import { enforceActionRateLimit } from '@/lib/rate-limit'
 import { z } from 'zod'
@@ -13,6 +13,9 @@ const feedbackPayloadSchema = z.object({
 })
 
 export async function POST(req: Request) {
+  const csrfError = requireSameOrigin(req)
+  if (csrfError) return csrfError
+
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   const userId = user?.id ?? null
@@ -30,6 +33,7 @@ export async function POST(req: Request) {
   const allowedAccount = account!
 
   const rateLimited = await enforceActionRateLimit({
+    authClient: supabase,
     action: 'feedback_submitted',
     actorUserId: userId!,
     actorRole: allowedAccount.role,
@@ -46,11 +50,7 @@ export async function POST(req: Request) {
   if (!parsed.success) return parsed.response
   const { category, message } = parsed.data
 
-  const service = createServiceClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  )
-  const { error } = await service.from('feedback').insert({
+  const { error } = await supabase.from('feedback').insert({
     id: crypto.randomUUID(),
     submitted_by_user_id: userId,
     submitted_by_name: allowedAccount.display_name,

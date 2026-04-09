@@ -207,9 +207,9 @@ export async function getAuthenticatedMedic() {
   const { data: { user } } = await authClient.auth.getUser()
   if (!user) return null
   const { data: account } = await authClient
-    .from('user_accounts').select('role, display_name, business_id').eq('id', user.id).single()
+    .from('user_accounts').select('role, display_name, business_id, site_ids').eq('id', user.id).single()
   if (!account || account.role !== 'medic') return null
-  return { user, account }
+  return { user, account, authClient }
 }
 
 export async function getAuthenticatedSuperuser() {

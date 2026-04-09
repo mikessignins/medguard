@@ -1,8 +1,72 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
+import { requireSameOrigin } from '@/lib/api-security'
+import { getElapsedMilliseconds, startRequestTimer } from '@/lib/request-timing'
 
 export async function updateSession(request: NextRequest) {
-  let supabaseResponse = NextResponse.next({ request })
+  const requestHeaders = new Headers(request.headers)
+  const requestId = request.headers.get('x-medguard-request-id') ?? crypto.randomUUID()
+  requestHeaders.set('x-medguard-request-id', requestId)
+  requestHeaders.set('x-medguard-pathname', request.nextUrl.pathname)
+
+  const buildNextResponse = () =>
+    NextResponse.next({
+      request: {
+        headers: requestHeaders,
+      },
+    })
+
+  let supabaseResponse = buildNextResponse()
+  const finalizeResponse = (response: NextResponse, authDurationMs: number) => {
+    response.headers.set('x-medguard-request-id', requestId)
+    response.headers.set('x-medguard-middleware-auth-ms', String(authDurationMs))
+    response.headers.set('Server-Timing', `supabase-auth;dur=${authDurationMs}`)
+    return response
+  }
+
+  const isRscRequest =
+    request.headers.get('rsc') === '1' ||
+    request.nextUrl.searchParams.has('_rsc')
+  const isHeadRequest = request.method === 'HEAD'
+  const isCronPath = request.nextUrl.pathname.startsWith('/api/cron/')
+  const isApiWriteRequest =
+    request.nextUrl.pathname.startsWith('/api/') &&
+    !['GET', 'HEAD', 'OPTIONS'].includes(request.method) &&
+    !isCronPath
+
+  if (isApiWriteRequest) {
+    const csrfError = requireSameOrigin(request)
+    if (csrfError) {
+      return finalizeResponse(csrfError, 0)
+    }
+  }
+
+  if (isCronPath) {
+    const cronSecret = process.env.CRON_SECRET
+
+    if (!cronSecret || cronSecret.length < 32) {
+      return finalizeResponse(
+        NextResponse.json({ error: 'Server cron secret is not configured.' }, { status: 500 }),
+        0,
+      )
+    }
+
+    if (request.headers.get('authorization') !== `Bearer ${cronSecret}`) {
+      return finalizeResponse(
+        NextResponse.json({ error: 'Unauthorized' }, { status: 401 }),
+        0,
+      )
+    }
+
+    return finalizeResponse(supabaseResponse, 0)
+  }
+
+  // Router-driven RSC navigations and HEAD probes are already protected by the
+  // target server component/layout, so we can skip the middleware auth fetch and
+  // avoid paying the extra Supabase round-trip on every tab switch.
+  if (isRscRequest || isHeadRequest) {
+    return finalizeResponse(supabaseResponse, 0)
+  }
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -14,7 +78,7 @@ export async function updateSession(request: NextRequest) {
         },
         setAll(cookiesToSet) {
           cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value))
-          supabaseResponse = NextResponse.next({ request })
+          supabaseResponse = buildNextResponse()
           cookiesToSet.forEach(({ name, value, options }) =>
             supabaseResponse.cookies.set(name, value, options)
           )
@@ -23,21 +87,17 @@ export async function updateSession(request: NextRequest) {
     }
   )
 
+  const authStartedAt = startRequestTimer()
   const { data: { user } } = await supabase.auth.getUser()
+  const authDurationMs = getElapsedMilliseconds(authStartedAt)
+  finalizeResponse(supabaseResponse, authDurationMs)
 
   const url = request.nextUrl.clone()
   const isPublicPath = url.pathname === '/login' || url.pathname === '/'
-  const isCronPath = url.pathname.startsWith('/api/cron/')
-
-  // Allow scheduled cron endpoints to authenticate themselves with CRON_SECRET
-  // instead of being redirected through the interactive login flow.
-  if (isCronPath) {
-    return supabaseResponse
-  }
 
   if (!user && !isPublicPath) {
     url.pathname = '/login'
-    return NextResponse.redirect(url)
+    return finalizeResponse(NextResponse.redirect(url), authDurationMs)
   }
 
   return supabaseResponse

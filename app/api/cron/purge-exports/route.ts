@@ -1,10 +1,23 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import {
+  createErrorId,
+  getRequiredSecret,
+  internalServerError,
+  logApiError,
+} from '@/lib/api-security'
 
 // Vercel invokes this daily with Authorization: Bearer <CRON_SECRET>
 export async function GET(request: Request) {
+  const cronSecret = getRequiredSecret('CRON_SECRET', 32)
+  if (!cronSecret) {
+    const errorId = createErrorId()
+    logApiError('/api/cron/purge-exports', errorId, 'CRON_SECRET is missing or too short')
+    return internalServerError(errorId)
+  }
+
   const auth = request.headers.get('authorization')
-  if (auth !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (auth !== `Bearer ${cronSecret}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
