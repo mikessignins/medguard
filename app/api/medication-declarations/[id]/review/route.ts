@@ -83,10 +83,7 @@ export async function PATCH(
   const scopeError = requireMedicScope(medicAccount, current)
   if (scopeError) return NextResponse.json({ error: scopeError.error }, { status: scopeError.status })
 
-  const transitionError = validateMedicationReviewTransition(
-    current.medic_review_status,
-    medic_review_status
-  )
+  const transitionError = validateMedicationReviewTransition(current.medic_review_status)
   if (transitionError) {
     return NextResponse.json(
       { error: transitionError.error },
