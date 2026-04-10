@@ -39,3 +39,7 @@ next-env.d.ts
 
 # worktrees
 .worktrees/
+
+# local AI / assistant tooling
+.claude/
+.superpowers/

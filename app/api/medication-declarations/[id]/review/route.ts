@@ -9,6 +9,7 @@ import { parseJsonBody, parseUuidParam } from '@/lib/api-validation'
 import { requireSameOrigin } from '@/lib/api-security'
 import { medicationReviewRequestSchema } from '@/lib/review-request-schemas'
 import { enforceActionRateLimit } from '@/lib/rate-limit'
+import { enqueueDeclarationProcessing } from '@/lib/declaration-processing'
 
 const VALID_STATUSES: MedDecReviewStatus[] = ['Pending', 'In Review', 'Normal Duties', 'Restricted Duties', 'Unfit for Work']
 
@@ -142,6 +143,16 @@ export async function PATCH(
     route: '/api/medication-declarations/[id]/review',
     targetId: parsedId.value,
     context: { medic_review_status },
+  })
+
+  void enqueueDeclarationProcessing({
+    moduleKey: 'confidential_medication',
+    route: '/api/medication-declarations/[id]/review',
+    targetId: parsedId.value,
+    targetTable: 'medication_declarations',
+    businessId: medicAccount.business_id,
+    siteId: current.site_id,
+    triggeredByUserId: userId!,
   })
 
   return NextResponse.json({ ok: true })

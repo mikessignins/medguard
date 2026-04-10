@@ -11,6 +11,7 @@ import { parseJsonBody, parseUuidParam } from '@/lib/api-validation'
 import { requireSameOrigin } from '@/lib/api-security'
 import { emergencyReviewRequestSchema } from '@/lib/review-request-schemas'
 import { enforceActionRateLimit } from '@/lib/rate-limit'
+import { enqueueDeclarationProcessing } from '@/lib/declaration-processing'
 
 export const runtime = 'nodejs'
 
@@ -165,6 +166,16 @@ export async function PATCH(
     route: '/api/declarations/[id]/review',
     targetId: parsedId.value,
     context: { status },
+  })
+
+  void enqueueDeclarationProcessing({
+    moduleKey: 'emergency_declaration',
+    route: '/api/declarations/[id]/review',
+    targetId: parsedId.value,
+    targetTable: 'submissions',
+    businessId: medicAccount.business_id,
+    siteId: current.site_id,
+    triggeredByUserId: userId!,
   })
 
   return NextResponse.json({ ok: true })

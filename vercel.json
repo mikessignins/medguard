@@ -3,6 +3,10 @@
     {
       "path": "/api/cron/purge-exports",
       "schedule": "0 2 * * *"
+    },
+    {
+      "path": "/api/cron/contractor-expiry",
+      "schedule": "0 1 * * *"
     }
   ]
 }

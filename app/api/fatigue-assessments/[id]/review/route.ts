@@ -8,6 +8,7 @@ import { parseJsonBody, parseUuidParam } from '@/lib/api-validation'
 import { requireSameOrigin } from '@/lib/api-security'
 import { fatigueReviewRequestSchema } from '@/lib/review-request-schemas'
 import { enforceActionRateLimit } from '@/lib/rate-limit'
+import { enqueueDeclarationProcessing } from '@/lib/declaration-processing'
 
 export const runtime = 'nodejs'
 
@@ -170,6 +171,16 @@ export async function PATCH(
     route: '/api/fatigue-assessments/[id]/review',
     targetId: parsedId.value,
     context: { fit_for_work_decision: body.fitForWorkDecision },
+  })
+
+  void enqueueDeclarationProcessing({
+    moduleKey: 'fatigue_assessment',
+    route: '/api/fatigue-assessments/[id]/review',
+    targetId: parsedId.value,
+    targetTable: 'module_submissions',
+    businessId: medicAccount.business_id,
+    siteId: current.site_id,
+    triggeredByUserId: userId!,
   })
 
   return NextResponse.json({ ok: true })

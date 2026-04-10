@@ -1,5 +1,5 @@
 'use client'
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { getExportErrorMessage } from '@/lib/export-feedback'
@@ -137,6 +137,46 @@ export default function SubmissionDetail({ submission, siteName, businessName, c
   const [commentDraft, setCommentDraft] = useState('')
   const [commentSaving, setCommentSaving] = useState(false)
   const [commentError, setCommentError] = useState('')
+  const draftStorageKey = useMemo(
+    () => `medic-submission-draft:${submission.id}`,
+    [submission.id],
+  )
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+
+    const raw = window.localStorage.getItem(draftStorageKey)
+    if (!raw) return
+
+    try {
+      const parsed = JSON.parse(raw) as {
+        commentDraft?: string
+        followUpNote?: string
+      }
+      setCommentDraft(typeof parsed.commentDraft === 'string' ? parsed.commentDraft : '')
+      setFollowUpNote(typeof parsed.followUpNote === 'string' ? parsed.followUpNote : '')
+    } catch {
+      window.localStorage.removeItem(draftStorageKey)
+    }
+  }, [draftStorageKey])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+
+    const hasDraft = commentDraft.trim().length > 0 || followUpNote.trim().length > 0
+    if (!hasDraft) {
+      window.localStorage.removeItem(draftStorageKey)
+      return
+    }
+
+    window.localStorage.setItem(
+      draftStorageKey,
+      JSON.stringify({
+        commentDraft,
+        followUpNote,
+      }),
+    )
+  }, [commentDraft, draftStorageKey, followUpNote])
 
   async function handleAddComment() {
     const note = commentDraft.trim()
@@ -153,6 +193,9 @@ export default function SubmissionDetail({ submission, siteName, businessName, c
       const newComment: MedicComment = await res.json()
       setComments(prev => [...prev, newComment])
       setCommentDraft('')
+      if (!followUpNote.trim()) {
+        window.localStorage.removeItem(draftStorageKey)
+      }
     } catch {
       setCommentError('Network error — please try again.')
     } finally {
@@ -210,6 +253,9 @@ export default function SubmissionDetail({ submission, siteName, businessName, c
       }
       setShowFollowUpModal(false)
       setFollowUpNote('')
+      if (typeof window !== 'undefined') {
+        window.localStorage.removeItem(draftStorageKey)
+      }
       router.refresh()
     } catch {
       setActionError('Network error — please try again.')

@@ -8,6 +8,7 @@ import { parseJsonBody, parseUuidParam } from '@/lib/api-validation'
 import { requireSameOrigin } from '@/lib/api-security'
 import { psychosocialReviewRequestSchema } from '@/lib/review-request-schemas'
 import { enforceActionRateLimit } from '@/lib/rate-limit'
+import { enqueueDeclarationProcessing } from '@/lib/declaration-processing'
 
 export const runtime = 'nodejs'
 
@@ -208,6 +209,16 @@ export async function PATCH(
     route: '/api/psychosocial-assessments/[id]/review',
     targetId: parsedId.value,
     context: { next_status: nextStatus, workflow_kind: workflowKind },
+  })
+
+  void enqueueDeclarationProcessing({
+    moduleKey: 'psychosocial_health',
+    route: '/api/psychosocial-assessments/[id]/review',
+    targetId: parsedId.value,
+    targetTable: 'module_submissions',
+    businessId: medicAccount.business_id,
+    siteId: current.site_id,
+    triggeredByUserId: userId!,
   })
 
   return NextResponse.json({ ok: true })

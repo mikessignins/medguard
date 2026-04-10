@@ -38,6 +38,91 @@ interface Props {
   sites: SiteItem[]
 }
 
+function TrendChart({
+  title,
+  rows,
+  lineClassName,
+  fillClassName,
+}: {
+  title: string
+  rows: Array<{ label: string; value: number }>
+  lineClassName: string
+  fillClassName: string
+}) {
+  if (rows.length === 0) {
+    return (
+      <div className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-5">
+        <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-widest">{title}</h3>
+        <p className="mt-4 text-sm text-slate-500">No trend data available yet.</p>
+      </div>
+    )
+  }
+
+  const width = 520
+  const height = 180
+  const paddingX = 22
+  const paddingY = 18
+  const values = rows.map((row) => row.value)
+  const maxValue = Math.max(...values, 1)
+  const stepX = rows.length > 1 ? (width - paddingX * 2) / (rows.length - 1) : 0
+
+  const points = rows.map((row, index) => {
+    const x = paddingX + stepX * index
+    const normalized = row.value / maxValue
+    const y = height - paddingY - normalized * (height - paddingY * 2)
+    return { ...row, x, y }
+  })
+
+  const linePath = points
+    .map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x} ${point.y}`)
+    .join(' ')
+  const fillPath = `${linePath} L ${points[points.length - 1]?.x ?? paddingX} ${height - paddingY} L ${points[0]?.x ?? paddingX} ${height - paddingY} Z`
+
+  return (
+    <div className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-5">
+      <div className="flex items-center justify-between gap-3">
+        <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-widest">{title}</h3>
+        <p className="text-xs text-slate-500">Last {rows.length} months</p>
+      </div>
+
+      <svg
+        viewBox={`0 0 ${width} ${height}`}
+        className="mt-4 h-44 w-full overflow-visible"
+        role="img"
+        aria-label={title}
+      >
+        {[0.25, 0.5, 0.75, 1].map((fraction) => {
+          const y = height - paddingY - fraction * (height - paddingY * 2)
+          return (
+            <line
+              key={fraction}
+              x1={paddingX}
+              x2={width - paddingX}
+              y1={y}
+              y2={y}
+              className="stroke-slate-700/60"
+              strokeWidth="1"
+            />
+          )
+        })}
+        <path d={fillPath} className={fillClassName} />
+        <path d={linePath} className={lineClassName} fill="none" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+        {points.map((point) => (
+          <g key={point.label}>
+            <circle cx={point.x} cy={point.y} r="4" className="fill-slate-950 stroke-slate-200/80" strokeWidth="1.5" />
+            <text x={point.x} y={point.y - 10} textAnchor="middle" className="fill-slate-300 text-[10px] font-medium">
+              {point.value}
+            </text>
+            <text x={point.x} y={height} textAnchor="middle" className="fill-slate-500 text-[10px]">
+              {point.label}
+            </text>
+          </g>
+        ))}
+      </svg>
+    </div>
+  )
+}
+
 function formatMonth(key: string) {
   try {
     const [year, month] = key.split('-')
@@ -163,6 +248,12 @@ export default function AdminSubmissions({ overview, sites }: Props) {
           <MetricCard title="Total Actioned" value={emergency.totalActioned} tone="slate" />
         </div>
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+          <TrendChart
+            title="Emergency Trend"
+            rows={emergency.monthlyRows}
+            lineClassName="stroke-cyan-300"
+            fillClassName="fill-cyan-500/10"
+          />
           <BreakdownTable
             title="Monthly Breakdown"
             emptyLabel="No emergency declaration activity recorded yet."
@@ -190,6 +281,12 @@ export default function AdminSubmissions({ overview, sites }: Props) {
           <MetricCard title="Total Visible" value={medication.totalVisible} tone="slate" />
         </div>
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+          <TrendChart
+            title="Medication Trend"
+            rows={medication.monthlyRows}
+            lineClassName="stroke-indigo-300"
+            fillClassName="fill-indigo-500/10"
+          />
           <BreakdownTable
             title="Monthly Breakdown"
             emptyLabel="No medication declaration activity recorded yet."
