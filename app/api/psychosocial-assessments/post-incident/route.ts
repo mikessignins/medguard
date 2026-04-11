@@ -4,7 +4,7 @@ import { cookies } from 'next/headers'
 import { requireActiveMedic, requireAuthenticatedUser, requireMedicScope } from '@/lib/route-access'
 import type { PsychosocialModulePayload, PsychosocialPostIncidentEventType } from '@/lib/types'
 import { parseJsonBody } from '@/lib/api-validation'
-import { requireSameOrigin } from '@/lib/api-security'
+import { logAndReturnInternalError, requireSameOrigin } from '@/lib/api-security'
 import { psychosocialPostIncidentRequestSchema } from '@/lib/review-request-schemas'
 import { safeLogServerEvent } from '@/lib/app-event-log'
 import { enforceActionRateLimit } from '@/lib/rate-limit'
@@ -74,7 +74,7 @@ export async function POST(request: NextRequest) {
 
   const { data: account } = await authClient
     .from('user_accounts')
-    .select('role, display_name, business_id, site_ids, is_inactive')
+    .select('role, display_name, business_id, site_ids, is_inactive, contract_end_date')
     .eq('id', userId)
     .single()
 
@@ -216,7 +216,10 @@ export async function POST(request: NextRequest) {
       errorMessage: error?.message || 'Failed to create post-incident welfare case.',
       context: { site_id, event_type: eventType },
     })
-    return NextResponse.json({ error: error?.message || 'Failed to create post-incident welfare case.' }, { status: 500 })
+    return logAndReturnInternalError(
+      '/api/psychosocial-assessments/post-incident',
+      error ?? new Error('Failed to create post-incident welfare case.'),
+    )
   }
 
   await safeLogServerEvent({

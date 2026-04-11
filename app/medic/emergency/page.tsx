@@ -1,7 +1,8 @@
 import MedicDashboard from '@/components/medic/MedicDashboard'
 import { getMedicDashboardData } from '@/lib/medic-dashboard-data'
 
-export default async function MedicEmergencyPage({ searchParams }: { searchParams: { site?: string } }) {
+export default async function MedicEmergencyPage({ searchParams }: { searchParams: Promise<{ site?: string }> }) {
+  const resolvedSearchParams = await searchParams
   const data = await getMedicDashboardData('emergency')
 
   return (
@@ -12,7 +13,7 @@ export default async function MedicEmergencyPage({ searchParams }: { searchParam
       fatigueAssessments={data.fatigueAssessments}
       medDecEnabled={data.medDecEnabled}
       fatigueEnabled={data.fatigueEnabled}
-      initialSite={searchParams?.site}
+      initialSite={resolvedSearchParams?.site}
       moduleView="emergency"
     />
   )

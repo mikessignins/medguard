@@ -3,7 +3,8 @@ import { NextResponse } from 'next/server'
 import { isKnownModuleKey, MODULE_REGISTRY, type ModuleKey } from '@/lib/modules'
 import { requireAuthenticatedUser, requireScopedBusinessAccess } from '@/lib/route-access'
 import { parseBusinessIdParam, parseJsonBody } from '@/lib/api-validation'
-import { requireSameOrigin } from '@/lib/api-security'
+import { logAndReturnInternalError, requireSameOrigin } from '@/lib/api-security'
+import { safeLogServerEvent } from '@/lib/app-event-log'
 import { z } from 'zod'
 
 const businessModuleSchema = z.object({
@@ -11,8 +12,9 @@ const businessModuleSchema = z.object({
   moduleKey: z.string().optional(),
 })
 
-export async function PATCH(req: Request, { params }: { params: { id: string } }) {
-  const parsedBusinessId = parseBusinessIdParam(params.id)
+export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const resolvedParams = await params
+  const parsedBusinessId = parseBusinessIdParam(resolvedParams.id)
   if (!parsedBusinessId.success) return parsedBusinessId.response
 
   const csrfError = requireSameOrigin(req)
@@ -26,7 +28,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
 
   const { data: account } = await supabase
     .from('user_accounts')
-    .select('role, business_id')
+    .select('role, display_name, business_id')
     .eq('id', userId)
     .single()
 
@@ -74,7 +76,37 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
       config: existingRow?.config ?? {},
     }, { onConflict: 'business_id,module_key' })
 
-  if (moduleError) return NextResponse.json({ error: moduleError.message }, { status: 500 })
+  if (moduleError) {
+    await safeLogServerEvent({
+      source: 'web_api',
+      action: 'business_module_updated',
+      result: 'failure',
+      actorUserId: userId,
+      actorRole: account?.role,
+      actorName: account?.display_name,
+      businessId: parsedBusinessId.value,
+      moduleKey,
+      route: '/api/businesses/[id]/modules',
+      targetId: parsedBusinessId.value,
+      errorMessage: moduleError.message,
+      context: { enabled: nextEnabled },
+    })
+    return logAndReturnInternalError('/api/businesses/[id]/modules', moduleError)
+  }
+
+  await safeLogServerEvent({
+    source: 'web_api',
+    action: 'business_module_updated',
+    result: 'success',
+    actorUserId: userId,
+    actorRole: account?.role,
+    actorName: account?.display_name,
+    businessId: parsedBusinessId.value,
+    moduleKey,
+    route: '/api/businesses/[id]/modules',
+    targetId: parsedBusinessId.value,
+    context: { enabled: nextEnabled },
+  })
 
   return NextResponse.json({ ok: true })
 }

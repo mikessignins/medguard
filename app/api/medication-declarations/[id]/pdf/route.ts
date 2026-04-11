@@ -7,6 +7,7 @@ import { parseUuidParam } from '@/lib/api-validation'
 import { markExportedIfNeeded } from '@/lib/export-stamp'
 import { enforceActionRateLimit } from '@/lib/rate-limit'
 import { safeLogServerEvent } from '@/lib/app-event-log'
+import { logAndReturnInternalError, NO_STORE_HEADERS } from '@/lib/api-security'
 import {
   streamToBuffer, sanitize, fmtDate, fmtDateTime, parseArray,
   pageHeader, pageFooter, sectionHeader, twoColTable, renderAuditEntries, renderExportAuditSummary,
@@ -19,19 +20,16 @@ export const runtime = 'nodejs'
 
 export async function GET(
   _request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const parsedId = parseUuidParam(params.id, 'Medication declaration id')
+  const resolvedParams = await params
+  const parsedId = parseUuidParam(resolvedParams.id, 'Medication declaration id')
   if (!parsedId.success) return parsedId.response
 
   try {
     return await generateMedDecPdf(parsedId.value)
   } catch (err) {
-    console.error('[med-dec/pdf] unhandled error:', err)
-    return new NextResponse(
-      `Internal error: ${err instanceof Error ? err.message : String(err)}`,
-      { status: 500 }
-    )
+    return logAndReturnInternalError('/api/medication-declarations/[id]/pdf', err)
   }
 }
 
@@ -454,10 +452,10 @@ async function generateMedDecPdf(id: string) {
   return new NextResponse(pdfBuffer as unknown as BodyInit, {
     status: 200,
     headers: {
+      ...NO_STORE_HEADERS,
       'Content-Type': 'application/pdf',
       'Content-Disposition': `attachment; filename="${filename}"`,
       'Content-Length': String(pdfBuffer.length),
-      'Cache-Control': 'no-store',
     },
   })
 }

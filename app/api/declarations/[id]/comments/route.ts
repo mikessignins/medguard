@@ -5,7 +5,7 @@ import type { MedicComment } from '@/lib/types'
 import { hasMedicScopeAccess } from '@/lib/medic-scope'
 import { parseSubmissionComments } from '@/lib/submission-comments'
 import { parseJsonBody, parseUuidParam } from '@/lib/api-validation'
-import { requireSameOrigin } from '@/lib/api-security'
+import { logAndReturnInternalError, requireSameOrigin } from '@/lib/api-security'
 import { submissionCommentRequestSchema } from '@/lib/review-request-schemas'
 import { enforceActionRateLimit } from '@/lib/rate-limit'
 import { safeLogServerEvent } from '@/lib/app-event-log'
@@ -46,7 +46,7 @@ async function getAuthenticatedMedic() {
 
   const { data: account } = await authClient
     .from('user_accounts')
-    .select('role, display_name, business_id, site_ids, is_inactive')
+    .select('role, display_name, business_id, site_ids, is_inactive, contract_end_date')
     .eq('id', user.id)
     .single()
 
@@ -84,9 +84,10 @@ async function fetchComments(authClient: AuthenticatedMedic['client'], submissio
 
 export async function GET(
   _request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const parsedId = parseUuidParam(params.id, 'Submission id')
+  const resolvedParams = await params
+  const parsedId = parseUuidParam(resolvedParams.id, 'Submission id')
   if (!parsedId.success) return parsedId.response
 
   const medic = await getAuthenticatedMedic()
@@ -106,9 +107,10 @@ export async function GET(
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const parsedId = parseUuidParam(params.id, 'Submission id')
+  const resolvedParams = await params
+  const parsedId = parseUuidParam(resolvedParams.id, 'Submission id')
   if (!parsedId.success) return parsedId.response
 
   const csrfError = requireSameOrigin(request)
@@ -161,7 +163,6 @@ export async function POST(
     .single()
 
   if (error) {
-    console.error('[comments/POST] error:', error)
     await safeLogServerEvent({
       source: 'web_api',
       action: 'emergency_comment_saved',
@@ -174,7 +175,7 @@ export async function POST(
       targetId: parsedId.value,
       errorMessage: error.message,
     })
-    return new NextResponse(error.message, { status: 500 })
+    return logAndReturnInternalError('/api/declarations/[id]/comments', error)
   }
 
   const comment = parseSubmissionComments(data ? [data] : [])[0]

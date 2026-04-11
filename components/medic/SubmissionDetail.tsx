@@ -20,6 +20,8 @@ const STATUS_COLORS: Record<SubmissionStatus, string> = {
   'Recalled': 'bg-slate-500/10 text-slate-400 border border-slate-500/20',
 }
 
+const DRAFT_TTL_MS = 12 * 60 * 60 * 1000
+
 // All date formatting done here — never inline — to avoid hydration mismatches
 function fmt(value: string | null | undefined, opts: Intl.DateTimeFormatOptions = { day: '2-digit', month: 'short', year: 'numeric' }): string {
   if (!value) return '—'
@@ -138,42 +140,51 @@ export default function SubmissionDetail({ submission, siteName, businessName, c
   const [commentSaving, setCommentSaving] = useState(false)
   const [commentError, setCommentError] = useState('')
   const draftStorageKey = useMemo(
-    () => `medic-submission-draft:${submission.id}`,
-    [submission.id],
+    () => `medic-submission-draft:${currentUserId}:${submission.id}`,
+    [currentUserId, submission.id],
   )
 
   useEffect(() => {
     if (typeof window === 'undefined') return
 
-    const raw = window.localStorage.getItem(draftStorageKey)
+    const legacyDraftKey = `medic-submission-draft:${submission.id}`
+    window.localStorage.removeItem(legacyDraftKey)
+
+    const raw = window.sessionStorage.getItem(draftStorageKey)
     if (!raw) return
 
     try {
       const parsed = JSON.parse(raw) as {
         commentDraft?: string
         followUpNote?: string
+        savedAt?: number
+      }
+      if (!parsed.savedAt || Date.now() - parsed.savedAt > DRAFT_TTL_MS) {
+        window.sessionStorage.removeItem(draftStorageKey)
+        return
       }
       setCommentDraft(typeof parsed.commentDraft === 'string' ? parsed.commentDraft : '')
       setFollowUpNote(typeof parsed.followUpNote === 'string' ? parsed.followUpNote : '')
     } catch {
-      window.localStorage.removeItem(draftStorageKey)
+      window.sessionStorage.removeItem(draftStorageKey)
     }
-  }, [draftStorageKey])
+  }, [draftStorageKey, submission.id])
 
   useEffect(() => {
     if (typeof window === 'undefined') return
 
     const hasDraft = commentDraft.trim().length > 0 || followUpNote.trim().length > 0
     if (!hasDraft) {
-      window.localStorage.removeItem(draftStorageKey)
+      window.sessionStorage.removeItem(draftStorageKey)
       return
     }
 
-    window.localStorage.setItem(
+    window.sessionStorage.setItem(
       draftStorageKey,
       JSON.stringify({
         commentDraft,
         followUpNote,
+        savedAt: Date.now(),
       }),
     )
   }, [commentDraft, draftStorageKey, followUpNote])
@@ -194,7 +205,7 @@ export default function SubmissionDetail({ submission, siteName, businessName, c
       setComments(prev => [...prev, newComment])
       setCommentDraft('')
       if (!followUpNote.trim()) {
-        window.localStorage.removeItem(draftStorageKey)
+        window.sessionStorage.removeItem(draftStorageKey)
       }
     } catch {
       setCommentError('Network error — please try again.')
@@ -254,7 +265,7 @@ export default function SubmissionDetail({ submission, siteName, businessName, c
       setShowFollowUpModal(false)
       setFollowUpNote('')
       if (typeof window !== 'undefined') {
-        window.localStorage.removeItem(draftStorageKey)
+        window.sessionStorage.removeItem(draftStorageKey)
       }
       router.refresh()
     } catch {

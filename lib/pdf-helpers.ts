@@ -294,8 +294,11 @@ export async function getAuthenticatedMedic() {
   const { data: { user } } = await authClient.auth.getUser()
   if (!user) return null
   const { data: account } = await authClient
-    .from('user_accounts').select('role, display_name, business_id, site_ids, is_inactive').eq('id', user.id).single()
-  if (!account || account.role !== 'medic' || account.is_inactive) return null
+    .from('user_accounts').select('role, display_name, business_id, site_ids, is_inactive, contract_end_date').eq('id', user.id).single()
+  const contractExpired = account?.contract_end_date
+    ? new Date(account.contract_end_date).getTime() < Date.now()
+    : false
+  if (!account || account.role !== 'medic' || account.is_inactive || contractExpired) return null
   return { user, account, authClient }
 }
 

@@ -2,7 +2,8 @@ import { createClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuthenticatedUser, requireScopedBusinessAccess } from '@/lib/route-access'
 import { parseBusinessIdParam } from '@/lib/api-validation'
-import { requireSameOrigin } from '@/lib/api-security'
+import { logAndReturnInternalError, requireSameOrigin } from '@/lib/api-security'
+import { safeLogServerEvent } from '@/lib/app-event-log'
 import { z } from 'zod'
 
 const MAX_SIZE = 2 * 1024 * 1024 // 2 MB
@@ -10,8 +11,9 @@ const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp']
 type LogoVariant = 'default' | 'light' | 'dark'
 const logoVariantSchema = z.enum(['default', 'light', 'dark'])
 
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
-  const parsedBusinessId = parseBusinessIdParam(params.id)
+export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const resolvedParams = await params
+  const parsedBusinessId = parseBusinessIdParam(resolvedParams.id)
   if (!parsedBusinessId.success) return parsedBusinessId.response
 
   const csrfError = requireSameOrigin(req)
@@ -25,7 +27,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
   const { data: account } = await supabase
     .from('user_accounts')
-    .select('role, business_id')
+    .select('role, display_name, business_id')
     .eq('id', userId)
     .single()
 
@@ -64,7 +66,20 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     .upload(storagePath, buffer, { contentType: file.type, upsert: true })
 
   if (uploadError) {
-    return NextResponse.json({ error: uploadError.message }, { status: 500 })
+    await safeLogServerEvent({
+      source: 'web_api',
+      action: 'business_logo_updated',
+      result: 'failure',
+      actorUserId: userId,
+      actorRole: account?.role,
+      actorName: account?.display_name,
+      businessId: parsedBusinessId.value,
+      route: '/api/businesses/[id]/logo',
+      targetId: parsedBusinessId.value,
+      errorMessage: uploadError.message,
+      context: { variant, content_type: file.type, file_size: file.size },
+    })
+    return logAndReturnInternalError('/api/businesses/[id]/logo', uploadError)
   }
 
   const { data: urlData } = supabase.storage.from('business-logos').getPublicUrl(storagePath)
@@ -81,7 +96,35 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     .update(updatePayload)
     .eq('id', parsedBusinessId.value)
 
-  if (dbError) return NextResponse.json({ error: dbError.message }, { status: 500 })
+  if (dbError) {
+    await safeLogServerEvent({
+      source: 'web_api',
+      action: 'business_logo_updated',
+      result: 'failure',
+      actorUserId: userId,
+      actorRole: account?.role,
+      actorName: account?.display_name,
+      businessId: parsedBusinessId.value,
+      route: '/api/businesses/[id]/logo',
+      targetId: parsedBusinessId.value,
+      errorMessage: dbError.message,
+      context: { variant, storage_path: storagePath },
+    })
+    return logAndReturnInternalError('/api/businesses/[id]/logo', dbError)
+  }
+
+  await safeLogServerEvent({
+    source: 'web_api',
+    action: 'business_logo_updated',
+    result: 'success',
+    actorUserId: userId,
+    actorRole: account?.role,
+    actorName: account?.display_name,
+    businessId: parsedBusinessId.value,
+    route: '/api/businesses/[id]/logo',
+    targetId: parsedBusinessId.value,
+    context: { variant, storage_path: storagePath, content_type: file.type, file_size: file.size },
+  })
 
   return NextResponse.json({ variant, url: publicUrl, ...updatePayload })
 }

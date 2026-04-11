@@ -1,5 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
-import { createClient as createServiceClient } from '@supabase/supabase-js'
+import { createServiceClient } from '@/lib/supabase/service'
 import { redirect } from 'next/navigation'
 import { formatDistanceToNow } from 'date-fns'
 import { expireMedicContracts } from '@/lib/admin-medics'
@@ -62,10 +62,7 @@ export default async function AdminPage() {
   // Forms unreviewed for more than 24 hours are a safety risk
   const staleThreshold = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString()
 
-  const service = createServiceClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  )
+  const service = createServiceClient()
 
   const [
     { count: workerCount },

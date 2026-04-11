@@ -32,9 +32,11 @@ export default async function MedicPsychosocialPage({
   params,
   searchParams,
 }: {
-  params: { id: string }
-  searchParams: { queue?: string; pos?: string; site?: string }
+  params: Promise<{ id: string }>
+  searchParams: Promise<{ queue?: string; pos?: string; site?: string }>
 }) {
+  const resolvedParams = await params
+  const resolvedSearchParams = await searchParams
   const user = await getRequestUser()
   if (!user) redirect('/login')
 
@@ -47,7 +49,7 @@ export default async function MedicPsychosocialPage({
   const { data: raw } = await supabase
     .from('module_submissions')
     .select('*')
-    .eq('id', params.id)
+    .eq('id', resolvedParams.id)
     .eq('module_key', 'psychosocial_health')
     .single()
 
@@ -58,7 +60,7 @@ export default async function MedicPsychosocialPage({
     ?? (raw.payload?.postIncidentWelfare ? 'post_incident_psychological_welfare' : null)
 
   if (!['support_check_in', 'post_incident_psychological_welfare'].includes(workflowKind ?? '')) {
-    redirect(`/medic/psychosocial?site=${encodeURIComponent(searchParams.site || String(raw.site_id || ''))}`)
+    redirect(`/medic/psychosocial?site=${encodeURIComponent(resolvedSearchParams.site || String(raw.site_id || ''))}`)
   }
 
   if (raw.status === 'awaiting_medic_review' || raw.status === 'review_recommended') {
@@ -99,8 +101,8 @@ export default async function MedicPsychosocialPage({
   ])
   const workerDisplayName = await getWorkerDisplayNameById(String(raw.worker_id ?? ''))
 
-  const queueContext = parseQueue(searchParams)
-  const backHref = `/medic/psychosocial?site=${encodeURIComponent(searchParams.site || String(raw.site_id || ''))}`
+  const queueContext = parseQueue(resolvedSearchParams)
+  const backHref = `/medic/psychosocial?site=${encodeURIComponent(resolvedSearchParams.site || String(raw.site_id || ''))}`
   const assessment = withPsychosocialWorkerNameFallback(
     parsePsychosocialAssessment(raw),
     workerDisplayName,

@@ -1,4 +1,4 @@
-import { createClient as createServiceClient } from '@supabase/supabase-js'
+import { createServiceClient } from '@/lib/supabase/service'
 
 type ExpiringMedic = {
   id: string
@@ -18,13 +18,6 @@ type AdminRecipient = {
 type BusinessRecord = {
   id: string
   name: string
-}
-
-function createService() {
-  return createServiceClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  )
 }
 
 function startOfUtcDay(value: Date) {
@@ -109,7 +102,7 @@ function emailHtml({
 }
 
 export async function sendContractorExpiryWarnings(now = new Date()) {
-  const service = createService()
+  const service = createServiceClient()
 
   const [{ data: medics, error: medicError }, { data: admins, error: adminError }, { data: businesses, error: businessError }] = await Promise.all([
     service

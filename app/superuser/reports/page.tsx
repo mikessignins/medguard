@@ -1,5 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
-import { createClient as createServiceClient } from '@supabase/supabase-js'
+import { createServiceClient } from '@/lib/supabase/service'
 import { redirect } from 'next/navigation'
 import type { PsychosocialHazardMetric } from '@/lib/psychosocial'
 
@@ -32,7 +32,8 @@ interface DeidentifiedPsychosocialSummary {
   is_suppressed: boolean
 }
 
-export default async function SuperuserReportsPage({ searchParams }: { searchParams: SearchParams }) {
+export default async function SuperuserReportsPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
+  const resolvedSearchParams = await searchParams
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
@@ -45,20 +46,17 @@ export default async function SuperuserReportsPage({ searchParams }: { searchPar
 
   if (!account || account.role !== 'superuser') redirect('/')
 
-  const service = createServiceClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  )
+  const service = createServiceClient()
 
   const { data: businesses } = await service
     .from('businesses')
     .select('id, name')
     .order('name', { ascending: true })
 
-  const selectedBusinessId = searchParams.business_id ?? ''
-  const selectedSiteId = searchParams.site_id ?? 'all'
-  const fromDate = searchParams.from ?? ''
-  const toDate = searchParams.to ?? ''
+  const selectedBusinessId = resolvedSearchParams.business_id ?? ''
+  const selectedSiteId = resolvedSearchParams.site_id ?? 'all'
+  const fromDate = resolvedSearchParams.from ?? ''
+  const toDate = resolvedSearchParams.to ?? ''
 
   const { data: sites } = selectedBusinessId
     ? await service

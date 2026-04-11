@@ -35,8 +35,9 @@ function parsePsychosocialAssessment(raw: Record<string, unknown>): Psychosocial
 export default async function MedicPsychosocialDashboardPage({
   searchParams,
 }: {
-  searchParams: { site?: string }
+  searchParams: Promise<{ site?: string }>
 }) {
+  const resolvedSearchParams = await searchParams
   const startedAt = startRequestTimer()
   // Cached helpers — deduplicated with layout's auth/account/modules queries
   const user = await getRequestUser()
@@ -105,7 +106,7 @@ export default async function MedicPsychosocialDashboardPage({
       sites={sites ?? []}
       supportCheckIns={supportCheckIns}
       pulseCount={pulseCount}
-      initialSite={searchParams?.site}
+      initialSite={resolvedSearchParams?.site}
     />
   )
 }

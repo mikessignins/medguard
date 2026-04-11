@@ -1,5 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
-import { createClient as createServiceClient } from '@supabase/supabase-js'
+import { createServiceClient } from '@/lib/supabase/service'
 import { redirect } from 'next/navigation'
 import SuperuserDashboard from '@/components/superuser/SuperuserDashboard'
 import type { Business } from '@/lib/types'
@@ -27,10 +27,7 @@ export default async function SuperuserPage() {
 
   if (!account || account.role !== 'superuser') redirect('/')
 
-  const service = createServiceClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  )
+  const service = createServiceClient()
 
   let businessesQuery = service
     .from('businesses')

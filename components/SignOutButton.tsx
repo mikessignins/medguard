@@ -7,6 +7,16 @@ export default function SignOutButton() {
   const supabase = createClient()
 
   async function handleSignOut() {
+    if (typeof window !== 'undefined') {
+      for (const storage of [window.sessionStorage, window.localStorage]) {
+        for (let index = storage.length - 1; index >= 0; index -= 1) {
+          const key = storage.key(index)
+          if (key?.startsWith('medic-submission-draft:')) {
+            storage.removeItem(key)
+          }
+        }
+      }
+    }
     await supabase.auth.signOut()
     router.push('/login')
   }

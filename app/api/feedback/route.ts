@@ -2,7 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 import { requireAuthenticatedUser, requireOneOfRoles } from '@/lib/route-access'
 import { parseJsonBody } from '@/lib/api-validation'
-import { requireSameOrigin } from '@/lib/api-security'
+import { logAndReturnInternalError, requireSameOrigin } from '@/lib/api-security'
 import { safeLogServerEvent } from '@/lib/app-event-log'
 import { enforceActionRateLimit } from '@/lib/rate-limit'
 import { z } from 'zod'
@@ -73,7 +73,7 @@ export async function POST(req: Request) {
       errorMessage: error.message,
       context: { category },
     })
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    return logAndReturnInternalError('/api/feedback', error)
   }
 
   await safeLogServerEvent({

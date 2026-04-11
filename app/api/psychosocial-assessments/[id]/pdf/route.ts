@@ -20,6 +20,7 @@ import type { PsychosocialAssessment, PsychosocialReviewPayload } from '@/lib/ty
 import { enforceActionRateLimit } from '@/lib/rate-limit'
 import { safeLogServerEvent } from '@/lib/app-event-log'
 import { getWorkerDisplayNameById } from '@/lib/worker-account-names'
+import { logAndReturnInternalError, NO_STORE_HEADERS } from '@/lib/api-security'
 import {
   streamToBuffer,
   sanitize,
@@ -41,19 +42,16 @@ export const runtime = 'nodejs'
 
 export async function GET(
   _request: NextRequest,
-  { params }: { params: { id: string } },
+  { params }: { params: Promise<{ id: string }> },
 ) {
-  const parsedId = parseUuidParam(params.id, 'Psychosocial assessment id')
+  const resolvedParams = await params
+  const parsedId = parseUuidParam(resolvedParams.id, 'Psychosocial assessment id')
   if (!parsedId.success) return parsedId.response
 
   try {
     return await generatePsychosocialPdf(parsedId.value)
   } catch (err) {
-    console.error('[psychosocial/pdf] unhandled error:', err)
-    return new NextResponse(
-      `Internal error: ${err instanceof Error ? err.message : String(err)}`,
-      { status: 500 },
-    )
+    return logAndReturnInternalError('/api/psychosocial-assessments/[id]/pdf', err)
   }
 }
 
@@ -347,9 +345,9 @@ async function generatePsychosocialPdf(id: string) {
   return new NextResponse(new Uint8Array(pdfBuffer), {
     status: 200,
     headers: {
+      ...NO_STORE_HEADERS,
       'Content-Type': 'application/pdf',
       'Content-Disposition': `attachment; filename="${filename}"`,
-      'Cache-Control': 'no-store',
     },
   })
 }

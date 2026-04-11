@@ -1,5 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
-import { createClient as createServiceClient } from '@supabase/supabase-js'
+import { createServiceClient } from '@/lib/supabase/service'
 import { redirect } from 'next/navigation'
 import FeedbackReview from '@/components/superuser/FeedbackReview'
 import { clampPage, getPaginationRange, getTotalPages, parsePageParam } from '@/lib/pagination'
@@ -13,7 +13,8 @@ interface SearchParams {
   status?: string
 }
 
-export default async function SuperuserFeedbackPage({ searchParams }: { searchParams: SearchParams }) {
+export default async function SuperuserFeedbackPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
+  const resolvedSearchParams = await searchParams
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
@@ -26,12 +27,9 @@ export default async function SuperuserFeedbackPage({ searchParams }: { searchPa
 
   if (!account || account.role !== 'superuser') redirect('/')
 
-  const service = createServiceClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  )
-  const status = ALL_STATUSES.includes((searchParams.status as FeedbackStatus | 'All') ?? 'All')
-    ? ((searchParams.status as FeedbackStatus | 'All') ?? 'All')
+  const service = createServiceClient()
+  const status = ALL_STATUSES.includes((resolvedSearchParams.status as FeedbackStatus | 'All') ?? 'All')
+    ? ((resolvedSearchParams.status as FeedbackStatus | 'All') ?? 'All')
     : 'All'
   const countQueries = ALL_STATUSES
     .filter((value): value is FeedbackStatus => value !== 'All')
@@ -58,7 +56,7 @@ export default async function SuperuserFeedbackPage({ searchParams }: { searchPa
   } satisfies Record<FeedbackStatus, number>
 
   const totalPages = getTotalPages(totalCount ?? 0, PAGE_SIZE)
-  const page = clampPage(parsePageParam(searchParams.page), totalPages)
+  const page = clampPage(parsePageParam(resolvedSearchParams.page), totalPages)
   const { from, to } = getPaginationRange(page, PAGE_SIZE)
   let feedbackQuery = service
     .from('feedback')

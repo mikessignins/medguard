@@ -25,7 +25,9 @@ function parseScriptUploads(raw: unknown): ScriptUpload[] {
   } catch { return [] }
 }
 
-export default async function MedDecPage({ params, searchParams }: { params: { id: string }; searchParams: { queue?: string; pos?: string; view?: string; site?: string } }) {
+export default async function MedDecPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ queue?: string; pos?: string; view?: string; site?: string }> }) {
+  const resolvedParams = await params
+  const resolvedSearchParams = await searchParams
   const user = await getRequestUser()
   if (!user) redirect('/login')
 
@@ -38,7 +40,7 @@ export default async function MedDecPage({ params, searchParams }: { params: { i
   const { data: raw } = await supabase
     .from('medication_declarations')
     .select('*')
-    .eq('id', params.id)
+    .eq('id', resolvedParams.id)
     .single()
 
   if (!raw) notFound()
@@ -93,9 +95,9 @@ export default async function MedDecPage({ params, searchParams }: { params: { i
     phi_purged_at: raw.phi_purged_at ? String(raw.phi_purged_at) : null,
   }
 
-  const queueContext = parseQueue(searchParams)
-  const backHref = searchParams.view === 'exports'
-    ? `/medic/exports${searchParams.site ? `?site=${encodeURIComponent(searchParams.site)}` : ''}`
+  const queueContext = parseQueue(resolvedSearchParams)
+  const backHref = resolvedSearchParams.view === 'exports'
+    ? `/medic/exports${resolvedSearchParams.site ? `?site=${encodeURIComponent(resolvedSearchParams.site)}` : ''}`
     : `/medic/medications${raw.site_id ? `?site=${encodeURIComponent(String(raw.site_id))}` : ''}`
 
   return (

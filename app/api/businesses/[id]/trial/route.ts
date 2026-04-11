@@ -2,7 +2,8 @@ import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 import { requireAuthenticatedUser, requireScopedBusinessAccess } from '@/lib/route-access'
 import { parseBusinessIdParam, parseJsonBody } from '@/lib/api-validation'
-import { requireSameOrigin } from '@/lib/api-security'
+import { logAndReturnInternalError, requireSameOrigin } from '@/lib/api-security'
+import { safeLogServerEvent } from '@/lib/app-event-log'
 import { z } from 'zod'
 
 const trialSchema = z.object({
@@ -13,8 +14,9 @@ const trialSchema = z.object({
 // Body: { trial_until: string (ISO) | null }
 // Superuser only. Sets or clears the trial period for a business.
 // While trial_until > NOW(), the DB trigger auto-tags all new submissions as is_test = true.
-export async function PATCH(req: Request, { params }: { params: { id: string } }) {
-  const parsedBusinessId = parseBusinessIdParam(params.id)
+export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const resolvedParams = await params
+  const parsedBusinessId = parseBusinessIdParam(resolvedParams.id)
   if (!parsedBusinessId.success) return parsedBusinessId.response
 
   const csrfError = requireSameOrigin(req)
@@ -28,7 +30,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
 
   const { data: account } = await supabase
     .from('user_accounts')
-    .select('role, business_id')
+    .select('role, display_name, business_id')
     .eq('id', userId)
     .single()
 
@@ -44,6 +46,35 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     .update({ trial_until: trial_until ?? null })
     .eq('id', parsedBusinessId.value)
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) {
+    await safeLogServerEvent({
+      source: 'web_api',
+      action: 'business_trial_updated',
+      result: 'failure',
+      actorUserId: userId,
+      actorRole: account?.role,
+      actorName: account?.display_name,
+      businessId: parsedBusinessId.value,
+      route: '/api/businesses/[id]/trial',
+      targetId: parsedBusinessId.value,
+      errorMessage: error.message,
+      context: { trial_until },
+    })
+    return logAndReturnInternalError('/api/businesses/[id]/trial', error)
+  }
+
+  await safeLogServerEvent({
+    source: 'web_api',
+    action: 'business_trial_updated',
+    result: 'success',
+    actorUserId: userId,
+    actorRole: account?.role,
+    actorName: account?.display_name,
+    businessId: parsedBusinessId.value,
+    route: '/api/businesses/[id]/trial',
+    targetId: parsedBusinessId.value,
+    context: { trial_until },
+  })
+
   return NextResponse.json({ ok: true })
 }

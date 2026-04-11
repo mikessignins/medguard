@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import PDFDocument from 'pdfkit'
 import { sanitize, streamToBuffer, F_REGULAR, F_BOLD, MARGIN, CONTENT_W, getAuthenticatedSuperuser } from '@/lib/pdf-helpers'
+import { logAndReturnInternalError, NO_STORE_HEADERS } from '@/lib/api-security'
 
 export const runtime = 'nodejs'
 
@@ -47,7 +48,7 @@ export async function GET(request: NextRequest) {
         p_to: to ? `${to}T23:59:59Z` : null,
       },
     )
-    if (error) return new NextResponse(error.message, { status: 400 })
+    if (error) return logAndReturnInternalError('/api/superuser/reports/deidentified-pdf', error)
 
     const rows = (metrics || []) as DeidentifiedConditionMetric[]
     const allSuppressed = rows.length > 0 && rows.every((row) => row.is_suppressed)
@@ -172,14 +173,12 @@ export async function GET(request: NextRequest) {
     return new NextResponse(new Uint8Array(buffer), {
       status: 200,
       headers: {
+        ...NO_STORE_HEADERS,
         'Content-Type': 'application/pdf',
         'Content-Disposition': `attachment; filename="${filename}"`,
       },
     })
   } catch (err) {
-    return new NextResponse(
-      `Failed to generate report PDF: ${err instanceof Error ? err.message : String(err)}`,
-      { status: 500 },
-    )
+    return logAndReturnInternalError('/api/superuser/reports/deidentified-pdf', err)
   }
 }

@@ -1,7 +1,8 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 import { parseJsonBody, parseUuidParam } from '@/lib/api-validation'
-import { requireSameOrigin } from '@/lib/api-security'
+import { logAndReturnInternalError, requireSameOrigin } from '@/lib/api-security'
+import { safeLogServerEvent } from '@/lib/app-event-log'
 import { z } from 'zod'
 
 const testFlagSchema = z.object({
@@ -13,8 +14,9 @@ const testFlagSchema = z.object({
 // Superuser only. Manually marks or unmarks a submission as a test form.
 // The DB trigger (lock_is_test_when_reviewed) will reject this if the
 // submission has already been moved past 'New' status.
-export async function PATCH(req: Request, { params }: { params: { id: string } }) {
-  const parsedId = parseUuidParam(params.id, 'Submission id')
+export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const resolvedParams = await params
+  const parsedId = parseUuidParam(resolvedParams.id, 'Submission id')
   if (!parsedId.success) return parsedId.response
 
   const csrfError = requireSameOrigin(req)
@@ -26,7 +28,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
 
   const { data: account } = await supabase
     .from('user_accounts')
-    .select('role')
+    .select('role, display_name, business_id')
     .eq('id', user.id)
     .single()
 
@@ -41,7 +43,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   // Verify the submission exists and is still in 'New' status (only state where is_test is mutable).
   const { data: submission } = await supabase
     .from('submissions')
-    .select('status')
+    .select('status, business_id')
     .eq('id', parsedId.value)
     .single()
 
@@ -58,6 +60,37 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     .update({ is_test: body.is_test })
     .eq('id', parsedId.value)
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) {
+    await safeLogServerEvent({
+      source: 'web_api',
+      action: 'submission_test_flag_updated',
+      result: 'failure',
+      actorUserId: user.id,
+      actorRole: account.role,
+      actorName: account.display_name,
+      businessId: submission.business_id,
+      moduleKey: 'emergency_declaration',
+      route: '/api/submissions/[id]/test-flag',
+      targetId: parsedId.value,
+      errorMessage: error.message,
+      context: { is_test: body.is_test },
+    })
+    return logAndReturnInternalError('/api/submissions/[id]/test-flag', error)
+  }
+
+  await safeLogServerEvent({
+    source: 'web_api',
+    action: 'submission_test_flag_updated',
+    result: 'success',
+    actorUserId: user.id,
+    actorRole: account.role,
+    actorName: account.display_name,
+    businessId: submission.business_id,
+    moduleKey: 'emergency_declaration',
+    route: '/api/submissions/[id]/test-flag',
+    targetId: parsedId.value,
+    context: { is_test: body.is_test },
+  })
+
   return NextResponse.json({ ok: true })
 }

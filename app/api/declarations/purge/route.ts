@@ -5,7 +5,7 @@ import { validatePurgeSelection } from '@/lib/purge-guards'
 import { requireActiveMedic, requireAuthenticatedUser, requireMedicScope } from '@/lib/route-access'
 import { safeLogServerEvent } from '@/lib/app-event-log'
 import { parseJsonBody } from '@/lib/api-validation'
-import { requireSameOrigin } from '@/lib/api-security'
+import { logAndReturnInternalError, requireSameOrigin } from '@/lib/api-security'
 import { emergencyPurgeRequestSchema } from '@/lib/review-request-schemas'
 import { enforceActionRateLimit } from '@/lib/rate-limit'
 
@@ -35,7 +35,7 @@ export async function POST(request: NextRequest) {
   if (authError) return new NextResponse(authError.error, { status: authError.status })
 
   const { data: account } = await authClient
-    .from('user_accounts').select('role, display_name, business_id, site_ids, is_inactive').eq('id', userId).single()
+    .from('user_accounts').select('role, display_name, business_id, site_ids, is_inactive, contract_end_date').eq('id', userId).single()
   const roleError = requireActiveMedic(account)
   if (roleError) return new NextResponse(roleError.error, { status: roleError.status })
   const medicAccount = account!
@@ -114,7 +114,6 @@ export async function POST(request: NextRequest) {
     .in('id', ids)
 
   if (error) {
-    console.error('[purge/route] update error:', error)
     await safeLogServerEvent({
       source: 'web_api',
       action: 'emergency_purge_completed',
@@ -128,12 +127,27 @@ export async function POST(request: NextRequest) {
       errorMessage: error.message,
       context: { purge_count: ids.length },
     })
-    return new NextResponse(`Purge failed: ${error.message}`, { status: 500 })
+    return logAndReturnInternalError('/api/declarations/purge', error)
   }
 
   if (auditRows.length > 0) {
     const { error: auditError } = await authClient.from('purge_audit_log').insert(auditRows)
-    if (auditError) console.error('[purge/route] audit log error after purge:', auditError)
+    if (auditError) {
+      await safeLogServerEvent({
+        source: 'web_api',
+        action: 'emergency_purge_completed',
+        result: 'failure',
+        actorUserId: userId,
+        actorRole: medicAccount.role,
+        actorName: medicAccount.display_name,
+        businessId: medicAccount.business_id,
+        moduleKey: 'emergency_declaration',
+        route: '/api/declarations/purge',
+        errorMessage: auditError.message,
+        context: { purge_count: ids.length, purge_completed_but_audit_failed: true },
+      })
+      return logAndReturnInternalError('/api/declarations/purge', auditError)
+    }
   }
 
   await safeLogServerEvent({

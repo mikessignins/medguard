@@ -1,4 +1,5 @@
-import { createClient as createServiceClient, type SupabaseClient } from '@supabase/supabase-js'
+import type { SupabaseClient } from '@supabase/supabase-js'
+import { createServiceClient } from '@/lib/supabase/service'
 
 export interface MonthlyBillableRow {
   business_id: string
@@ -7,10 +8,7 @@ export interface MonthlyBillableRow {
 }
 
 function createBillingServiceClient(): SupabaseClient {
-  return createServiceClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  )
+  return createServiceClient()
 }
 
 export async function fetchBusinessMonthlyBillables(businessId: string) {

@@ -1,4 +1,4 @@
-import { createClient as createServiceClient } from '@supabase/supabase-js'
+import { createServiceClient } from '@/lib/supabase/service'
 
 export interface WorkerDirectoryEntry {
   id: string
@@ -8,11 +8,11 @@ export interface WorkerDirectoryEntry {
 }
 
 function getServiceClient() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
-  if (!url || !key) return null
-
-  return createServiceClient(url, key)
+  try {
+    return createServiceClient()
+  } catch {
+    return null
+  }
 }
 
 export async function getWorkerDisplayNameById(workerId: string | null | undefined) {

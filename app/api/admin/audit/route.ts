@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { parseJsonBody } from '@/lib/api-validation'
-import { requireSameOrigin } from '@/lib/api-security'
+import { logAndReturnInternalError, requireSameOrigin } from '@/lib/api-security'
 import { safeLogServerEvent } from '@/lib/app-event-log'
 import { adminAuditRequestSchema } from '@/lib/review-request-schemas'
 import { enforceActionRateLimit } from '@/lib/rate-limit'
@@ -85,7 +85,6 @@ export async function POST(request: NextRequest) {
   })
 
   if (error) {
-    console.error('[admin/audit] insert error:', error)
     await safeLogServerEvent({
       source: 'web_api',
       action: 'admin_audit_recorded',
@@ -98,7 +97,7 @@ export async function POST(request: NextRequest) {
       errorMessage: error.message,
       context: { action: body.action },
     })
-    return new NextResponse(error.message, { status: 500 })
+    return logAndReturnInternalError('/api/admin/audit', error)
   }
 
   await safeLogServerEvent({

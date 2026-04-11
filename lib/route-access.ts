@@ -10,6 +10,7 @@ export interface RouteAccessFailure {
 interface RoleAccount {
   role?: string | null
   is_inactive?: boolean | null
+  contract_end_date?: string | null
   business_id?: string | null
 }
 
@@ -57,7 +58,11 @@ export function requireMedicScope(
 export function requireActiveMedic(
   account: RoleAccount | null | undefined,
 ): RouteAccessFailure | null {
-  if (!account || account.role !== 'medic' || account.is_inactive) {
+  const contractExpired = account?.contract_end_date
+    ? new Date(account.contract_end_date).getTime() < Date.now()
+    : false
+
+  if (!account || account.role !== 'medic' || account.is_inactive || contractExpired) {
     return { error: 'Forbidden', status: 403 }
   }
 

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   requireAuthenticatedUser,
+  requireActiveMedic,
   requireMedicScope,
   requireOneOfRoles,
   requireRole,
@@ -16,6 +17,36 @@ describe('requireAuthenticatedUser', () => {
 
   it('allows authenticated users through', () => {
     expect(requireAuthenticatedUser('user-1')).toBeNull()
+  })
+})
+
+describe('requireActiveMedic', () => {
+  it('allows active medics without an expired contract', () => {
+    expect(requireActiveMedic({ role: 'medic', is_inactive: false })).toBeNull()
+    expect(requireActiveMedic({
+      role: 'medic',
+      is_inactive: false,
+      contract_end_date: '2999-01-01T00:00:00.000Z',
+    })).toBeNull()
+  })
+
+  it('blocks inactive, non-medic, and expired medic accounts', () => {
+    expect(requireActiveMedic({ role: 'medic', is_inactive: true })).toEqual({
+      error: 'Forbidden',
+      status: 403,
+    })
+    expect(requireActiveMedic({ role: 'admin', is_inactive: false })).toEqual({
+      error: 'Forbidden',
+      status: 403,
+    })
+    expect(requireActiveMedic({
+      role: 'medic',
+      is_inactive: false,
+      contract_end_date: '2000-01-01T00:00:00.000Z',
+    })).toEqual({
+      error: 'Forbidden',
+      status: 403,
+    })
   })
 })
 

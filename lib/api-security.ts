@@ -62,3 +62,16 @@ export function logApiError(route: string, errorId: string, error: unknown) {
 export function internalServerError(errorId: string) {
   return NextResponse.json({ error: 'Internal Server Error', errorId }, { status: 500 })
 }
+
+export function logAndReturnInternalError(route: string, error: unknown) {
+  const errorId = createErrorId()
+  logApiError(route, errorId, error)
+  return internalServerError(errorId)
+}
+
+export const NO_STORE_HEADERS = {
+  'Cache-Control': 'no-store, private, max-age=0',
+  Pragma: 'no-cache',
+  Expires: '0',
+  'X-Content-Type-Options': 'nosniff',
+}

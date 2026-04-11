@@ -1,5 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
-import { createClient as createServiceClient } from '@supabase/supabase-js'
+import { createServiceClient } from '@/lib/supabase/service'
 import { redirect } from 'next/navigation'
 import PurgeLog from '@/components/admin/PurgeLog'
 import { clampPage, getPaginationRange, getTotalPages, parsePageParam } from '@/lib/pagination'
@@ -12,7 +12,8 @@ interface SearchParams {
   form_type?: string
 }
 
-export default async function PurgeLogPage({ searchParams }: { searchParams: SearchParams }) {
+export default async function PurgeLogPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
+  const resolvedSearchParams = await searchParams
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
@@ -26,13 +27,10 @@ export default async function PurgeLogPage({ searchParams }: { searchParams: Sea
   if (!account || !['admin', 'superuser'].includes(account.role)) redirect('/login')
 
   // Use service role to bypass RLS — scoped to this business via explicit filter
-  const service = createServiceClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  )
-  const query = (searchParams.q ?? '').trim()
-  const formType = searchParams.form_type === 'emergency_declaration' || searchParams.form_type === 'medication_declaration'
-    ? searchParams.form_type
+  const service = createServiceClient()
+  const query = (resolvedSearchParams.q ?? '').trim()
+  const formType = resolvedSearchParams.form_type === 'emergency_declaration' || resolvedSearchParams.form_type === 'medication_declaration'
+    ? resolvedSearchParams.form_type
     : 'all'
 
   let countQuery = service
@@ -44,7 +42,7 @@ export default async function PurgeLogPage({ searchParams }: { searchParams: Sea
   const { count } = await countQuery
 
   const totalPages = getTotalPages(count ?? 0, PAGE_SIZE)
-  const page = clampPage(parsePageParam(searchParams.page), totalPages)
+  const page = clampPage(parsePageParam(resolvedSearchParams.page), totalPages)
   const { from, to } = getPaginationRange(page, PAGE_SIZE)
 
   let logsQuery = service

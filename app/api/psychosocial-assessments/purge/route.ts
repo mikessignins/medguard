@@ -4,7 +4,7 @@ import { cookies } from 'next/headers'
 import { requireActiveMedic, requireAuthenticatedUser, requireMedicScope } from '@/lib/route-access'
 import { safeLogServerEvent } from '@/lib/app-event-log'
 import { parseJsonBody } from '@/lib/api-validation'
-import { requireSameOrigin } from '@/lib/api-security'
+import { logAndReturnInternalError, requireSameOrigin } from '@/lib/api-security'
 import { psychosocialPurgeRequestSchema } from '@/lib/review-request-schemas'
 import { enforceActionRateLimit } from '@/lib/rate-limit'
 
@@ -35,7 +35,7 @@ export async function POST(request: NextRequest) {
 
   const { data: account } = await authClient
     .from('user_accounts')
-    .select('role, display_name, business_id, site_ids, is_inactive')
+    .select('role, display_name, business_id, site_ids, is_inactive, contract_end_date')
     .eq('id', userId)
     .single()
   const roleError = requireActiveMedic(account)
@@ -139,7 +139,6 @@ export async function POST(request: NextRequest) {
     .in('id', ids)
 
   if (error) {
-    console.error('[psychosocial/purge] update error:', error)
     await safeLogServerEvent({
       source: 'web_api',
       action: 'psychosocial_purge_completed',
@@ -153,12 +152,27 @@ export async function POST(request: NextRequest) {
       errorMessage: error.message,
       context: { purge_count: ids.length },
     })
-    return new NextResponse(`Purge failed: ${error.message}`, { status: 500 })
+    return logAndReturnInternalError('/api/psychosocial-assessments/purge', error)
   }
 
   if (auditRows.length > 0) {
     const { error: auditError } = await authClient.from('purge_audit_log').insert(auditRows)
-    if (auditError) console.error('[psychosocial/purge] audit log error after purge:', auditError)
+    if (auditError) {
+      await safeLogServerEvent({
+        source: 'web_api',
+        action: 'psychosocial_purge_completed',
+        result: 'failure',
+        actorUserId: userId,
+        actorRole: medicAccount.role,
+        actorName: medicAccount.display_name,
+        businessId: medicAccount.business_id,
+        moduleKey: 'psychosocial_health',
+        route: '/api/psychosocial-assessments/purge',
+        errorMessage: auditError.message,
+        context: { purge_count: ids.length, purge_completed_but_audit_failed: true },
+      })
+      return logAndReturnInternalError('/api/psychosocial-assessments/purge', auditError)
+    }
   }
 
   await safeLogServerEvent({

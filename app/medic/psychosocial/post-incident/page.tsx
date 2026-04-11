@@ -6,8 +6,9 @@ import { getWorkerDirectoryEntriesByIds } from '@/lib/worker-account-names'
 export default async function MedicPostIncidentWelfarePage({
   searchParams,
 }: {
-  searchParams: { site?: string }
+  searchParams: Promise<{ site?: string }>
 }) {
+  const resolvedSearchParams = await searchParams
   const user = await getRequestUser()
   if (!user) redirect('/login')
 
@@ -65,7 +66,7 @@ export default async function MedicPostIncidentWelfarePage({
     <PostIncidentWelfareForm
       sites={sites || []}
       workers={workers}
-      initialSite={searchParams.site}
+      initialSite={resolvedSearchParams.site}
     />
   )
 }

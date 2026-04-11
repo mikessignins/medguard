@@ -6,7 +6,7 @@ import { requireActiveMedic, requireAuthenticatedUser, requireMedicScope } from 
 import { validateMedicationReviewTransition } from '@/lib/medication-review-guards'
 import { safeLogServerEvent } from '@/lib/app-event-log'
 import { parseJsonBody, parseUuidParam } from '@/lib/api-validation'
-import { requireSameOrigin } from '@/lib/api-security'
+import { logAndReturnInternalError, requireSameOrigin } from '@/lib/api-security'
 import { medicationReviewRequestSchema } from '@/lib/review-request-schemas'
 import { enforceActionRateLimit } from '@/lib/rate-limit'
 import { enqueueDeclarationProcessing } from '@/lib/declaration-processing'
@@ -15,9 +15,10 @@ const VALID_STATUSES: MedDecReviewStatus[] = ['Pending', 'In Review', 'Normal Du
 
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const parsedId = parseUuidParam(params.id, 'Medication declaration id')
+  const resolvedParams = await params
+  const parsedId = parseUuidParam(resolvedParams.id, 'Medication declaration id')
   if (!parsedId.success) return parsedId.response
 
   const csrfError = requireSameOrigin(request)
@@ -43,7 +44,7 @@ export async function PATCH(
   if (authError) return NextResponse.json({ error: authError.error }, { status: authError.status })
 
   const { data: account } = await authClient
-    .from('user_accounts').select('role, display_name, business_id, site_ids, is_inactive').eq('id', userId).single()
+    .from('user_accounts').select('role, display_name, business_id, site_ids, is_inactive, contract_end_date').eq('id', userId).single()
   const roleError = requireActiveMedic(account)
   if (roleError) return NextResponse.json({ error: roleError.error }, { status: roleError.status })
   const medicAccount = account!
@@ -121,7 +122,7 @@ export async function PATCH(
       errorMessage: error.message,
       context: { medic_review_status },
     })
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    return logAndReturnInternalError('/api/medication-declarations/[id]/review', error)
   }
 
   if (!updatedDeclaration) {

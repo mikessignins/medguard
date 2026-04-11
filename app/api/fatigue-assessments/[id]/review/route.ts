@@ -5,7 +5,7 @@ import type { FatigueMedicReviewPayload } from '@/lib/types'
 import { requireActiveMedic, requireAuthenticatedUser, requireMedicScope } from '@/lib/route-access'
 import { safeLogServerEvent } from '@/lib/app-event-log'
 import { parseJsonBody, parseUuidParam } from '@/lib/api-validation'
-import { requireSameOrigin } from '@/lib/api-security'
+import { logAndReturnInternalError, requireSameOrigin } from '@/lib/api-security'
 import { fatigueReviewRequestSchema } from '@/lib/review-request-schemas'
 import { enforceActionRateLimit } from '@/lib/rate-limit'
 import { enqueueDeclarationProcessing } from '@/lib/declaration-processing'
@@ -14,9 +14,10 @@ export const runtime = 'nodejs'
 
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string } },
+  { params }: { params: Promise<{ id: string }> },
 ) {
-  const parsedId = parseUuidParam(params.id, 'Fatigue assessment id')
+  const resolvedParams = await params
+  const parsedId = parseUuidParam(resolvedParams.id, 'Fatigue assessment id')
   if (!parsedId.success) return parsedId.response
 
   const csrfError = requireSameOrigin(request)
@@ -43,7 +44,7 @@ export async function PATCH(
 
   const { data: account } = await authClient
     .from('user_accounts')
-    .select('role, display_name, business_id, site_ids, is_inactive')
+    .select('role, display_name, business_id, site_ids, is_inactive, contract_end_date')
     .eq('id', userId)
     .single()
 
@@ -149,7 +150,7 @@ export async function PATCH(
       errorMessage: error.message,
       context: { fit_for_work_decision: body.fitForWorkDecision },
     })
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    return logAndReturnInternalError('/api/fatigue-assessments/[id]/review', error)
   }
 
   if (!updatedAssessment) {

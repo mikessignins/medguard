@@ -10,7 +10,8 @@ import {
 import { logRequestTiming, startRequestTimer } from '@/lib/request-timing'
 import { getRequestBusinessModules, getRequestClient, getRequestUser, getRequestUserAccount } from '@/lib/supabase/request-cache'
 
-export default async function MedicExportsPage({ searchParams }: { searchParams: { site?: string } }) {
+export default async function MedicExportsPage({ searchParams }: { searchParams: Promise<{ site?: string }> }) {
+  const resolvedSearchParams = await searchParams
   const startedAt = startRequestTimer()
   const user = await getRequestUser()
   if (!user) redirect('/login')
@@ -87,7 +88,7 @@ export default async function MedicExportsPage({ searchParams }: { searchParams:
       medDeclarations={medDeclarations || []}
       fatigueAssessments={fatigueAssessments || []}
       psychosocialAssessments={psychosocialAssessments || []}
-      initialSite={searchParams?.site}
+      initialSite={resolvedSearchParams?.site}
     />
   )
 }

@@ -7,6 +7,7 @@ import { markExportedIfNeeded } from '@/lib/export-stamp'
 import type { FatigueAssessment, FatigueMedicReviewPayload, FatigueModulePayload } from '@/lib/types'
 import { enforceActionRateLimit } from '@/lib/rate-limit'
 import { safeLogServerEvent } from '@/lib/app-event-log'
+import { logAndReturnInternalError, NO_STORE_HEADERS } from '@/lib/api-security'
 import {
   streamToBuffer,
   sanitize,
@@ -28,19 +29,16 @@ export const runtime = 'nodejs'
 
 export async function GET(
   _request: NextRequest,
-  { params }: { params: { id: string } },
+  { params }: { params: Promise<{ id: string }> },
 ) {
-  const parsedId = parseUuidParam(params.id, 'Fatigue assessment id')
+  const resolvedParams = await params
+  const parsedId = parseUuidParam(resolvedParams.id, 'Fatigue assessment id')
   if (!parsedId.success) return parsedId.response
 
   try {
     return await generateFatiguePdf(parsedId.value)
   } catch (err) {
-    console.error('[fatigue/pdf] unhandled error:', err)
-    return new NextResponse(
-      `Internal error: ${err instanceof Error ? err.message : String(err)}`,
-      { status: 500 },
-    )
+    return logAndReturnInternalError('/api/fatigue-assessments/[id]/pdf', err)
   }
 }
 
@@ -342,9 +340,9 @@ async function generateFatiguePdf(id: string) {
   return new NextResponse(new Uint8Array(pdfBuffer), {
     status: 200,
     headers: {
+      ...NO_STORE_HEADERS,
       'Content-Type': 'application/pdf',
       'Content-Disposition': `attachment; filename="${filename}"`,
-      'Cache-Control': 'no-store',
     },
   })
 }

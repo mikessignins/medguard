@@ -1,8 +1,10 @@
 import { createClient } from '@/lib/supabase/server'
-import { createClient as createServiceClient } from '@supabase/supabase-js'
+import { createServiceClient } from '@/lib/supabase/service'
 import { NextResponse } from 'next/server'
 import { parseJsonBody } from '@/lib/api-validation'
-import { requireSameOrigin } from '@/lib/api-security'
+import { logAndReturnInternalError, requireSameOrigin } from '@/lib/api-security'
+import { safeLogServerEvent } from '@/lib/app-event-log'
+import { enforceActionRateLimit } from '@/lib/rate-limit'
 import { requireAuthenticatedUser, requireRole } from '@/lib/route-access'
 import { z } from 'zod'
 
@@ -11,7 +13,12 @@ export const runtime = 'nodejs'
 const contractorMedicSchema = z.object({
   display_name: z.string().trim().min(1, 'Full name is required').max(120, 'Full name is too long'),
   email: z.string().trim().email('A valid email address is required'),
-  password: z.string().min(8, 'Temporary password must be at least 8 characters'),
+  password: z.string()
+    .min(12, 'Temporary password must be at least 12 characters')
+    .regex(/[A-Z]/, 'Temporary password must include an uppercase letter')
+    .regex(/[a-z]/, 'Temporary password must include a lowercase letter')
+    .regex(/[0-9]/, 'Temporary password must include a number')
+    .regex(/[^A-Za-z0-9]/, 'Temporary password must include a symbol'),
   site_ids: z.array(z.string().trim().min(1)).default([]),
   contract_end_date: z.union([
     z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Contract end date must be in YYYY-MM-DD format'),
@@ -33,12 +40,26 @@ export async function POST(req: Request) {
 
   const { data: account } = await supabase
     .from('user_accounts')
-    .select('role, business_id')
+    .select('role, display_name, business_id')
     .eq('id', userId)
     .single()
 
   const roleError = requireRole(account, 'admin')
   if (roleError) return NextResponse.json({ error: roleError.error }, { status: roleError.status })
+
+  const rateLimited = await enforceActionRateLimit({
+    authClient: supabase,
+    action: 'admin_contractor_medic_created',
+    actorUserId: userId!,
+    actorRole: account!.role,
+    actorName: account!.display_name,
+    businessId: account!.business_id,
+    route: '/api/admin/contractor-medics',
+    limit: 10,
+    windowMs: 10 * 60_000,
+    errorMessage: 'Too many contractor medic accounts were requested. Please wait and try again.',
+  })
+  if (rateLimited) return rateLimited
 
   const parsed = await parseJsonBody(req, contractorMedicSchema)
   if (!parsed.success) return parsed.response
@@ -61,10 +82,7 @@ export async function POST(req: Request) {
     }
   }
 
-  const service = createServiceClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  )
+  const service = createServiceClient()
 
   const { data: createdUser, error: createUserError } = await service.auth.admin.createUser({
     email: body.email,
@@ -74,12 +92,25 @@ export async function POST(req: Request) {
       display_name: body.display_name,
       role: 'medic',
       business_id: account!.business_id,
+      temporary_password_required: true,
     },
   })
 
   if (createUserError || !createdUser.user) {
+    await safeLogServerEvent({
+      source: 'web_api',
+      action: 'admin_contractor_medic_created',
+      result: 'failure',
+      actorUserId: userId,
+      actorRole: account!.role,
+      actorName: account!.display_name,
+      businessId: account!.business_id,
+      route: '/api/admin/contractor-medics',
+      errorMessage: createUserError?.message ?? 'Missing created user',
+      context: { target_email: body.email, site_count: normalizedSiteIds.length },
+    })
     return NextResponse.json(
-      { error: createUserError?.message ?? 'Failed to create medic sign-in account.' },
+      { error: 'Failed to create medic sign-in account.' },
       { status: 400 },
     )
   }
@@ -94,10 +125,19 @@ export async function POST(req: Request) {
 
   if (userIndexError) {
     await service.auth.admin.deleteUser(medicUserId).catch(() => undefined)
-    return NextResponse.json(
-      { error: userIndexError.message || 'Failed to create business mapping for medic account.' },
-      { status: 500 },
-    )
+    await safeLogServerEvent({
+      source: 'web_api',
+      action: 'admin_contractor_medic_created',
+      result: 'failure',
+      actorUserId: userId,
+      actorRole: account!.role,
+      actorName: account!.display_name,
+      businessId: account!.business_id,
+      route: '/api/admin/contractor-medics',
+      targetId: medicUserId,
+      errorMessage: userIndexError.message,
+    })
+    return logAndReturnInternalError('/api/admin/contractor-medics', userIndexError)
   }
 
   const { error: accountInsertError } = await service
@@ -117,11 +157,37 @@ export async function POST(req: Request) {
     try {
       await service.from('user_index').delete().eq('user_id', medicUserId)
     } catch {}
-    return NextResponse.json(
-      { error: accountInsertError.message || 'Failed to create medic profile.' },
-      { status: 500 },
-    )
+    await safeLogServerEvent({
+      source: 'web_api',
+      action: 'admin_contractor_medic_created',
+      result: 'failure',
+      actorUserId: userId,
+      actorRole: account!.role,
+      actorName: account!.display_name,
+      businessId: account!.business_id,
+      route: '/api/admin/contractor-medics',
+      targetId: medicUserId,
+      errorMessage: accountInsertError.message,
+    })
+    return logAndReturnInternalError('/api/admin/contractor-medics', accountInsertError)
   }
+
+  await safeLogServerEvent({
+    source: 'web_api',
+    action: 'admin_contractor_medic_created',
+    result: 'success',
+    actorUserId: userId,
+    actorRole: account!.role,
+    actorName: account!.display_name,
+    businessId: account!.business_id,
+    route: '/api/admin/contractor-medics',
+    targetId: medicUserId,
+    context: {
+      target_email: body.email,
+      site_count: normalizedSiteIds.length,
+      contract_end_date: body.contract_end_date,
+    },
+  })
 
   return NextResponse.json({
     ok: true,

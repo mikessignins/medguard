@@ -1,14 +1,7 @@
-import { createClient as createServiceClient } from '@supabase/supabase-js'
-
-function createService() {
-  return createServiceClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  )
-}
+import { createServiceClient } from '@/lib/supabase/service'
 
 export async function expireMedicContracts(businessId: string) {
-  const service = createService()
+  const service = createServiceClient()
   const now = new Date().toISOString()
 
   const { error } = await service

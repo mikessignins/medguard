@@ -1,5 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
-import { createClient as createServiceClient } from '@supabase/supabase-js'
+import { createServiceClient } from '@/lib/supabase/service'
 import { redirect, notFound } from 'next/navigation'
 import Link from 'next/link'
 import { format } from 'date-fns'
@@ -21,7 +21,8 @@ interface DeidentifiedConditionMetric {
   is_suppressed: boolean
 }
 
-export default async function BusinessDetailPage({ params }: { params: { id: string } }) {
+export default async function BusinessDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const resolvedParams = await params
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
@@ -32,18 +33,15 @@ export default async function BusinessDetailPage({ params }: { params: { id: str
     .eq('id', user.id)
     .single()
 
-  const accessError = requireScopedBusinessAccess(account, params.id)
+  const accessError = requireScopedBusinessAccess(account, resolvedParams.id)
   if (accessError) redirect('/')
 
-  const service = createServiceClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  )
+  const service = createServiceClient()
 
   const { data: business } = await service
     .from('businesses')
     .select('*')
-    .eq('id', params.id)
+    .eq('id', resolvedParams.id)
     .single()
 
   if (!business) notFound()
@@ -57,22 +55,22 @@ export default async function BusinessDetailPage({ params }: { params: { id: str
     { data: businessModules },
     { data: deidentifiedMetrics, error: deidentifiedMetricsError },
   ] = await Promise.all([
-    service.from('user_accounts').select('id, display_name, email, contract_end_date').eq('business_id', params.id).eq('role', 'admin'),
-    service.from('user_accounts').select('id, display_name, email, role, site_ids, contract_end_date').eq('business_id', params.id).in('role', ['medic', 'pending_medic']),
-    service.from('sites').select('id, name, is_office, latitude, longitude').eq('business_id', params.id),
-    service.from('submissions').select('status').eq('business_id', params.id),
+    service.from('user_accounts').select('id, display_name, email, contract_end_date').eq('business_id', resolvedParams.id).eq('role', 'admin'),
+    service.from('user_accounts').select('id, display_name, email, role, site_ids, contract_end_date').eq('business_id', resolvedParams.id).in('role', ['medic', 'pending_medic']),
+    service.from('sites').select('id, name, is_office, latitude, longitude').eq('business_id', resolvedParams.id),
+    service.from('submissions').select('status').eq('business_id', resolvedParams.id),
     // Non-PHI fields only — superusers never see worker_snapshot
     service.from('submissions')
       .select('id, submitted_at, site_name, is_test')
-      .eq('business_id', params.id)
+      .eq('business_id', resolvedParams.id)
       .eq('status', 'New')
       .order('submitted_at', { ascending: false }),
     service
       .from('business_modules')
       .select('business_id,module_key,enabled,config')
-      .eq('business_id', params.id),
+      .eq('business_id', resolvedParams.id),
     service.rpc('get_business_deidentified_condition_prevalence', {
-      p_business_id: params.id,
+      p_business_id: resolvedParams.id,
     }),
   ])
 

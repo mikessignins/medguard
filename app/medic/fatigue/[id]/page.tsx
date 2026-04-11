@@ -29,9 +29,11 @@ export default async function MedicFatiguePage({
   params,
   searchParams,
 }: {
-  params: { id: string }
-  searchParams: { queue?: string; pos?: string; site?: string }
+  params: Promise<{ id: string }>
+  searchParams: Promise<{ queue?: string; pos?: string; site?: string }>
 }) {
+  const resolvedParams = await params
+  const resolvedSearchParams = await searchParams
   const user = await getRequestUser()
   if (!user) redirect('/login')
 
@@ -44,7 +46,7 @@ export default async function MedicFatiguePage({
   const { data: raw } = await supabase
     .from('module_submissions')
     .select('*')
-    .eq('id', params.id)
+    .eq('id', resolvedParams.id)
     .eq('module_key', 'fatigue_assessment')
     .single()
 
@@ -75,8 +77,8 @@ export default async function MedicFatiguePage({
     supabase.from('businesses').select('name').eq('id', raw.business_id).single(),
   ])
 
-  const queueContext = parseQueue(searchParams)
-  const backHref = `/medic/fatigue?site=${encodeURIComponent(searchParams.site || String(raw.site_id || ''))}`
+  const queueContext = parseQueue(resolvedSearchParams)
+  const backHref = `/medic/fatigue?site=${encodeURIComponent(resolvedSearchParams.site || String(raw.site_id || ''))}`
 
   return (
     <FatigueDetail

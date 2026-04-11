@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { createServiceClient } from '@/lib/supabase/service'
 import {
   createErrorId,
   getRequiredSecret,
   internalServerError,
+  logAndReturnInternalError,
   logApiError,
 } from '@/lib/api-security'
 
@@ -21,10 +22,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  )
+  const supabase = createServiceClient()
 
   // Find submissions exported more than 7 days ago that haven't been purged yet
   const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
@@ -37,9 +35,7 @@ export async function GET(request: Request) {
     .lt('exported_at', cutoff)
     .is('phi_purged_at', null)
 
-  if (subFetchError) {
-    return NextResponse.json({ error: subFetchError.message }, { status: 500 })
-  }
+  if (subFetchError) return logAndReturnInternalError('/api/cron/purge-exports', subFetchError)
 
   let subsPurged = 0
   if (subTargets && subTargets.length > 0) {
@@ -73,15 +69,11 @@ export async function GET(request: Request) {
       })
       .in('id', subTargets.map(r => r.id))
 
-    if (subUpdateError) {
-      return NextResponse.json({ error: subUpdateError.message }, { status: 500 })
-    }
+    if (subUpdateError) return logAndReturnInternalError('/api/cron/purge-exports', subUpdateError)
 
     if (subAuditRows.length > 0) {
       const { error: subAuditError } = await supabase.from('purge_audit_log').insert(subAuditRows)
-      if (subAuditError) {
-        return NextResponse.json({ error: subAuditError.message }, { status: 500 })
-      }
+      if (subAuditError) return logAndReturnInternalError('/api/cron/purge-exports', subAuditError)
     }
     subsPurged = subTargets.length
   }
@@ -93,9 +85,7 @@ export async function GET(request: Request) {
     .lt('exported_at', cutoff)
     .is('phi_purged_at', null)
 
-  if (medFetchError) {
-    return NextResponse.json({ error: medFetchError.message }, { status: 500 })
-  }
+  if (medFetchError) return logAndReturnInternalError('/api/cron/purge-exports', medFetchError)
 
   let medsPurged = 0
   if (medTargets && medTargets.length > 0) {
@@ -130,15 +120,11 @@ export async function GET(request: Request) {
       })
       .in('id', medTargets.map(r => r.id))
 
-    if (medUpdateError) {
-      return NextResponse.json({ error: medUpdateError.message }, { status: 500 })
-    }
+    if (medUpdateError) return logAndReturnInternalError('/api/cron/purge-exports', medUpdateError)
 
     if (medAuditRows.length > 0) {
       const { error: medAuditError } = await supabase.from('purge_audit_log').insert(medAuditRows)
-      if (medAuditError) {
-        return NextResponse.json({ error: medAuditError.message }, { status: 500 })
-      }
+      if (medAuditError) return logAndReturnInternalError('/api/cron/purge-exports', medAuditError)
     }
     medsPurged = medTargets.length
   }
@@ -151,9 +137,7 @@ export async function GET(request: Request) {
     .lt('exported_at', cutoff)
     .is('phi_purged_at', null)
 
-  if (fatigueFetchError) {
-    return NextResponse.json({ error: fatigueFetchError.message }, { status: 500 })
-  }
+  if (fatigueFetchError) return logAndReturnInternalError('/api/cron/purge-exports', fatigueFetchError)
 
   let fatiguePurged = 0
   if (fatigueTargets && fatigueTargets.length > 0) {
@@ -198,15 +182,11 @@ export async function GET(request: Request) {
       .eq('module_key', 'fatigue_assessment')
       .in('id', fatigueTargets.map((row) => row.id))
 
-    if (fatigueUpdateError) {
-      return NextResponse.json({ error: fatigueUpdateError.message }, { status: 500 })
-    }
+    if (fatigueUpdateError) return logAndReturnInternalError('/api/cron/purge-exports', fatigueUpdateError)
 
     if (fatigueAuditRows.length > 0) {
       const { error: fatigueAuditError } = await supabase.from('purge_audit_log').insert(fatigueAuditRows)
-      if (fatigueAuditError) {
-        return NextResponse.json({ error: fatigueAuditError.message }, { status: 500 })
-      }
+      if (fatigueAuditError) return logAndReturnInternalError('/api/cron/purge-exports', fatigueAuditError)
     }
     fatiguePurged = fatigueTargets.length
   }
@@ -219,9 +199,7 @@ export async function GET(request: Request) {
     .lt('exported_at', cutoff)
     .is('phi_purged_at', null)
 
-  if (psychosocialFetchError) {
-    return NextResponse.json({ error: psychosocialFetchError.message }, { status: 500 })
-  }
+  if (psychosocialFetchError) return logAndReturnInternalError('/api/cron/purge-exports', psychosocialFetchError)
 
   const psychosocialSupportTargets = (psychosocialTargets ?? []).filter(
     (entry) => {
@@ -274,15 +252,11 @@ export async function GET(request: Request) {
       .eq('module_key', 'psychosocial_health')
       .in('id', psychosocialSupportTargets.map((row) => row.id))
 
-    if (psychosocialUpdateError) {
-      return NextResponse.json({ error: psychosocialUpdateError.message }, { status: 500 })
-    }
+    if (psychosocialUpdateError) return logAndReturnInternalError('/api/cron/purge-exports', psychosocialUpdateError)
 
     if (psychosocialAuditRows.length > 0) {
       const { error: psychosocialAuditError } = await supabase.from('purge_audit_log').insert(psychosocialAuditRows)
-      if (psychosocialAuditError) {
-        return NextResponse.json({ error: psychosocialAuditError.message }, { status: 500 })
-      }
+      if (psychosocialAuditError) return logAndReturnInternalError('/api/cron/purge-exports', psychosocialAuditError)
     }
     psychosocialPurged = psychosocialSupportTargets.length
   }
