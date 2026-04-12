@@ -2,6 +2,10 @@ const DEFAULT_MESSAGE = 'Something went wrong. Please try again.'
 
 const ERROR_MESSAGE_MAP: Array<[RegExp, string]> = [
   [
+    /RESEND_API_KEY or RESEND_FROM_EMAIL is missing/i,
+    'Email delivery is not configured yet. Add the Resend email settings in Vercel and try again.',
+  ],
+  [
     /infinite recursion detected in policy for relation "user_accounts"/i,
     'We could not save your account details because account permissions need attention. Please contact support.',
   ],

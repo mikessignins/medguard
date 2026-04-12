@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { getUserFacingErrorMessage } from '@/lib/user-facing-errors'
 
 const CSRF_ERROR_MESSAGE = 'Cross-site request blocked'
 
@@ -81,10 +82,10 @@ export function logApiError(route: string, errorId: string, error: unknown) {
   console.error(`[${route}] [${errorId}]`, sanitizeError(error))
 }
 
-export function internalServerError(errorId: string) {
+export function internalServerError(errorId: string, message?: string) {
   return NextResponse.json(
     {
-      error: 'We could not complete that request. Please try again. If it keeps happening, contact support with the error ID.',
+      error: message || 'We could not complete that request. Please try again. If it keeps happening, contact support with the error ID.',
       errorId,
     },
     { status: 500 },
@@ -94,7 +95,7 @@ export function internalServerError(errorId: string) {
 export function logAndReturnInternalError(route: string, error: unknown) {
   const errorId = createErrorId()
   logApiError(route, errorId, error)
-  return internalServerError(errorId)
+  return internalServerError(errorId, getUserFacingErrorMessage(error))
 }
 
 export const NO_STORE_HEADERS = {

@@ -11,6 +11,14 @@ describe('getUserFacingErrorMessage', () => {
     ).toBe('We could not save your account details because account permissions need attention. Please contact support.')
   })
 
+  it('shows a clear message when email delivery is not configured', () => {
+    expect(
+      getUserFacingErrorMessage({
+        message: 'RESEND_API_KEY or RESEND_FROM_EMAIL is missing.',
+      }),
+    ).toBe('Email delivery is not configured yet. Add the Resend email settings in Vercel and try again.')
+  })
+
   it('uses a caller-specific fallback for unknown errors', () => {
     expect(getUserFacingErrorMessage(new Error('database exploded'), 'Please try again later.')).toBe(
       'Please try again later.',
