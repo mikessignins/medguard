@@ -9,6 +9,9 @@ import {
 } from '@/lib/api-security'
 
 const SYSTEM_PURGE_USER_ID = '00000000-0000-0000-0000-000000000000'
+const FINAL_SUBMISSION_STATUSES = ['Approved', 'Requires Follow-up']
+const FINAL_MEDICATION_STATUSES = ['Normal Duties', 'Restricted Duties', 'Unfit for Work']
+const MODULE_FINAL_STATUS = 'resolved'
 
 async function recordPurgeCronHealth(
   supabase: ReturnType<typeof createServiceClient>,
@@ -31,6 +34,14 @@ async function recordFailureAndReturn(
     error: error && typeof error === 'object' && 'message' in error ? String(error.message) : 'Unexpected cron error',
   })
   return logAndReturnInternalError('/api/cron/purge-exports', error)
+}
+
+function isBeforeCutoff(value: string | null | undefined, cutoff: string) {
+  return !!value && value < cutoff
+}
+
+function uniqueById<T extends { id: string }>(rows: T[]) {
+  return Array.from(new Map(rows.map((row) => [row.id, row])).values())
 }
 
 // Vercel invokes this daily with Authorization: Bearer <CRON_SECRET>
@@ -57,7 +68,7 @@ export async function GET(request: Request) {
   // Several PHI-bearing columns are NOT NULL, so nulling them will break cron.
 
   // ── Submissions ─────────────────────────────────────────────────────────────
-  const { data: subTargets, error: subFetchError } = await supabase
+  const { data: liveSubTargets, error: subFetchError } = await supabase
     .from('submissions')
     .select('id, business_id, site_id, site_name, worker_snapshot, exported_at, exported_by_name, decision')
     .lt('exported_at', cutoff)
@@ -65,8 +76,26 @@ export async function GET(request: Request) {
 
   if (subFetchError) return recordFailureAndReturn(supabase, 'fetch_emergency_declarations', subFetchError)
 
+  const { data: testSubCandidates, error: testSubFetchError } = await supabase
+    .from('submissions')
+    .select('id, business_id, site_id, site_name, worker_snapshot, status, submitted_at, exported_at, exported_by_name, decision, is_test')
+    .eq('is_test', true)
+    .is('exported_at', null)
+    .is('phi_purged_at', null)
+    .in('status', FINAL_SUBMISSION_STATUSES)
+
+  if (testSubFetchError) return recordFailureAndReturn(supabase, 'fetch_test_emergency_declarations', testSubFetchError)
+
+  const subTargets = uniqueById([
+    ...(liveSubTargets ?? []),
+    ...(testSubCandidates ?? []).filter((sub) => {
+      const decision = sub.decision as Record<string, unknown> | null
+      return isBeforeCutoff((decision?.decided_at as string | null | undefined) ?? sub.submitted_at, cutoff)
+    }),
+  ])
+
   let subsPurged = 0
-  if (subTargets && subTargets.length > 0) {
+  if (subTargets.length > 0) {
     const subAuditRows = subTargets.map(sub => {
       const ws       = sub.worker_snapshot as Record<string, unknown> | null
       const decision = sub.decision as Record<string, unknown> | null
@@ -107,7 +136,7 @@ export async function GET(request: Request) {
   }
 
   // ── Medication Declarations ──────────────────────────────────────────────────
-  const { data: medTargets, error: medFetchError } = await supabase
+  const { data: liveMedTargets, error: medFetchError } = await supabase
     .from('medication_declarations')
     .select('id, business_id, site_id, site_name, worker_name, worker_dob, exported_at, exported_by_name, medic_name, medic_reviewed_at')
     .lt('exported_at', cutoff)
@@ -115,8 +144,23 @@ export async function GET(request: Request) {
 
   if (medFetchError) return recordFailureAndReturn(supabase, 'fetch_medication_declarations', medFetchError)
 
+  const { data: testMedCandidates, error: testMedFetchError } = await supabase
+    .from('medication_declarations')
+    .select('id, business_id, site_id, site_name, worker_name, worker_dob, medic_review_status, submitted_at, exported_at, exported_by_name, medic_name, medic_reviewed_at, is_test')
+    .eq('is_test', true)
+    .is('exported_at', null)
+    .is('phi_purged_at', null)
+    .in('medic_review_status', FINAL_MEDICATION_STATUSES)
+
+  if (testMedFetchError) return recordFailureAndReturn(supabase, 'fetch_test_medication_declarations', testMedFetchError)
+
+  const medTargets = uniqueById([
+    ...(liveMedTargets ?? []),
+    ...(testMedCandidates ?? []).filter((declaration) => isBeforeCutoff(declaration.medic_reviewed_at ?? declaration.submitted_at, cutoff)),
+  ])
+
   let medsPurged = 0
-  if (medTargets && medTargets.length > 0) {
+  if (medTargets.length > 0) {
     const medAuditRows = medTargets.map(m => ({
       submission_id:     m.id,
       worker_name:       m.worker_name ?? null,
@@ -158,7 +202,7 @@ export async function GET(request: Request) {
   }
 
   // ── Fatigue Module Submissions ───────────────────────────────────────────────
-  const { data: fatigueTargets, error: fatigueFetchError } = await supabase
+  const { data: liveFatigueTargets, error: fatigueFetchError } = await supabase
     .from('module_submissions')
     .select('id, business_id, site_id, payload, review_payload, exported_at, exported_by_name, module_key, reviewed_at')
     .eq('module_key', 'fatigue_assessment')
@@ -167,8 +211,24 @@ export async function GET(request: Request) {
 
   if (fatigueFetchError) return recordFailureAndReturn(supabase, 'fetch_fatigue_assessments', fatigueFetchError)
 
+  const { data: testFatigueCandidates, error: testFatigueFetchError } = await supabase
+    .from('module_submissions')
+    .select('id, business_id, site_id, payload, review_payload, status, submitted_at, exported_at, exported_by_name, module_key, reviewed_at, is_test')
+    .eq('module_key', 'fatigue_assessment')
+    .eq('is_test', true)
+    .eq('status', MODULE_FINAL_STATUS)
+    .is('exported_at', null)
+    .is('phi_purged_at', null)
+
+  if (testFatigueFetchError) return recordFailureAndReturn(supabase, 'fetch_test_fatigue_assessments', testFatigueFetchError)
+
+  const fatigueTargets = uniqueById([
+    ...(liveFatigueTargets ?? []),
+    ...(testFatigueCandidates ?? []).filter((entry) => isBeforeCutoff(entry.reviewed_at ?? entry.submitted_at, cutoff)),
+  ])
+
   let fatiguePurged = 0
-  if (fatigueTargets && fatigueTargets.length > 0) {
+  if (fatigueTargets.length > 0) {
     const fatigueAuditRows = fatigueTargets.map((entry) => {
       const payload =
         typeof entry.payload === 'object' && entry.payload
@@ -219,7 +279,7 @@ export async function GET(request: Request) {
   }
 
   // ── Psychosocial Support Check-Ins ──────────────────────────────────────────
-  const { data: psychosocialTargets, error: psychosocialFetchError } = await supabase
+  const { data: livePsychosocialTargets, error: psychosocialFetchError } = await supabase
     .from('module_submissions')
     .select('id, business_id, site_id, payload, review_payload, exported_at, exported_by_name, module_key, reviewed_at')
     .eq('module_key', 'psychosocial_health')
@@ -228,7 +288,23 @@ export async function GET(request: Request) {
 
   if (psychosocialFetchError) return recordFailureAndReturn(supabase, 'fetch_psychosocial_support_checkins', psychosocialFetchError)
 
-  const psychosocialSupportTargets = (psychosocialTargets ?? []).filter(
+  const { data: testPsychosocialCandidates, error: testPsychosocialFetchError } = await supabase
+    .from('module_submissions')
+    .select('id, business_id, site_id, payload, review_payload, status, submitted_at, exported_at, exported_by_name, module_key, reviewed_at, is_test')
+    .eq('module_key', 'psychosocial_health')
+    .eq('is_test', true)
+    .eq('status', MODULE_FINAL_STATUS)
+    .is('exported_at', null)
+    .is('phi_purged_at', null)
+
+  if (testPsychosocialFetchError) return recordFailureAndReturn(supabase, 'fetch_test_psychosocial_support_checkins', testPsychosocialFetchError)
+
+  const psychosocialTargets = uniqueById([
+    ...(livePsychosocialTargets ?? []),
+    ...(testPsychosocialCandidates ?? []).filter((entry) => isBeforeCutoff(entry.reviewed_at ?? entry.submitted_at, cutoff)),
+  ])
+
+  const psychosocialSupportTargets = psychosocialTargets.filter(
     (entry) => {
       const workflowKind = entry.payload?.workerPulse?.workflowKind
         ?? (entry.payload?.postIncidentWelfare ? 'post_incident_psychological_welfare' : null)

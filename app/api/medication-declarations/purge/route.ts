@@ -7,6 +7,7 @@ import { parseJsonBody } from '@/lib/api-validation'
 import { logAndReturnInternalError, requireSameOrigin } from '@/lib/api-security'
 import { medicationPurgeRequestSchema } from '@/lib/review-request-schemas'
 import { enforceActionRateLimit } from '@/lib/rate-limit'
+import { validatePurgeSelection } from '@/lib/purge-guards'
 
 export const runtime = 'nodejs'
 
@@ -62,27 +63,30 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ purged: 0 })
   }
 
-  // Fetch med decs before wiping — guard: all must be exported first
+  // Fetch med decs before wiping. Production records must be exported; reviewed test records can be purged without export.
   const { data: medDecs } = await authClient
     .from('medication_declarations')
-    .select('id, business_id, site_id, site_name, worker_name, worker_dob, exported_at, exported_by_name, medic_name, medic_reviewed_at')
+    .select('id, business_id, site_id, site_name, worker_name, worker_dob, medic_review_status, exported_at, exported_by_name, medic_name, medic_reviewed_at, is_test')
     .in('id', ids)
 
-  if ((medDecs ?? []).length !== ids.length) {
-    return NextResponse.json({ error: 'One or more declarations were not found.' }, { status: 404 })
-  }
+  const purgeError = validatePurgeSelection(
+    ids,
+    (medDecs ?? []).map((declaration) => ({
+      id: declaration.id,
+      exported_at: declaration.exported_at,
+      is_test: declaration.is_test,
+      status: declaration.medic_review_status,
+    })),
+    {
+      testFinalStatuses: ['Normal Duties', 'Restricted Duties', 'Unfit for Work'],
+      notFoundError: 'One or more declarations were not found.',
+    },
+  )
+  if (purgeError) return NextResponse.json({ error: purgeError.error }, { status: purgeError.status })
 
   const outOfScope = (medDecs ?? []).some((declaration) => requireMedicScope(medicAccount, declaration))
   if (outOfScope) {
     return new NextResponse('Forbidden', { status: 403 })
-  }
-
-  const unexported = (medDecs ?? []).filter(m => !m.exported_at)
-  if (unexported.length > 0) {
-    return NextResponse.json(
-      { error: 'All declarations must be exported to PDF before purging.' },
-      { status: 400 }
-    )
   }
 
   // Build audit log entries (site_name already snapshotted on row since migration 002)

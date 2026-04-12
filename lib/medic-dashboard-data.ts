@@ -40,11 +40,11 @@ export async function getMedicDashboardData(moduleView: MedicDashboardModuleView
   const siteIds: string[] = account.site_ids || []
   const siteSelect = 'id,name,is_office'
   const submissionSelect =
-    'id,business_id,site_id,worker_id,worker_snapshot,role,visit_date,shift_type,status,submitted_at,exported_at,phi_purged_at'
+    'id,business_id,site_id,worker_id,worker_snapshot,role,visit_date,shift_type,status,submitted_at,exported_at,phi_purged_at,is_test'
   const medDecSelect =
-    'id,business_id,site_id,worker_name,submitted_at,medic_review_status,exported_at,phi_purged_at,medications,has_recent_injury_or_illness,has_side_effects'
+    'id,business_id,site_id,worker_name,submitted_at,medic_review_status,exported_at,phi_purged_at,medications,has_recent_injury_or_illness,has_side_effects,is_test'
   const fatigueSelect =
-    'id,business_id,site_id,worker_id,module_key,module_version,status,payload,review_payload,submitted_at,reviewed_at,reviewed_by,exported_at,phi_purged_at'
+    'id,business_id,site_id,worker_id,module_key,module_version,status,payload,review_payload,submitted_at,reviewed_at,reviewed_by,exported_at,phi_purged_at,is_test'
 
   const [{ data: sites }, submissionsResult] = await Promise.all([
     supabase.from('sites').select(siteSelect).in('id', siteIds.length ? siteIds : ['__none__']),

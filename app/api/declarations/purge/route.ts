@@ -64,13 +64,15 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ purged: 0 })
   }
 
-  // 3. Fetch submission data before wiping — guard: all must be exported first
+  // 3. Fetch submission data before wiping. Production records must be exported; reviewed test records can be purged without export.
   const { data: submissions } = await authClient
     .from('submissions')
-    .select('id, business_id, site_id, site_name, worker_snapshot, exported_at, exported_by_name, decision')
+    .select('id, business_id, site_id, site_name, worker_snapshot, status, exported_at, exported_by_name, decision, is_test')
     .in('id', ids)
 
-  const purgeError = validatePurgeSelection(ids, submissions ?? [])
+  const purgeError = validatePurgeSelection(ids, submissions ?? [], {
+    testFinalStatuses: ['Approved', 'Requires Follow-up'],
+  })
   if (purgeError) {
     return NextResponse.json({ error: purgeError.error }, { status: purgeError.status })
   }

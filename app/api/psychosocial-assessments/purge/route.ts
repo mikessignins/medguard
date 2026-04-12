@@ -7,6 +7,7 @@ import { parseJsonBody } from '@/lib/api-validation'
 import { logAndReturnInternalError, requireSameOrigin } from '@/lib/api-security'
 import { psychosocialPurgeRequestSchema } from '@/lib/review-request-schemas'
 import { enforceActionRateLimit } from '@/lib/rate-limit'
+import { validatePurgeSelection } from '@/lib/purge-guards'
 
 export const runtime = 'nodejs'
 
@@ -65,13 +66,16 @@ export async function POST(request: NextRequest) {
 
   const { data: assessments } = await authClient
     .from('module_submissions')
-    .select('id, business_id, site_id, payload, review_payload, exported_at, exported_by_name, reviewed_at, module_key')
+    .select('id, business_id, site_id, payload, review_payload, status, exported_at, exported_by_name, reviewed_at, module_key, is_test')
     .eq('module_key', 'psychosocial_health')
     .in('id', ids)
 
-  if ((assessments ?? []).length !== ids.length) {
-    return NextResponse.json({ error: 'One or more psychosocial support check-ins were not found.' }, { status: 404 })
-  }
+  const purgeError = validatePurgeSelection(ids, assessments ?? [], {
+    testFinalStatuses: ['resolved'],
+    notFoundError: 'One or more psychosocial support check-ins were not found.',
+    blockedError: 'All production psychosocial support cases must be exported to PDF before purging. Reviewed test cases can be purged without export.',
+  })
+  if (purgeError) return NextResponse.json({ error: purgeError.error }, { status: purgeError.status })
 
   const invalidWorkflow = (assessments ?? []).some((entry) => {
     const workflowKind = entry.payload?.workerPulse?.workflowKind
@@ -85,14 +89,6 @@ export async function POST(request: NextRequest) {
   const outOfScope = (assessments ?? []).some((entry) => requireMedicScope(medicAccount, entry))
   if (outOfScope) {
     return new NextResponse('Forbidden', { status: 403 })
-  }
-
-  const unexported = (assessments ?? []).filter((entry) => !entry.exported_at)
-  if (unexported.length > 0) {
-    return NextResponse.json(
-      { error: 'All psychosocial support check-ins must be exported to PDF before purging.' },
-      { status: 400 },
-    )
   }
 
   const purgedAt = new Date().toISOString()

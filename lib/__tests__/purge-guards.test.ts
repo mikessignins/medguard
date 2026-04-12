@@ -20,7 +20,29 @@ describe('validatePurgeSelection', () => {
         { id: 'sub-2', exported_at: null },
       ],
     )).toEqual({
-      error: 'All declarations must be exported to PDF before purging.',
+      error: 'All production records must be exported to PDF before purging. Reviewed test records can be purged without export.',
+      status: 400,
+    })
+  })
+
+  it('allows reviewed test records to be purged before export', () => {
+    expect(validatePurgeSelection(
+      ['sub-1', 'sub-2'],
+      [
+        { id: 'sub-1', exported_at: '2026-04-05T10:00:00.000Z' },
+        { id: 'sub-2', exported_at: null, is_test: true, status: 'Approved' },
+      ],
+      { testFinalStatuses: ['Approved', 'Requires Follow-up'] },
+    )).toBeNull()
+  })
+
+  it('rejects test records that are not reviewed yet', () => {
+    expect(validatePurgeSelection(
+      ['sub-1'],
+      [{ id: 'sub-1', exported_at: null, is_test: true, status: 'In Review' }],
+      { testFinalStatuses: ['Approved', 'Requires Follow-up'] },
+    )).toEqual({
+      error: 'All production records must be exported to PDF before purging. Reviewed test records can be purged without export.',
       status: 400,
     })
   })

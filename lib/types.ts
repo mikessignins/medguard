@@ -291,6 +291,7 @@ export interface FatigueAssessment {
   exported_at?: string | null
   exported_by_name?: string | null
   phi_purged_at?: string | null
+  is_test?: boolean | null
 }
 
 export type PsychosocialWorkflowKind =
