@@ -506,10 +506,53 @@ export default function SubmissionDetail({ submission, siteName, businessName, c
                       <span className="font-bold">ANAPHYLACTIC RISK</span>
                     </div>
                   )}
+                  {ws.anaphylactic && ws.adrenalineDeviceType && (
+                    <p className="text-xs text-red-300 mb-2">
+                      Device: {ws.adrenalineDeviceType}
+                    </p>
+                  )}
                   <p className="text-sm text-slate-300 bg-slate-900/40 border border-slate-700/30 px-3 py-2 rounded-lg">
                     {ws.allergies || 'None reported'}
                   </p>
+                  {ws.allergyReactionNotes && (
+                    <p className="text-sm text-slate-400 mt-2 bg-slate-900/40 border border-slate-700/30 px-3 py-2 rounded-lg">
+                      Reaction notes: {ws.allergyReactionNotes}
+                    </p>
+                  )}
                 </div>
+
+                {/* Clinical notes */}
+                {(ws.homeGpName || ws.additionalMedicalNotes || ws.recentIllnessInjuryHospitalisation30d) && (
+                  <div className="mb-5 space-y-3">
+                    <p className="text-sm font-medium text-slate-300">Clinical Notes</p>
+                    {ws.homeGpName && (
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">Home GP</p>
+                        <p className="text-sm text-slate-300 bg-slate-900/40 border border-slate-700/30 px-3 py-2 rounded-lg">
+                          {ws.homeGpName}
+                        </p>
+                      </div>
+                    )}
+
+                    {ws.additionalMedicalNotes && (
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">Additional Medical Notes</p>
+                        <div className="text-sm text-slate-300 bg-slate-900/40 border border-slate-700/30 px-3 py-2 rounded-lg whitespace-pre-wrap">
+                          {ws.additionalMedicalNotes}
+                        </div>
+                      </div>
+                    )}
+
+                    {ws.recentIllnessInjuryHospitalisation30d && (
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">Recent Illness / Injury / Hospitalisation</p>
+                        <div className="text-sm text-slate-300 bg-slate-900/40 border border-slate-700/30 px-3 py-2 rounded-lg whitespace-pre-wrap">
+                          {ws.recentIllnessInjuryHospitalisation30d}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {/* Medications */}
                 <div className="mb-5">

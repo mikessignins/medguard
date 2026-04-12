@@ -350,6 +350,11 @@ export default function MedicDashboard({
         .filter((item) => item.site_id === activeTab && item.status === 'resolved' && !item.phi_purged_at)
         .slice(0, 10)
     : []
+  const workerOnlyFatigueCount = fatigueEnabled
+    ? fatigueAssessments.filter(
+        (item) => item.site_id === activeTab && item.status === 'worker_only_complete' && !item.phi_purged_at,
+      ).length
+    : 0
   const fatigueReadyToExport = fatigueEnabled
     ? fatigueAssessments.filter(
         (item) => item.site_id === activeTab && item.status === 'resolved' && !item.exported_at && !item.phi_purged_at,
@@ -555,6 +560,7 @@ export default function MedicDashboard({
     { label: 'Awaiting Review', value: fatigueAwaitingCount, helper: 'Worker checks waiting for first medic review', tone: 'accent' as const },
     { label: 'In Review', value: fatigueInReviewCount, helper: 'Already opened by a medic', tone: 'warn' as const },
     { label: 'High Risk', value: fatigueHighRiskCount, helper: 'Immediate attention candidates', tone: 'danger' as const },
+    { label: 'Worker Only', value: workerOnlyFatigueCount, helper: 'Low-risk checks that do not enter the medic queue', tone: 'muted' as const },
     { label: 'Ready for Export', value: fatigueReadyToExport, helper: 'Reviewed outcomes waiting in exports', tone: 'success' as const, onClick: () => router.push(`/medic/exports?site=${activeTab}`) },
   ]
 
@@ -578,11 +584,23 @@ export default function MedicDashboard({
         </div>
       )}
 
+      {workerOnlyFatigueCount > 0 && (
+        <div className="medic-inline-alert">
+          <span>
+            <strong>{workerOnlyFatigueCount}</strong> low-risk fatigue check{workerOnlyFatigueCount === 1 ? '' : 's'} were submitted as worker-only and do not require medic review, so they are not listed in the live queue.
+          </span>
+        </div>
+      )}
+
       <section className="space-y-3">
         <h2 className="text-sm font-semibold uppercase tracking-[0.22em] text-[var(--medic-muted)]">Live queue</h2>
         {activeFatigueAssessments.length === 0 ? (
           <div className="medic-empty-state py-12">
-            <p className="text-sm text-[var(--medic-muted)]">No active fatigue assessments for this site.</p>
+            <p className="text-sm text-[var(--medic-muted)]">
+              {workerOnlyFatigueCount > 0
+                ? 'No fatigue assessments currently require medic review for this site. Low-risk worker-only checks are counted above.'
+                : 'No active fatigue assessments for this site.'}
+            </p>
           </div>
         ) : (
           <div className="medic-list-shell">

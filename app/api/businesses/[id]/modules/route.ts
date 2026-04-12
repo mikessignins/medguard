@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
+import { revalidateTag } from 'next/cache'
 import { isKnownModuleKey, MODULE_REGISTRY, type ModuleKey } from '@/lib/modules'
 import { requireAuthenticatedUser, requireScopedBusinessAccess } from '@/lib/route-access'
 import { parseBusinessIdParam, parseJsonBody } from '@/lib/api-validation'
@@ -107,6 +108,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     targetId: parsedBusinessId.value,
     context: { enabled: nextEnabled },
   })
+
+  revalidateTag(`business-modules:${parsedBusinessId.value}`)
 
   return NextResponse.json({ ok: true })
 }

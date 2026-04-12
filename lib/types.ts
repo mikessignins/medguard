@@ -111,25 +111,63 @@ export interface WorkerSnapshot {
   dateOfBirth: string
   emailAddress: string
   mobileNumber: string
+  religionCulturalConsiderations?: string | null
+  interpreterRequired?: boolean
+  interpreterLanguage?: string | null
   company: string
   department: string
   supervisor?: string
   siteLocation?: string
   employeeId: string
   isContractor: boolean
+  contractorCompanyName?: string | null
+  contractorSupervisorName?: string | null
+  contractorSupervisorPhone?: string | null
+  contractorSupervisorEmail?: string | null
+  jobRoleTitle?: string | null
+  workgroup?: string | null
+  rosterPattern?: string | null
+  permanentRoomNumber?: string | null
   heightCm: number | null
   weightKg: number | null
   emergencyContactName: string
   emergencyContactMobile: string
   emergencyContactRelationship?: string
   emergencyContactOther?: string
+  emergencyContactEmail?: string | null
+  secondaryEmergencyContactName?: string | null
+  secondaryEmergencyContactRelationship?: string | null
+  secondaryEmergencyContactPhone?: string | null
+  secondaryEmergencyContactEmail?: string | null
+  noEmergencyContactAcknowledged?: boolean
   allergies: string
+  allergyReactionNotes?: string | null
   anaphylactic: boolean
+  adrenalineDeviceType?: string | null
+  homeGpName?: string | null
+  homeGpClinic?: string | null
+  homeGpPhone?: string | null
+  normalRestingHr?: number | null
+  normalBpSystolic?: number | null
+  normalBpDiastolic?: number | null
+  normalBgl?: string | null
+  hasHearingLoss?: boolean
+  hearingAidUsed?: boolean
+  hearingAffectedEar?: string | null
+  hearingLossNotes?: string | null
+  lastFfwMedicalDate?: string | null
+  recentIllnessInjuryHospitalisation30d?: string | null
+  additionalMedicalNotes?: string | null
   currentMedications: Medication[]
   hasPrescriptions: boolean
   tetanus: { immunised: boolean; lastDoseDate: string | null }
   hepatitisB: { immunised: boolean; lastDoseDate: string | null }
+  qFever?: { immunised: boolean; lastDoseDate: string | null }
   conditionChecklist: Record<string, { id?: string; label: string; hint?: string; answer: boolean; detail: string }>
+  bloodBorneVirusTypes?: string[]
+  analyticsConsentDeidentified?: boolean
+  emergencyDataSharingConsent?: boolean
+  profileReviewDueDate?: string | null
 }
 
 export interface ScriptUpload {
