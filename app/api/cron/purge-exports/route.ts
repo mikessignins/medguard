@@ -53,6 +53,9 @@ export async function GET(request: Request) {
   const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
   const purgedAt = new Date().toISOString()
 
+  // When new PHI columns are added, wipe them with schema-safe empty values.
+  // Several PHI-bearing columns are NOT NULL, so nulling them will break cron.
+
   // ── Submissions ─────────────────────────────────────────────────────────────
   const { data: subTargets, error: subFetchError } = await supabase
     .from('submissions')

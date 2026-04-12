@@ -69,6 +69,7 @@ Business and site access are enforced through Supabase and in route/page guards.
 ## Data Governance Notes
 
 - Reviewed/exported PHI is purged from operational tables after the retention window and copied into immutable audit logs.
+- Purge code must wipe PHI without violating schema constraints. If a migration adds a new `NOT NULL` PHI-bearing column, update both manual purge routes and `app/api/cron/purge-exports/route.ts` to replace it with a schema-safe empty value rather than `null`.
 - Emergency declaration comments are now stored in the `submission_comments` table as append-only rows rather than a mutable JSON array on `submissions`.
 - Superuser reporting is intended to be de-identified/aggregate-only at the database boundary, not just hidden in the UI.
 
@@ -93,3 +94,4 @@ High-value regression areas:
 - Apply database migrations before deploying code that depends on them.
 - `SUPABASE_SERVICE_ROLE_KEY` must stay server-side only and should be rotated immediately if it is ever exposed.
 - The cron purge route is protected by `Authorization: Bearer <CRON_SECRET>`, and that secret should be at least 32 characters long.
+- The auto-purge cron runs daily at `02:00 UTC` (`10:00 Australia/Perth`) and purges records whose `exported_at` timestamp is older than seven days.
