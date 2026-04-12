@@ -124,7 +124,6 @@ export async function POST(request: NextRequest) {
     .update({
       phi_purged_at: purgedAt,
       payload: {},
-      review_payload: {},
     })
     .eq('module_key', 'fatigue_assessment')
     .in('id', ids)

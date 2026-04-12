@@ -202,7 +202,6 @@ export async function GET(request: Request) {
       .update({
         phi_purged_at: purgedAt,
         payload: {},
-        review_payload: {},
       })
       .eq('module_key', 'fatigue_assessment')
       .in('id', fatigueTargets.map((row) => row.id))
@@ -272,7 +271,6 @@ export async function GET(request: Request) {
       .update({
         phi_purged_at: purgedAt,
         payload: {},
-        review_payload: {},
       })
       .eq('module_key', 'psychosocial_health')
       .in('id', psychosocialSupportTargets.map((row) => row.id))

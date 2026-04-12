@@ -133,7 +133,6 @@ export async function POST(request: NextRequest) {
     .update({
       phi_purged_at: purgedAt,
       payload: {},
-      review_payload: {},
     })
     .eq('module_key', 'psychosocial_health')
     .in('id', ids)
