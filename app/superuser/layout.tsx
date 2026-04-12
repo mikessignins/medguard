@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { createServiceClient } from '@/lib/supabase/service'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
@@ -42,7 +43,9 @@ export default async function SuperuserLayout({ children }: { children: React.Re
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const { data: account } = await supabase
+  const service = createServiceClient()
+
+  const { data: account } = await service
     .from('user_accounts')
     .select('display_name, role')
     .eq('id', user.id)

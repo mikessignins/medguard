@@ -6,8 +6,6 @@ import { logAndReturnInternalError, requireSameOrigin } from '@/lib/api-security
 import { safeLogServerEvent } from '@/lib/app-event-log'
 import { enforceActionRateLimit } from '@/lib/rate-limit'
 import { requireAuthenticatedUser, requireRole } from '@/lib/route-access'
-import { getLoginUrl } from '@/lib/app-url'
-import { generateTemporaryPassword, sendTemporaryPasswordEmail } from '@/lib/account-credentials-email'
 import { z } from 'zod'
 
 export const runtime = 'nodejs'
@@ -15,6 +13,7 @@ export const runtime = 'nodejs'
 const contractorMedicSchema = z.object({
   display_name: z.string().trim().min(1, 'Full name is required').max(120, 'Full name is too long'),
   email: z.string().trim().email('A valid email address is required'),
+  temporary_password: z.string().min(8, 'Temporary password must be at least 8 characters').max(120, 'Temporary password is too long'),
   site_ids: z.array(z.string().trim().min(1)).default([]),
   contract_end_date: z.union([
     z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Contract end date must be in YYYY-MM-DD format'),
@@ -100,7 +99,7 @@ export async function POST(req: Request) {
   }
 
   const service = createServiceClient()
-  const temporaryPassword = generateTemporaryPassword()
+  const temporaryPassword = body.temporary_password
   const normalizedEmail = body.email.toLowerCase()
 
   const { data: existingAccounts, error: existingAccountsError } = await service
@@ -270,23 +269,6 @@ export async function POST(req: Request) {
     return logAndReturnInternalError('/api/admin/contractor-medics', accountInsertError)
   }
 
-  try {
-    await sendTemporaryPasswordEmail({
-      to: normalizedEmail,
-      displayName: body.display_name,
-      roleLabel: 'medic',
-      temporaryPassword,
-      loginUrl: getLoginUrl(req.url),
-    })
-  } catch (emailError) {
-    if (createdAuthUser) await service.auth.admin.deleteUser(medicUserId).catch(() => undefined)
-    try {
-      await service.from('user_index').delete().eq('user_id', medicUserId)
-      await service.from('user_accounts').delete().eq('id', medicUserId)
-    } catch {}
-    return logAndReturnInternalError('/api/admin/contractor-medics', emailError)
-  }
-
   await safeLogServerEvent({
     source: 'web_api',
     action: 'admin_contractor_medic_created',
@@ -315,5 +297,7 @@ export async function POST(req: Request) {
       site_ids: normalizedSiteIds,
       contract_end_date: body.contract_end_date,
     },
+    temporary_password: temporaryPassword,
+    message: 'Medic account created. Share the temporary password directly with them.',
   })
 }

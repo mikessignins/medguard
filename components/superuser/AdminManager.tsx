@@ -15,6 +15,8 @@ export default function AdminManager({ businessId, initialAdmins }: Props) {
   const [showAddForm, setShowAddForm] = useState(false)
   const [newAdminName, setNewAdminName] = useState('')
   const [newAdminEmail, setNewAdminEmail] = useState('')
+  const [newAdminPassword, setNewAdminPassword] = useState('')
+  const [createdAdminPassword, setCreatedAdminPassword] = useState('')
   const [editingId, setEditingId] = useState<string | null>(null)
   const [draftName, setDraftName] = useState('')
   const [loadingId, setLoadingId] = useState<string | null>(null)
@@ -34,13 +36,26 @@ export default function AdminManager({ businessId, initialAdmins }: Props) {
     setError('')
   }
 
+  function generateTemporaryPassword(length = 14) {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%*-_'
+    const bytes = new Uint8Array(length)
+    crypto.getRandomValues(bytes)
+    return Array.from(bytes, byte => chars[byte % chars.length]).join('')
+  }
+
   async function addAdmin(e: React.FormEvent) {
     e.preventDefault()
     const displayName = newAdminName.trim()
     const email = newAdminEmail.trim()
+    const temporaryPassword = newAdminPassword
 
-    if (!displayName || !email) {
-      setError('Enter the admin name and email.')
+    if (!displayName || !email || !temporaryPassword) {
+      setError('Enter the admin name, email, and temporary password.')
+      return
+    }
+
+    if (temporaryPassword.length < 8) {
+      setError('Temporary password must be at least 8 characters.')
       return
     }
 
@@ -52,7 +67,7 @@ export default function AdminManager({ businessId, initialAdmins }: Props) {
       const response = await fetch(`/api/superuser/businesses/${businessId}/admins`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ display_name: displayName, email }),
+        body: JSON.stringify({ display_name: displayName, email, temporary_password: temporaryPassword }),
       })
 
       const payload = await response.json().catch(() => ({}))
@@ -64,8 +79,10 @@ export default function AdminManager({ businessId, initialAdmins }: Props) {
       setAdmins(prev => [...prev, payload.admin])
       setNewAdminName('')
       setNewAdminEmail('')
+      setNewAdminPassword('')
+      setCreatedAdminPassword(payload.temporary_password || temporaryPassword)
       setShowAddForm(false)
-      setStatusMessage(`Admin temporary password email sent to ${email}.`)
+      setStatusMessage(`Business admin created for ${email}. Share the temporary password directly with them.`)
     } catch {
       setError('Could not reach the server. Please try again.')
     } finally {
@@ -162,7 +179,7 @@ export default function AdminManager({ businessId, initialAdmins }: Props) {
       {showAddForm && (
         <form onSubmit={addAdmin} className="mb-4 rounded-xl border border-[var(--border-md)] bg-[var(--bg-card)] p-4">
           <p className="mb-3 text-sm text-[var(--text-2)]">
-            Create another business admin and email them a temporary password.
+            Create another business admin and set a temporary password to hand over directly.
           </p>
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
@@ -190,13 +207,41 @@ export default function AdminManager({ businessId, initialAdmins }: Props) {
                 required
               />
             </div>
+            <div className="sm:col-span-2">
+              <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-[var(--text-3)]">
+                Temporary Password
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={newAdminPassword}
+                  onChange={e => setNewAdminPassword(e.target.value)}
+                  className="w-full rounded-lg border border-[var(--border-md)] bg-[var(--bg-surface)] px-3 py-2 text-sm text-[var(--text-1)] outline-none focus:border-cyan-500"
+                  placeholder="Minimum 8 characters"
+                  required
+                  minLength={8}
+                />
+                <button
+                  type="button"
+                  onClick={() => setNewAdminPassword(generateTemporaryPassword())}
+                  className="shrink-0 rounded-lg border border-[var(--border-md)] bg-[var(--bg-surface)] px-3 py-2 text-sm font-medium text-[var(--text-2)] transition-colors hover:bg-[var(--bg-elevated)]"
+                >
+                  Generate
+                </button>
+              </div>
+            </div>
           </div>
+          {createdAdminPassword && (
+            <div className="mt-3 rounded-lg border border-cyan-500/20 bg-cyan-500/10 px-3 py-3 text-sm text-cyan-100">
+              Latest temporary password: <span className="font-mono font-semibold">{createdAdminPassword}</span>
+            </div>
+          )}
           <button
             type="submit"
             disabled={loadingId === 'new'}
             className="mt-3 rounded-lg bg-cyan-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-cyan-500 disabled:opacity-50"
           >
-            {loadingId === 'new' ? 'Sending...' : 'Send Temporary Password'}
+            {loadingId === 'new' ? 'Creating...' : 'Create Admin'}
           </button>
         </form>
       )}

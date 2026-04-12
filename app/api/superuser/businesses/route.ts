@@ -5,8 +5,6 @@ import { createServiceClient } from '@/lib/supabase/service'
 import { parseJsonBody } from '@/lib/api-validation'
 import { logAndReturnInternalError, requireSameOrigin } from '@/lib/api-security'
 import { safeLogServerEvent } from '@/lib/app-event-log'
-import { getLoginUrl } from '@/lib/app-url'
-import { generateTemporaryPassword, sendTemporaryPasswordEmail } from '@/lib/account-credentials-email'
 import { requireAuthenticatedUser, requireRole } from '@/lib/route-access'
 
 export const runtime = 'nodejs'
@@ -17,6 +15,7 @@ const createBusinessSchema = z.object({
   contact_email: z.string().trim().email('A valid contact email is required'),
   admin_display_name: z.string().trim().min(1, 'Admin name is required').max(120, 'Admin name is too long'),
   admin_email: z.string().trim().email('A valid admin email is required'),
+  temporary_password: z.string().min(8, 'Temporary password must be at least 8 characters').max(120, 'Temporary password is too long'),
 })
 
 function generateInviteCode() {
@@ -67,7 +66,7 @@ export async function POST(req: Request) {
   const service = createServiceClient()
   const businessId = body.business_id
   const normalizedAdminEmail = body.admin_email.trim().toLowerCase()
-  const temporaryPassword = generateTemporaryPassword()
+  const temporaryPassword = body.temporary_password
   let adminUserId: string | null = null
 
   try {
@@ -117,14 +116,6 @@ export async function POST(req: Request) {
       })
     if (accountInsertError) throw accountInsertError
 
-    await sendTemporaryPasswordEmail({
-      to: normalizedAdminEmail,
-      displayName: body.admin_display_name,
-      roleLabel: 'business admin',
-      temporaryPassword,
-      loginUrl: getLoginUrl(req.url),
-    })
-
     await safeLogServerEvent({
       source: 'web_api',
       action: 'superuser_business_created',
@@ -151,7 +142,8 @@ export async function POST(req: Request) {
         display_name: body.admin_display_name,
         email: normalizedAdminEmail,
       },
-      message: 'Business created and admin temporary password email sent.',
+      temporary_password: temporaryPassword,
+      message: 'Business created. Share the temporary password and invite code with the business admin.',
     })
   } catch (error) {
     if (adminUserId) await service.auth.admin.deleteUser(adminUserId).catch(() => undefined)

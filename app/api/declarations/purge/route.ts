@@ -108,8 +108,8 @@ export async function POST(request: NextRequest) {
     .from('submissions')
     .update({
       phi_purged_at: purgedAt,
-      worker_snapshot: null,
-      script_uploads: null,
+      worker_snapshot: {},
+      script_uploads: [],
     })
     .in('id', ids)
 

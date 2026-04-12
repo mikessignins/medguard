@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
+import { createServiceClient } from '@/lib/supabase/service'
 
 export default async function Home({
   searchParams,
@@ -23,7 +24,9 @@ export default async function Home({
 
   if (!user) redirect('/login')
 
-  const { data: account } = await supabase
+  const service = createServiceClient()
+
+  const { data: account } = await service
     .from('user_accounts')
     .select('role, contract_end_date, is_inactive')
     .eq('id', user.id)

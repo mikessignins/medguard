@@ -24,6 +24,7 @@ const files = walk(join(root, 'app')).concat(walk(join(root, 'lib')))
 const allowedServiceClientFiles = new Set([
   'app/admin/page.tsx',
   'app/admin/purge-log/page.tsx',
+  'app/page.tsx',
   'app/api/admin/contractor-medics/route.ts',
   'app/api/admin/medics/[id]/password/route.ts',
   'app/api/businesses/[id]/logo/route.ts',
@@ -34,6 +35,7 @@ const allowedServiceClientFiles = new Set([
   'app/api/superuser/feedback/unread-count/route.ts',
   'app/superuser/business/[id]/page.tsx',
   'app/superuser/feedback/page.tsx',
+  'app/superuser/layout.tsx',
   'app/superuser/page.tsx',
   'app/superuser/purge-log/page.tsx',
   'app/superuser/reports/page.tsx',

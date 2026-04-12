@@ -177,7 +177,7 @@ CREATE TABLE public.purge_audit_log (
   site_id text,
   site_name text,
   business_id text NOT NULL,
-  medic_user_id uuid NOT NULL,
+  medic_user_id uuid,
   medic_name text,
   purged_at timestamp with time zone NOT NULL DEFAULT now(),
   form_type text,

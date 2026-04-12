@@ -8,6 +8,8 @@ import {
   logApiError,
 } from '@/lib/api-security'
 
+const SYSTEM_PURGE_USER_ID = '00000000-0000-0000-0000-000000000000'
+
 async function recordPurgeCronHealth(
   supabase: ReturnType<typeof createServiceClient>,
   result: Record<string, unknown>,
@@ -72,7 +74,7 @@ export async function GET(request: Request) {
         site_id:           sub.site_id ?? null,
         site_name:         sub.site_name ?? null,
         business_id:       sub.business_id,
-        medic_user_id:     null,
+        medic_user_id:     SYSTEM_PURGE_USER_ID,
         medic_name:        'Auto-purge (system)',
         purged_at:         purgedAt,
         form_type:         'emergency_declaration',
@@ -87,8 +89,8 @@ export async function GET(request: Request) {
       .from('submissions')
       .update({
         phi_purged_at: purgedAt,
-        worker_snapshot: null,
-        script_uploads: null,
+        worker_snapshot: {},
+        script_uploads: [],
       })
       .in('id', subTargets.map(r => r.id))
 
@@ -119,7 +121,7 @@ export async function GET(request: Request) {
       site_id:           m.site_id ?? null,
       site_name:         m.site_name ?? null,
       business_id:       m.business_id,
-      medic_user_id:     null,
+      medic_user_id:     SYSTEM_PURGE_USER_ID,
       medic_name:        'Auto-purge (system)',
       purged_at:         purgedAt,
       form_type:         'medication_declaration',
@@ -185,7 +187,7 @@ export async function GET(request: Request) {
         site_id: entry.site_id ?? null,
         site_name: null,
         business_id: entry.business_id,
-        medic_user_id: null,
+        medic_user_id: SYSTEM_PURGE_USER_ID,
         medic_name: 'Auto-purge (system)',
         purged_at: purgedAt,
         form_type: 'fatigue_assessment',
@@ -255,7 +257,7 @@ export async function GET(request: Request) {
         site_id: entry.site_id ?? null,
         site_name: null,
         business_id: entry.business_id,
-        medic_user_id: null,
+        medic_user_id: SYSTEM_PURGE_USER_ID,
         medic_name: 'Auto-purge (system)',
         purged_at: purgedAt,
         form_type: entry.payload?.postIncidentWelfare ? 'psychosocial_post_incident_welfare' : 'psychosocial_support_checkin',

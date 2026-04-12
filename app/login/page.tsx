@@ -113,13 +113,19 @@ export default function LoginPage() {
     setFailedAttempts(0)
     setLockoutUntil(null)
 
-    const { data: account } = await supabase
+    const { data: account, error: accountError } = await supabase
       .from('user_accounts')
       .select('role, contract_end_date, business_id, is_inactive')
       .eq('id', user.id)
       .single()
 
-    if (!account) { setError('Account not found'); setLoading(false); return }
+    if (accountError || !account) {
+      // If client-side RLS/account lookup is stale or blocked, hand off to the
+      // server-side root route, which performs the same routing decision using
+      // the authenticated session before loading the destination dashboard.
+      router.push('/')
+      return
+    }
 
     const { data: business } = await supabase
       .from('businesses')
@@ -139,8 +145,7 @@ export default function LoginPage() {
       return
     }
 
-    setError('This account type does not have web portal access.')
-    setLoading(false)
+    router.push('/')
   }
 
   async function handleForgotPassword(e: React.FormEvent) {

@@ -5,8 +5,6 @@ import { createServiceClient } from '@/lib/supabase/service'
 import { parseJsonBody } from '@/lib/api-validation'
 import { logAndReturnInternalError, requireSameOrigin } from '@/lib/api-security'
 import { safeLogServerEvent } from '@/lib/app-event-log'
-import { getLoginUrl } from '@/lib/app-url'
-import { generateTemporaryPassword, sendTemporaryPasswordEmail } from '@/lib/account-credentials-email'
 import { requireAuthenticatedUser, requireRole } from '@/lib/route-access'
 
 export const runtime = 'nodejs'
@@ -14,6 +12,7 @@ export const runtime = 'nodejs'
 const addBusinessAdminSchema = z.object({
   display_name: z.string().trim().min(1, 'Full name is required').max(120, 'Full name is too long'),
   email: z.string().trim().email('A valid email address is required'),
+  temporary_password: z.string().min(8, 'Temporary password must be at least 8 characters').max(120, 'Temporary password is too long'),
 })
 
 export async function POST(
@@ -56,7 +55,7 @@ export async function POST(
   if (!business) return NextResponse.json({ error: 'Business not found.' }, { status: 404 })
 
   const normalizedEmail = body.email.trim().toLowerCase()
-  const temporaryPassword = generateTemporaryPassword()
+  const temporaryPassword = body.temporary_password
 
   const { data: createdUser, error: createUserError } = await service.auth.admin.createUser({
     email: normalizedEmail,
@@ -118,23 +117,6 @@ export async function POST(
     return logAndReturnInternalError('/api/superuser/businesses/[id]/admins', accountInsertError)
   }
 
-  try {
-    await sendTemporaryPasswordEmail({
-      to: normalizedEmail,
-      displayName: body.display_name,
-      roleLabel: 'business admin',
-      temporaryPassword,
-      loginUrl: getLoginUrl(req.url),
-    })
-  } catch (emailError) {
-    await service.auth.admin.deleteUser(adminUserId).catch(() => undefined)
-    try {
-      await service.from('user_index').delete().eq('user_id', adminUserId)
-      await service.from('user_accounts').delete().eq('id', adminUserId)
-    } catch {}
-    return logAndReturnInternalError('/api/superuser/businesses/[id]/admins', emailError)
-  }
-
   await safeLogServerEvent({
     source: 'web_api',
     action: 'superuser_business_admin_created',
@@ -155,6 +137,7 @@ export async function POST(
       display_name: body.display_name,
       email: normalizedEmail,
     },
-    message: 'Admin temporary password email sent.',
+    temporary_password: temporaryPassword,
+    message: 'Business admin created. Share the temporary password directly with them.',
   })
 }
