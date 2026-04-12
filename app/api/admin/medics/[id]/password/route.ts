@@ -1,23 +1,14 @@
 import { createClient } from '@/lib/supabase/server'
 import { createServiceClient } from '@/lib/supabase/service'
 import { NextResponse } from 'next/server'
-import { parseJsonBody } from '@/lib/api-validation'
 import { logAndReturnInternalError, requireSameOrigin } from '@/lib/api-security'
 import { safeLogServerEvent } from '@/lib/app-event-log'
 import { enforceActionRateLimit } from '@/lib/rate-limit'
 import { requireAuthenticatedUser, requireRole } from '@/lib/route-access'
-import { z } from 'zod'
+import { getLoginUrl } from '@/lib/app-url'
+import { generateTemporaryPassword, sendTemporaryPasswordEmail } from '@/lib/account-credentials-email'
 
 export const runtime = 'nodejs'
-
-const resetMedicPasswordSchema = z.object({
-  password: z.string()
-    .min(12, 'Temporary password must be at least 12 characters')
-    .regex(/[A-Z]/, 'Temporary password must include an uppercase letter')
-    .regex(/[a-z]/, 'Temporary password must include a lowercase letter')
-    .regex(/[0-9]/, 'Temporary password must include a number')
-    .regex(/[^A-Za-z0-9]/, 'Temporary password must include a symbol'),
-})
 
 export async function POST(
   req: Request,
@@ -59,9 +50,6 @@ export async function POST(
   })
   if (rateLimited) return rateLimited
 
-  const parsed = await parseJsonBody(req, resetMedicPasswordSchema)
-  if (!parsed.success) return parsed.response
-
   const { data: targetMedic, error: targetError } = await supabase
     .from('user_accounts')
     .select('id, display_name, email, role, business_id')
@@ -91,15 +79,13 @@ export async function POST(
   }
 
   const service = createServiceClient()
+  const temporaryPassword = generateTemporaryPassword()
 
-  const { error: resetError } = await service.auth.admin.updateUserById(targetMedic.id, {
-    password: parsed.data.password,
-    user_metadata: {
-      temporary_password_required: true,
-    },
+  const { error: updateError } = await service.auth.admin.updateUserById(targetMedic.id, {
+    password: temporaryPassword,
   })
 
-  if (resetError) {
+  if (updateError) {
     await safeLogServerEvent({
       source: 'web_api',
       action: 'admin_medic_password_reset',
@@ -110,9 +96,33 @@ export async function POST(
       businessId: account!.business_id,
       route: '/api/admin/medics/[id]/password',
       targetId: targetMedic.id,
-      errorMessage: resetError.message,
+      errorMessage: updateError.message,
     })
-    return NextResponse.json({ error: 'Failed to reset medic password.' }, { status: 400 })
+    return NextResponse.json({ error: 'Failed to set a temporary medic password.' }, { status: 400 })
+  }
+
+  try {
+    await sendTemporaryPasswordEmail({
+      to: targetMedic.email,
+      displayName: targetMedic.display_name,
+      roleLabel: 'medic',
+      temporaryPassword,
+      loginUrl: getLoginUrl(req.url),
+    })
+  } catch (emailError) {
+    await safeLogServerEvent({
+      source: 'web_api',
+      action: 'admin_medic_password_reset',
+      result: 'failure',
+      actorUserId: userId,
+      actorRole: account!.role,
+      actorName: account!.display_name,
+      businessId: account!.business_id,
+      route: '/api/admin/medics/[id]/password',
+      targetId: targetMedic.id,
+      errorMessage: emailError instanceof Error ? emailError.message : 'Failed to send email',
+    })
+    return logAndReturnInternalError('/api/admin/medics/[id]/password', emailError)
   }
 
   await safeLogServerEvent({
@@ -130,6 +140,7 @@ export async function POST(
 
   return NextResponse.json({
     ok: true,
+    message: 'Temporary password email sent.',
     medic: {
       id: targetMedic.id,
       display_name: targetMedic.display_name,

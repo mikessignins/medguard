@@ -1,0 +1,282 @@
+-- WARNING: This schema is for context only and is not meant to be run.
+-- Table order and constraints may not be valid for execution.
+
+CREATE TABLE public.admin_action_log (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  occurred_at timestamp with time zone NOT NULL DEFAULT now(),
+  business_id uuid NOT NULL,
+  actor_user_id uuid NOT NULL,
+  actor_name text NOT NULL,
+  action text NOT NULL,
+  target_user_id uuid,
+  target_name text,
+  detail jsonb,
+  CONSTRAINT admin_action_log_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.app_event_log (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  created_at timestamp with time zone NOT NULL DEFAULT timezone('utc'::text, now()),
+  source text NOT NULL,
+  action text NOT NULL,
+  result text NOT NULL,
+  actor_user_id text,
+  actor_role text,
+  actor_name text,
+  business_id text,
+  module_key text,
+  route text,
+  target_id text,
+  error_message text,
+  context jsonb NOT NULL DEFAULT '{}'::jsonb,
+  CONSTRAINT app_event_log_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.business_modules (
+  business_id text NOT NULL,
+  module_key text NOT NULL,
+  enabled boolean NOT NULL DEFAULT true,
+  config jsonb NOT NULL DEFAULT '{}'::jsonb,
+  enabled_at timestamp with time zone NOT NULL DEFAULT now(),
+  disabled_at timestamp with time zone,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT business_modules_pkey PRIMARY KEY (business_id, module_key),
+  CONSTRAINT business_modules_business_id_fkey FOREIGN KEY (business_id) REFERENCES public.businesses(id),
+  CONSTRAINT business_modules_module_key_fkey FOREIGN KEY (module_key) REFERENCES public.modules(key)
+);
+CREATE TABLE public.businesses (
+  id text NOT NULL,
+  name text NOT NULL,
+  contact_email text,
+  created_at timestamp with time zone DEFAULT now(),
+  is_suspended boolean NOT NULL DEFAULT false,
+  reminder_interval_months integer NOT NULL DEFAULT 3,
+  logo_url text,
+  trial_until timestamp with time zone,
+  logo_url_light text,
+  logo_url_dark text,
+  CONSTRAINT businesses_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.cron_health_log (
+  cron_name text NOT NULL,
+  last_run_at timestamp with time zone NOT NULL DEFAULT now(),
+  last_result jsonb,
+  CONSTRAINT cron_health_log_pkey PRIMARY KEY (cron_name)
+);
+CREATE TABLE public.feedback (
+  id text NOT NULL DEFAULT (gen_random_uuid())::text,
+  submitted_at timestamp with time zone NOT NULL DEFAULT now(),
+  submitted_by_user_id text NOT NULL,
+  submitted_by_name text NOT NULL,
+  submitted_by_role text NOT NULL,
+  business_id text NOT NULL,
+  business_name text,
+  category text NOT NULL,
+  message text NOT NULL,
+  status text NOT NULL DEFAULT 'Unread'::text,
+  superuser_note text,
+  status_updated_at timestamp with time zone,
+  CONSTRAINT feedback_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.invite_codes (
+  business_id text NOT NULL,
+  code text NOT NULL UNIQUE,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT invite_codes_pkey PRIMARY KEY (business_id)
+);
+CREATE TABLE public.medication_declarations (
+  id text NOT NULL DEFAULT (gen_random_uuid())::text,
+  business_id text NOT NULL,
+  site_id text NOT NULL,
+  worker_id uuid NOT NULL,
+  worker_name text NOT NULL,
+  worker_dob text NOT NULL,
+  employer text NOT NULL DEFAULT ''::text,
+  department text NOT NULL DEFAULT ''::text,
+  job_title text NOT NULL DEFAULT ''::text,
+  has_recent_injury_or_illness boolean NOT NULL DEFAULT false,
+  has_side_effects boolean NOT NULL DEFAULT false,
+  medications jsonb NOT NULL DEFAULT '[]'::jsonb,
+  submitted_at timestamp with time zone NOT NULL DEFAULT now(),
+  medic_review_status text NOT NULL DEFAULT 'Pending'::text,
+  medic_name text NOT NULL DEFAULT ''::text,
+  medic_comments text NOT NULL DEFAULT ''::text,
+  review_required boolean NOT NULL DEFAULT false,
+  medic_reviewed_at timestamp with time zone,
+  script_uploads jsonb NOT NULL DEFAULT '[]'::jsonb,
+  exported_at timestamp with time zone,
+  phi_purged_at timestamp with time zone,
+  exported_by_name text,
+  site_name text,
+  is_test boolean NOT NULL DEFAULT false,
+  CONSTRAINT medication_declarations_pkey PRIMARY KEY (id),
+  CONSTRAINT medication_declarations_business_id_fkey FOREIGN KEY (business_id) REFERENCES public.businesses(id),
+  CONSTRAINT medication_declarations_site_id_fkey FOREIGN KEY (site_id) REFERENCES public.sites(id),
+  CONSTRAINT medication_declarations_worker_id_fkey FOREIGN KEY (worker_id) REFERENCES auth.users(id),
+  CONSTRAINT med_dec_worker_id_fkey FOREIGN KEY (worker_id) REFERENCES auth.users(id)
+);
+CREATE TABLE public.module_form_versions (
+  id bigint NOT NULL DEFAULT nextval('module_form_versions_id_seq'::regclass),
+  module_key text NOT NULL,
+  version integer NOT NULL,
+  form_schema jsonb NOT NULL,
+  workflow_schema jsonb NOT NULL DEFAULT '{}'::jsonb,
+  pdf_template_key text,
+  ios_min_version text,
+  web_min_version text,
+  status text NOT NULL DEFAULT 'active'::text CHECK (status = ANY (ARRAY['draft'::text, 'active'::text, 'retired'::text])),
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT module_form_versions_pkey PRIMARY KEY (id),
+  CONSTRAINT module_form_versions_module_key_fkey FOREIGN KEY (module_key) REFERENCES public.modules(key)
+);
+CREATE TABLE public.module_submissions (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  business_id text NOT NULL,
+  site_id text,
+  worker_id uuid NOT NULL,
+  module_key text NOT NULL,
+  module_version integer NOT NULL,
+  status text NOT NULL,
+  payload jsonb NOT NULL DEFAULT '{}'::jsonb,
+  review_payload jsonb NOT NULL DEFAULT '{}'::jsonb,
+  submitted_at timestamp with time zone NOT NULL DEFAULT now(),
+  reviewed_at timestamp with time zone,
+  reviewed_by uuid,
+  exported_at timestamp with time zone,
+  exported_by_name text,
+  phi_purged_at timestamp with time zone,
+  is_test boolean NOT NULL DEFAULT false,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT module_submissions_pkey PRIMARY KEY (id),
+  CONSTRAINT module_submissions_business_id_fkey FOREIGN KEY (business_id) REFERENCES public.businesses(id),
+  CONSTRAINT module_submissions_site_id_fkey FOREIGN KEY (site_id) REFERENCES public.sites(id),
+  CONSTRAINT module_submissions_module_key_fkey FOREIGN KEY (module_key) REFERENCES public.modules(key),
+  CONSTRAINT module_submissions_module_version_fk FOREIGN KEY (module_key) REFERENCES public.module_form_versions(module_key),
+  CONSTRAINT module_submissions_module_version_fk FOREIGN KEY (module_version) REFERENCES public.module_form_versions(module_key),
+  CONSTRAINT module_submissions_module_version_fk FOREIGN KEY (module_key) REFERENCES public.module_form_versions(version),
+  CONSTRAINT module_submissions_module_version_fk FOREIGN KEY (module_version) REFERENCES public.module_form_versions(version)
+);
+CREATE TABLE public.modules (
+  key text NOT NULL,
+  name text NOT NULL,
+  category text NOT NULL,
+  status text NOT NULL DEFAULT 'active'::text CHECK (status = ANY (ARRAY['active'::text, 'deprecated'::text, 'disabled'::text])),
+  is_billable boolean NOT NULL DEFAULT false,
+  billing_category text,
+  current_version integer NOT NULL DEFAULT 1,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT modules_pkey PRIMARY KEY (key)
+);
+CREATE TABLE public.purge_audit_log (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  submission_id text NOT NULL,
+  worker_name text,
+  worker_dob text,
+  site_id text,
+  site_name text,
+  business_id text NOT NULL,
+  medic_user_id uuid NOT NULL,
+  medic_name text,
+  purged_at timestamp with time zone NOT NULL DEFAULT now(),
+  form_type text,
+  exported_at timestamp with time zone,
+  exported_by_name text,
+  approved_by_name text,
+  approved_at timestamp with time zone,
+  CONSTRAINT purge_audit_log_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.sites (
+  id text NOT NULL DEFAULT (gen_random_uuid())::text,
+  business_id text,
+  name text NOT NULL,
+  latitude double precision NOT NULL,
+  longitude double precision NOT NULL,
+  is_office boolean NOT NULL DEFAULT false,
+  medic_phone text,
+  eso_name text,
+  safety_manager_name text,
+  village_admin_name text,
+  eap_phone text,
+  CONSTRAINT sites_pkey PRIMARY KEY (id),
+  CONSTRAINT sites_business_id_fkey FOREIGN KEY (business_id) REFERENCES public.businesses(id)
+);
+CREATE TABLE public.submission_comments (
+  id text NOT NULL DEFAULT (gen_random_uuid())::text,
+  submission_id text NOT NULL,
+  business_id text NOT NULL,
+  site_id text NOT NULL,
+  medic_user_id text NOT NULL,
+  medic_name text NOT NULL CHECK (btrim(medic_name) <> ''::text),
+  note text NOT NULL CHECK (btrim(note) <> ''::text),
+  outcome text,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  edited_at timestamp with time zone,
+  legacy_comment_id text UNIQUE,
+  CONSTRAINT submission_comments_pkey PRIMARY KEY (id),
+  CONSTRAINT submission_comments_submission_id_fkey FOREIGN KEY (submission_id) REFERENCES public.submissions(id),
+  CONSTRAINT submission_comments_business_id_fkey FOREIGN KEY (business_id) REFERENCES public.businesses(id),
+  CONSTRAINT submission_comments_site_id_fkey FOREIGN KEY (site_id) REFERENCES public.sites(id)
+);
+CREATE TABLE public.submissions (
+  id text NOT NULL,
+  business_id text,
+  site_id text,
+  worker_snapshot jsonb NOT NULL,
+  role text NOT NULL,
+  visit_date timestamp with time zone NOT NULL,
+  shift_type text,
+  status text NOT NULL DEFAULT 'New'::text,
+  consent_given boolean NOT NULL DEFAULT false,
+  submitted_at timestamp with time zone NOT NULL,
+  site_specific_answers jsonb DEFAULT '{}'::jsonb,
+  decision jsonb,
+  worker_id uuid,
+  exported_at timestamp with time zone,
+  phi_purged_at timestamp with time zone,
+  script_uploads jsonb NOT NULL DEFAULT '[]'::jsonb,
+  comments jsonb NOT NULL DEFAULT '[]'::jsonb,
+  exported_by_name text,
+  site_name text,
+  version integer NOT NULL DEFAULT 1,
+  is_test boolean NOT NULL DEFAULT false,
+  CONSTRAINT submissions_pkey PRIMARY KEY (id),
+  CONSTRAINT submissions_business_id_fkey FOREIGN KEY (business_id) REFERENCES public.businesses(id),
+  CONSTRAINT submissions_site_id_fkey FOREIGN KEY (site_id) REFERENCES public.sites(id),
+  CONSTRAINT submissions_worker_id_fkey FOREIGN KEY (worker_id) REFERENCES auth.users(id)
+);
+CREATE TABLE public.user_accounts (
+  id uuid NOT NULL,
+  business_id text,
+  display_name text NOT NULL,
+  email text NOT NULL,
+  role text NOT NULL DEFAULT 'worker'::text CHECK (role = ANY (ARRAY['worker'::text, 'medic'::text, 'admin'::text, 'pending_medic'::text, 'superuser'::text])),
+  site_ids ARRAY DEFAULT '{}'::text[],
+  contract_end_date timestamp with time zone,
+  preferred_language text DEFAULT 'en'::text,
+  is_inactive boolean NOT NULL DEFAULT false,
+  superuser_scope text NOT NULL DEFAULT 'business'::text CHECK (superuser_scope = ANY (ARRAY['business'::text, 'platform'::text])),
+  CONSTRAINT user_accounts_pkey PRIMARY KEY (id),
+  CONSTRAINT user_accounts_id_fkey FOREIGN KEY (id) REFERENCES auth.users(id),
+  CONSTRAINT user_accounts_business_id_fkey FOREIGN KEY (business_id) REFERENCES public.businesses(id)
+);
+CREATE TABLE public.user_index (
+  user_id uuid NOT NULL,
+  business_id text,
+  CONSTRAINT user_index_pkey PRIMARY KEY (user_id),
+  CONSTRAINT user_index_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id),
+  CONSTRAINT user_index_business_id_fkey FOREIGN KEY (business_id) REFERENCES public.businesses(id)
+);
+CREATE TABLE public.worker_memberships (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  worker_id uuid NOT NULL,
+  business_id text NOT NULL,
+  role text NOT NULL DEFAULT 'worker'::text CHECK (role = ANY (ARRAY['worker'::text, 'pending_medic'::text])),
+  site_ids jsonb NOT NULL DEFAULT '[]'::jsonb,
+  joined_at timestamp with time zone NOT NULL DEFAULT now(),
+  is_active boolean NOT NULL DEFAULT true,
+  CONSTRAINT worker_memberships_pkey PRIMARY KEY (id),
+  CONSTRAINT worker_memberships_worker_id_fkey FOREIGN KEY (worker_id) REFERENCES auth.users(id),
+  CONSTRAINT worker_memberships_business_id_fkey FOREIGN KEY (business_id) REFERENCES public.businesses(id)
+);

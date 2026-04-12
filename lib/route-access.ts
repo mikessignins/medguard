@@ -12,6 +12,7 @@ interface RoleAccount {
   is_inactive?: boolean | null
   contract_end_date?: string | null
   business_id?: string | null
+  superuser_scope?: string | null
 }
 
 export function requireAuthenticatedUser(userId?: string | null): RouteAccessFailure | null {
@@ -73,15 +74,9 @@ export function requireScopedBusinessAccess(
   account: RoleAccount | null | undefined,
   businessId: string,
 ): RouteAccessFailure | null {
+  void businessId
+
   if (!account || account.role !== 'superuser') {
-    return { error: 'Forbidden', status: 403 }
-  }
-
-  if (!account.business_id) {
-    return null
-  }
-
-  if (account.business_id !== businessId) {
     return { error: 'Forbidden', status: 403 }
   }
 

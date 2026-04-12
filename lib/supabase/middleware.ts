@@ -44,7 +44,7 @@ export async function updateSession(request: NextRequest) {
   if (isCronPath) {
     const cronSecret = process.env.CRON_SECRET
 
-    if (!cronSecret || cronSecret.length < 32) {
+    if (!cronSecret) {
       return finalizeResponse(
         NextResponse.json({ error: 'Server cron secret is not configured.' }, { status: 500 }),
         0,
@@ -93,7 +93,15 @@ export async function updateSession(request: NextRequest) {
   finalizeResponse(supabaseResponse, authDurationMs)
 
   const url = request.nextUrl.clone()
-  const isPublicPath = url.pathname === '/login' || url.pathname === '/'
+  const isAccountSetupLink =
+    url.pathname === '/account' &&
+    (url.searchParams.has('code') || url.searchParams.get('setup') === 'password')
+  const isPublicPath =
+    url.pathname === '/login' ||
+    url.pathname === '/medic-signup' ||
+    url.pathname === '/api/medic-signup' ||
+    isAccountSetupLink ||
+    url.pathname === '/'
 
   if (!user && !isPublicPath) {
     url.pathname = '/login'

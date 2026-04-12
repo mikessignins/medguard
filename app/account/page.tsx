@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
 import { createClient } from '@/lib/supabase/client'
+import { getUserFacingErrorMessage } from '@/lib/user-facing-errors'
 
 export default function AccountSettingsPage() {
   const router = useRouter()
@@ -20,17 +21,96 @@ export default function AccountSettingsPage() {
   const [success, setSuccess] = useState('')
   const [error, setError] = useState('')
   const [initialLoad, setInitialLoad] = useState(true)
+  const [passwordSetupMode, setPasswordSetupMode] = useState(false)
 
   useEffect(() => {
-    async function load() {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) { router.push('/login'); return }
+    const searchParams = new URLSearchParams(window.location.search)
+    const setupModeFromUrl =
+      searchParams.get('setup') === 'password' ||
+      searchParams.has('code') ||
+      window.location.hash.includes('access_token=')
+    setPasswordSetupMode(setupModeFromUrl)
 
-      const { data: account } = await supabase
+    const { data: authListener } = supabase.auth.onAuthStateChange(event => {
+      if (event === 'PASSWORD_RECOVERY') {
+        setPasswordSetupMode(true)
+      }
+    })
+
+    async function load() {
+      const code = searchParams.get('code')
+      const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''))
+      const accessToken = hashParams.get('access_token')
+      const refreshToken = hashParams.get('refresh_token')
+
+      if (code) {
+        const { data: existingSession } = await supabase.auth.getSession()
+        if (existingSession.session) {
+          await supabase.auth.signOut({ scope: 'local' })
+        }
+
+        const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code)
+        if (exchangeError) {
+          console.error('[account/exchangeCodeForSession] failed', exchangeError)
+          setError('This setup link is invalid or has expired. Ask for a new setup or password reset email.')
+          setInitialLoad(false)
+          return
+        }
+
+        window.history.replaceState({}, '', '/account?setup=password')
+      } else if (accessToken && refreshToken) {
+        const { data: existingSession } = await supabase.auth.getSession()
+        if (existingSession.session) {
+          await supabase.auth.signOut({ scope: 'local' })
+        }
+
+        const { error: sessionError } = await supabase.auth.setSession({
+          access_token: accessToken,
+          refresh_token: refreshToken,
+        })
+
+        if (sessionError) {
+          console.error('[account/setSession] failed', sessionError)
+          setError('This setup link is invalid or has expired. Ask for a new setup or password reset email.')
+          setInitialLoad(false)
+          return
+        }
+
+        window.history.replaceState({}, '', '/account?setup=password')
+      } else if (setupModeFromUrl) {
+        const { data: existingSession } = await supabase.auth.getSession()
+        const expectedSetupUserId = sessionStorage.getItem('medguard:password-setup-user-id')
+        if (expectedSetupUserId && existingSession.session?.user.id === expectedSetupUserId) {
+          window.history.replaceState({}, '', '/account?setup=password')
+        } else {
+          if (existingSession.session) {
+            await supabase.auth.signOut({ scope: 'local' })
+          }
+
+          setError('This setup link did not include a valid setup token. Ask for a new setup or password reset email, then open that link to choose a password.')
+          setInitialLoad(false)
+          return
+        }
+      }
+
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) {
+        router.push(setupModeFromUrl ? '/login?setup=expired' : '/login')
+        return
+      }
+
+      const { data: account, error: accountError } = await supabase
         .from('user_accounts')
         .select('display_name, email, role')
         .eq('id', user.id)
         .single()
+
+      if (accountError) {
+        console.error('[account/load] failed', accountError)
+        setError(getUserFacingErrorMessage(accountError, 'We could not load your account settings. Please try again.'))
+        setInitialLoad(false)
+        return
+      }
 
       if (account) {
         setDisplayName(account.display_name || '')
@@ -41,6 +121,9 @@ export default function AccountSettingsPage() {
       setInitialLoad(false)
     }
     load()
+    return () => {
+      authListener.subscription.unsubscribe()
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -52,18 +135,34 @@ export default function AccountSettingsPage() {
   async function updateName(e: React.FormEvent) {
     e.preventDefault()
     clearMessages()
+    const nextDisplayName = displayName.trim()
+    if (!nextDisplayName) {
+      setError('Enter the name you want shown in MedGuard.')
+      return
+    }
     setLoading('name')
     const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
+    if (!user) {
+      setLoading(null)
+      setError('Please sign in again to update your account.')
+      return
+    }
 
     const { error: err } = await supabase
       .from('user_accounts')
-      .update({ display_name: displayName.trim() })
+      .update({ display_name: nextDisplayName })
       .eq('id', user.id)
 
     setLoading(null)
-    if (err) { setError(err.message); return }
+    if (err) {
+      console.error('[account/updateName] failed', err)
+      setError(getUserFacingErrorMessage(err, 'We could not update your display name. Please try again.'))
+      return
+    }
+    await supabase.auth.updateUser({ data: { display_name: nextDisplayName } })
+    setDisplayName(nextDisplayName)
     setSuccess('Display name updated.')
+    router.refresh()
   }
 
   async function updateEmail(e: React.FormEvent) {
@@ -82,7 +181,11 @@ export default function AccountSettingsPage() {
     }
     const { error: err } = await supabase.auth.updateUser({ email })
     setLoading(null)
-    if (err) { setError(err.message); return }
+    if (err) {
+      console.error('[account/updateEmail] failed', err)
+      setError(getUserFacingErrorMessage(err, 'We could not update your email address. Please try again.'))
+      return
+    }
     setEmailCurrentPassword('')
     setSuccess('Confirmation sent to your new email address.')
   }
@@ -92,24 +195,36 @@ export default function AccountSettingsPage() {
     clearMessages()
     if (newPassword !== confirmPassword) { setError('Passwords do not match.'); return }
     if (newPassword.length < 8) { setError('Password must be at least 8 characters.'); return }
-    if (!passwordCurrentPassword) { setError('Enter your current password to update your password.'); return }
-    setLoading('password')
-    const { error: reauthError } = await supabase.auth.signInWithPassword({
-      email: currentEmail,
-      password: passwordCurrentPassword,
-    })
-    if (reauthError) {
-      setLoading(null)
-      setError('Current password is incorrect.')
+    if (!passwordSetupMode && !passwordCurrentPassword) {
+      setError('Enter your current password to update your password.')
       return
+    }
+    setLoading('password')
+    if (!passwordSetupMode) {
+      const { error: reauthError } = await supabase.auth.signInWithPassword({
+        email: currentEmail,
+        password: passwordCurrentPassword,
+      })
+      if (reauthError) {
+        setLoading(null)
+        setError('Current password is incorrect.')
+        return
+      }
     }
     const { error: err } = await supabase.auth.updateUser({ password: newPassword })
     setLoading(null)
-    if (err) { setError(err.message); return }
+    if (err) {
+      console.error('[account/updatePassword] failed', err)
+      setError(getUserFacingErrorMessage(err, 'We could not update your password. Please try again.'))
+      return
+    }
     setNewPassword('')
     setConfirmPassword('')
     setPasswordCurrentPassword('')
-    setSuccess('Password updated.')
+    setPasswordSetupMode(false)
+    sessionStorage.removeItem('medguard:password-setup-user-id')
+    setSuccess('Password updated. You can now sign in with this password.')
+    router.replace('/account')
   }
 
   function goBack() {
@@ -123,6 +238,23 @@ export default function AccountSettingsPage() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-950">
         <p className="text-slate-500">Loading...</p>
+      </div>
+    )
+  }
+
+  if (!role && error) {
+    return (
+      <div className="min-h-screen bg-slate-950 px-4 py-10 text-slate-100">
+        <div className="mx-auto max-w-md rounded-xl border border-red-500/30 bg-red-500/10 p-6">
+          <h1 className="text-lg font-semibold text-red-200">Setup link problem</h1>
+          <p className="mt-3 text-sm text-red-100">{error}</p>
+          <button
+            onClick={() => router.push('/login')}
+            className="mt-5 rounded-lg bg-cyan-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-cyan-500"
+          >
+            Go to sign in
+          </button>
+        </div>
       </div>
     )
   }
@@ -205,16 +337,25 @@ export default function AccountSettingsPage() {
 
         {/* Password */}
         <div className="bg-slate-800/60 backdrop-blur-sm border border-slate-700/50 rounded-xl p-6">
-          <h2 className="text-base font-semibold text-slate-100 mb-4">Password</h2>
+          <h2 className="text-base font-semibold text-slate-100 mb-2">
+            {passwordSetupMode ? 'Set your password' : 'Password'}
+          </h2>
+          {passwordSetupMode && (
+            <p className="mb-4 text-sm text-slate-400">
+              Choose a password for this account. You do not need your old password when you arrive from a setup or reset email.
+            </p>
+          )}
           <form onSubmit={updatePassword} className="space-y-3">
-            <input
-              type="password"
-              value={passwordCurrentPassword}
-              onChange={e => setPasswordCurrentPassword(e.target.value)}
-              required
-              placeholder="Current password"
-              className="w-full px-4 py-2.5 bg-slate-900/60 border border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500 text-slate-100 placeholder-slate-500 text-sm transition-colors"
-            />
+            {!passwordSetupMode && (
+              <input
+                type="password"
+                value={passwordCurrentPassword}
+                onChange={e => setPasswordCurrentPassword(e.target.value)}
+                required
+                placeholder="Current password"
+                className="w-full px-4 py-2.5 bg-slate-900/60 border border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500 text-slate-100 placeholder-slate-500 text-sm transition-colors"
+              />
+            )}
             <input
               type="password"
               value={newPassword}
@@ -236,7 +377,7 @@ export default function AccountSettingsPage() {
               disabled={loading === 'password'}
               className="px-5 py-2 bg-cyan-600 hover:bg-cyan-500 text-white text-sm font-medium rounded-lg transition-colors duration-200 disabled:opacity-50"
             >
-              {loading === 'password' ? 'Saving...' : 'Update Password'}
+              {loading === 'password' ? 'Saving...' : passwordSetupMode ? 'Set Password' : 'Update Password'}
             </button>
           </form>
         </div>

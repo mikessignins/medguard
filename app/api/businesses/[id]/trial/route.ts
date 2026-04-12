@@ -30,7 +30,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   const { data: account } = await supabase
     .from('user_accounts')
-    .select('role, display_name, business_id')
+    .select('role, display_name, business_id, superuser_scope')
     .eq('id', userId)
     .single()
 

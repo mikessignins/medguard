@@ -1,10 +1,10 @@
 'use client'
 import { useState } from 'react'
-import { createClient } from '@/lib/supabase/client'
 import type { Business } from '@/lib/types'
 
 interface BusinessRow extends Business {
   adminCount: number
+  adminNames: string[]
   medicCount: number
   workerCount: number
   siteCount: number
@@ -19,15 +19,12 @@ interface Props {
 }
 
 export default function NewBusinessModal({ onClose, onSuccess }: Props) {
-  const supabase = createClient()
-
   const [form, setForm] = useState({
     business_id: '',
     business_name: '',
     contact_email: '',
     admin_display_name: '',
     admin_email: '',
-    admin_password: '',
   })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -42,19 +39,21 @@ export default function NewBusinessModal({ onClose, onSuccess }: Props) {
     setLoading(true)
     setError('')
 
-    const { data, error: fnError } = await supabase.functions.invoke('create-admin', {
-      body: {
+    const response = await fetch('/api/superuser/businesses', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
         business_id: form.business_id,
         business_name: form.business_name,
         contact_email: form.contact_email,
         admin_display_name: form.admin_display_name,
         admin_email: form.admin_email,
-        admin_password: form.admin_password,
-      },
+      }),
     })
 
-    if (fnError) {
-      setError(fnError.message || 'Failed to create business')
+    const data = await response.json().catch(() => ({}))
+    if (!response.ok) {
+      setError(data.error || 'Failed to create business')
       setLoading(false)
       return
     }
@@ -68,6 +67,7 @@ export default function NewBusinessModal({ onClose, onSuccess }: Props) {
       name: form.business_name,
       contact_email: form.contact_email,
       adminCount: 1,
+      adminNames: [form.admin_display_name],
       medicCount: 0,
       workerCount: 0,
       siteCount: 0,
@@ -93,7 +93,9 @@ export default function NewBusinessModal({ onClose, onSuccess }: Props) {
             </svg>
           </div>
           <h3 className="mb-2 text-lg font-semibold text-[var(--text-1)]">Business Created!</h3>
-          <p className="mb-5 text-sm text-[var(--text-2)]">Share this invite code with the medics:</p>
+          <p className="mb-5 text-sm text-[var(--text-2)]">
+            The business admin has been emailed their temporary password. Share this invite code with medics:
+          </p>
           <div className="mb-5 rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] px-6 py-5 font-mono text-3xl font-bold tracking-widest text-cyan-400">
             {inviteCode}
           </div>
@@ -142,10 +144,9 @@ export default function NewBusinessModal({ onClose, onSuccess }: Props) {
                 <label className={labelClass}>Admin Email *</label>
                 <input type="email" value={form.admin_email} onChange={e => handleChange('admin_email', e.target.value)} required className={inputClass} placeholder="jane@acme.com" />
               </div>
-              <div>
-                <label className={labelClass}>Admin Password *</label>
-                <input type="password" value={form.admin_password} onChange={e => handleChange('admin_password', e.target.value)} required minLength={8} className={inputClass} />
-              </div>
+              <p className="rounded-lg border border-cyan-500/20 bg-cyan-500/10 px-3 py-2 text-sm text-cyan-200">
+                The admin will receive a temporary password by email and can change it after signing in.
+              </p>
             </div>
           </div>
 

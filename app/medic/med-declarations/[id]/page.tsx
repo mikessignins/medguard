@@ -48,10 +48,13 @@ export default async function MedDecPage({ params, searchParams }: { params: Pro
 
   // Auto-tag as In Review when a medic opens a Pending medication declaration
   if (!raw.medic_review_status || raw.medic_review_status === 'Pending') {
-    await supabase
-      .from('medication_declarations')
-      .update({ medic_review_status: 'In Review' })
-      .eq('id', raw.id)
+    await supabase.rpc('review_medication_declaration', {
+      p_declaration_id: raw.id,
+      p_medic_review_status: 'In Review',
+      p_medic_comments: raw.medic_comments ?? '',
+      p_review_required: raw.review_required ?? false,
+      p_expected_status: raw.medic_review_status ?? 'Pending',
+    })
     raw.medic_review_status = 'In Review'
   }
 

@@ -120,6 +120,20 @@ function InfoRow({ label, value }: { label: string; value?: string | number | bo
   )
 }
 
+async function getResponseErrorMessage(res: Response, fallback: string): Promise<string> {
+  const contentType = res.headers.get('content-type') ?? ''
+
+  if (contentType.includes('application/json')) {
+    const data = await res.json().catch(() => null)
+    if (data && typeof data === 'object' && 'error' in data && typeof data.error === 'string') {
+      return data.error
+    }
+  }
+
+  const text = await res.text().catch(() => '')
+  return text || fallback
+}
+
 export default function SubmissionDetail({ submission, siteName, businessName, currentUserId, queueContext, backHref }: Props) {
   const router = useRouter()
 
@@ -200,7 +214,10 @@ export default function SubmissionDetail({ submission, siteName, businessName, c
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ note }),
       })
-      if (!res.ok) { setCommentError(await res.text()); return }
+      if (!res.ok) {
+        setCommentError(await getResponseErrorMessage(res, 'Comment could not be posted. Please try again.'))
+        return
+      }
       const newComment: MedicComment = await res.json()
       setComments(prev => [...prev, newComment])
       setCommentDraft('')
@@ -218,6 +235,14 @@ export default function SubmissionDetail({ submission, siteName, businessName, c
   const isPurged = !!submission.phi_purged_at
   const hasSnapshot = !!ws && typeof ws === 'object'
   const isDecisionLocked = status === 'Approved' || status === 'Requires Follow-up'
+  const areCommentsLocked = isPurged || status === 'Approved' || !!exportedAt
+  const commentLockMessage = isPurged
+    ? 'Medical information has been archived; new comments cannot be added.'
+    : status === 'Approved'
+      ? 'The PDF is locked to new comments now that it is approved.'
+      : exportedAt
+        ? 'The PDF is locked to new comments after export.'
+        : ''
 
   const conditionFlags = hasSnapshot && ws.conditionChecklist
     ? Object.entries(ws.conditionChecklist).filter(([, v]) => v?.answer === true)
@@ -673,7 +698,7 @@ export default function SubmissionDetail({ submission, siteName, businessName, c
                   </div>
                 )}
                 <p className="text-sm text-slate-500">
-                  Outcome locked. You can still add audit comments and re-export this record until it is purged.
+                  Outcome locked. You can still re-export this record until it is purged.
                 </p>
               </div>
             )}
@@ -688,7 +713,7 @@ export default function SubmissionDetail({ submission, siteName, businessName, c
                   </p>
                 </div>
                 <p className="text-sm text-slate-500">
-                  Outcome locked. You can still add audit comments and re-export this record until it is purged.
+                  Outcome locked. The PDF is locked to new comments now that it is approved.
                 </p>
               </div>
             )}
@@ -792,7 +817,14 @@ export default function SubmissionDetail({ submission, siteName, businessName, c
             )}
 
             {/* New comment composer */}
-            {!isPurged && (
+            {areCommentsLocked ? (
+              <div className="rounded-lg border border-slate-700/50 bg-slate-900/40 px-4 py-3">
+                <p className="text-sm font-medium text-slate-300">Comments locked</p>
+                <p className="mt-1 text-xs text-slate-500">
+                  {commentLockMessage}
+                </p>
+              </div>
+            ) : (
               <div className="space-y-2">
                 <p className="text-xs text-slate-500">
                   Notes are append-only once posted so the review history stays intact.

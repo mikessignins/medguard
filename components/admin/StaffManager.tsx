@@ -15,7 +15,6 @@ interface Props {
 interface ContractorForm {
   display_name: string
   email: string
-  password: string
   contract_end_date: string
   site_ids: string[]
 }
@@ -23,27 +22,15 @@ interface ContractorForm {
 interface ContractorAccountResult {
   display_name: string
   email: string
-  password: string
   contract_end_date: string | null
   site_names: string[]
-}
-
-interface PasswordResetForm {
-  password: string
-  confirmPassword: string
 }
 
 const EMPTY_CONTRACTOR: ContractorForm = {
   display_name: '',
   email: '',
-  password: '',
   contract_end_date: '',
   site_ids: [],
-}
-
-const EMPTY_PASSWORD_RESET: PasswordResetForm = {
-  password: '',
-  confirmPassword: '',
 }
 
 export default function StaffManager({
@@ -76,7 +63,6 @@ export default function StaffManager({
   const [contractorResult, setContractorResult] = useState<ContractorAccountResult | null>(null)
   const [showResetPasswordModal, setShowResetPasswordModal] = useState(false)
   const [resetPasswordMedic, setResetPasswordMedic] = useState<UserAccount | null>(null)
-  const [resetPasswordForm, setResetPasswordForm] = useState<PasswordResetForm>(EMPTY_PASSWORD_RESET)
   const [resetPasswordLoading, setResetPasswordLoading] = useState(false)
   const [resetPasswordError, setResetPasswordError] = useState('')
 
@@ -92,7 +78,6 @@ export default function StaffManager({
 
   function openResetPasswordModal(medic: UserAccount) {
     setResetPasswordMedic(medic)
-    setResetPasswordForm(EMPTY_PASSWORD_RESET)
     setResetPasswordError('')
     setShowResetPasswordModal(true)
     setStatusMessage('')
@@ -263,23 +248,12 @@ export default function StaffManager({
     setError('')
     setStatusMessage('')
 
-    if (resetPasswordForm.password !== resetPasswordForm.confirmPassword) {
-      setResetPasswordError('Passwords do not match.')
-      return
-    }
-
-    if (resetPasswordForm.password.length < 8) {
-      setResetPasswordError('Temporary password must be at least 8 characters.')
-      return
-    }
-
     setResetPasswordLoading(true)
 
     try {
       const response = await fetch(`/api/admin/medics/${resetPasswordMedic.id}/password`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password: resetPasswordForm.password }),
       })
 
       const payload = await response.json().catch(() => ({}))
@@ -300,10 +274,9 @@ export default function StaffManager({
 
       setShowResetPasswordModal(false)
       setStatusMessage(
-        `Temporary password reset for ${resetPasswordMedic.display_name}. Share the new password with them directly.`,
+        `Temporary password email sent to ${resetPasswordMedic.display_name}.`,
       )
       setResetPasswordMedic(null)
-      setResetPasswordForm(EMPTY_PASSWORD_RESET)
     } catch {
       setResetPasswordError('Could not reach the server. Please try again.')
     } finally {
@@ -324,7 +297,6 @@ export default function StaffManager({
         body: JSON.stringify({
           display_name: contractorForm.display_name.trim(),
           email: contractorForm.email.trim(),
-          password: contractorForm.password,
           site_ids: contractorForm.site_ids,
           contract_end_date: contractorForm.contract_end_date || null,
         }),
@@ -356,12 +328,11 @@ export default function StaffManager({
       setContractorLoading(false)
     }
 
-    setContractorSuccess(`Contractor medic account created for ${contractorForm.email}.`)
+    setContractorSuccess(`Contractor medic account created for ${contractorForm.email}. Temporary password email sent.`)
     setStatusMessage(`Contractor medic account created for ${contractorForm.display_name}.`)
     setContractorResult({
       display_name: contractorForm.display_name.trim(),
       email: contractorForm.email.trim(),
-      password: contractorForm.password,
       contract_end_date: contractorForm.contract_end_date || null,
       site_names: getSiteNames(contractorForm.site_ids),
     })
@@ -694,7 +665,7 @@ export default function StaffManager({
           <div className="bg-slate-900 border border-slate-700/50 rounded-2xl shadow-2xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto">
             <h3 className="text-lg font-semibold text-slate-100 mb-1">Add Contractor Medic</h3>
             <p className="text-sm text-slate-500 mb-5">
-              Create a medic account directly. Share the credentials with the contractor.
+              Create a medic account and email them a temporary password.
             </p>
 
             {contractorSuccess ? (
@@ -705,18 +676,12 @@ export default function StaffManager({
                 {contractorResult && (
                   <div className="rounded-xl border border-slate-700 bg-slate-950/60 p-4 space-y-3">
                     <div>
-                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Credentials to Share</p>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Temporary Password Email Sent</p>
                       <p className="mt-1 text-sm text-slate-300">{contractorResult.display_name}</p>
                     </div>
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <div>
-                        <p className="text-[11px] uppercase tracking-wide text-slate-500">Email</p>
-                        <p className="mt-1 text-sm font-medium text-slate-100 break-all">{contractorResult.email}</p>
-                      </div>
-                      <div>
-                        <p className="text-[11px] uppercase tracking-wide text-slate-500">Temporary Password</p>
-                        <p className="mt-1 text-sm font-medium text-slate-100 break-all">{contractorResult.password}</p>
-                      </div>
+                    <div>
+                      <p className="text-[11px] uppercase tracking-wide text-slate-500">Email</p>
+                      <p className="mt-1 text-sm font-medium text-slate-100 break-all">{contractorResult.email}</p>
                     </div>
                     <div>
                       <p className="text-[11px] uppercase tracking-wide text-slate-500">Assigned Sites</p>
@@ -782,18 +747,9 @@ export default function StaffManager({
                     placeholder="jane@example.com"
                   />
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-400 mb-1">Temporary Password *</label>
-                  <input
-                    type="password"
-                    value={contractorForm.password}
-                    onChange={e => setContractorForm(f => ({ ...f, password: e.target.value }))}
-                    required
-                    minLength={8}
-                    className={inputCls}
-                    placeholder="Min 8 characters"
-                  />
-                </div>
+                <p className="rounded-lg border border-cyan-500/20 bg-cyan-500/10 px-3 py-2 text-sm text-cyan-200">
+                  The contractor will receive a temporary password by email and can change it after signing in.
+                </p>
                 <div>
                   <label className="block text-sm font-medium text-slate-400 mb-1">
                     Contract End Date <span className="text-slate-600 font-normal">(optional)</span>
@@ -868,33 +824,10 @@ export default function StaffManager({
           <div className="bg-slate-900 border border-slate-700/50 rounded-2xl shadow-2xl w-full max-w-md p-6">
             <h3 className="text-lg font-semibold text-slate-100 mb-1">Reset Medic Password</h3>
             <p className="text-sm text-slate-500 mb-5">
-              Set a new temporary password for {resetPasswordMedic.display_name}. They can use it to sign in right away.
+              Send {resetPasswordMedic.display_name} a new temporary password by email.
             </p>
 
             <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-400 mb-1">Temporary Password *</label>
-                <input
-                  type="password"
-                  value={resetPasswordForm.password}
-                  onChange={e => setResetPasswordForm(form => ({ ...form, password: e.target.value }))}
-                  minLength={8}
-                  className={inputCls}
-                  placeholder="Min 8 characters"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-400 mb-1">Confirm Temporary Password *</label>
-                <input
-                  type="password"
-                  value={resetPasswordForm.confirmPassword}
-                  onChange={e => setResetPasswordForm(form => ({ ...form, confirmPassword: e.target.value }))}
-                  minLength={8}
-                  className={inputCls}
-                  placeholder="Re-enter password"
-                />
-              </div>
-
               {resetPasswordError && (
                 <div className="bg-red-500/10 border border-red-500/20 text-red-400 text-sm px-3 py-2 rounded-lg">
                   {resetPasswordError}
@@ -907,13 +840,12 @@ export default function StaffManager({
                   disabled={resetPasswordLoading}
                   className="flex-1 px-4 py-2.5 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg font-medium text-sm transition-colors disabled:opacity-50"
                 >
-                  {resetPasswordLoading ? 'Resetting...' : 'Reset Password'}
+                  {resetPasswordLoading ? 'Sending...' : 'Send Temporary Password'}
                 </button>
                 <button
                   onClick={() => {
                     setShowResetPasswordModal(false)
                     setResetPasswordMedic(null)
-                    setResetPasswordForm(EMPTY_PASSWORD_RESET)
                     setResetPasswordError('')
                   }}
                   disabled={resetPasswordLoading}

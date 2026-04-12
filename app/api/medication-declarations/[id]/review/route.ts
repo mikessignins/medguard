@@ -93,19 +93,13 @@ export async function PATCH(
     )
   }
 
-  const { data: updatedDeclaration, error } = await authClient
-    .from('medication_declarations')
-    .update({
-      medic_review_status,
-      medic_comments: medic_comments ?? '',
-      review_required,
-      medic_name: medicAccount.display_name,
-      medic_reviewed_at: new Date().toISOString(),
-    })
-    .eq('id', parsedId.value)
-    .eq('medic_review_status', current.medic_review_status)
-    .select('id')
-    .maybeSingle()
+  const { error } = await authClient.rpc('review_medication_declaration', {
+    p_declaration_id: parsedId.value,
+    p_medic_review_status: medic_review_status,
+    p_medic_comments: medic_comments ?? '',
+    p_review_required: review_required,
+    p_expected_status: current.medic_review_status,
+  })
 
   if (error) {
     await safeLogServerEvent({
@@ -123,13 +117,6 @@ export async function PATCH(
       context: { medic_review_status },
     })
     return logAndReturnInternalError('/api/medication-declarations/[id]/review', error)
-  }
-
-  if (!updatedDeclaration) {
-    return NextResponse.json(
-      { error: 'This medication review was updated by another medic. Please refresh and try again.' },
-      { status: 409 }
-    )
   }
 
   await safeLogServerEvent({

@@ -319,7 +319,7 @@ export async function getAuthenticatedSuperuser() {
   const { data: { user } } = await authClient.auth.getUser()
   if (!user) return null
   const { data: account } = await authClient
-    .from('user_accounts').select('role, display_name, business_id').eq('id', user.id).single()
+    .from('user_accounts').select('role, display_name, business_id, superuser_scope').eq('id', user.id).single()
   if (!account || account.role !== 'superuser') return null
   return { user, account, authClient }
 }

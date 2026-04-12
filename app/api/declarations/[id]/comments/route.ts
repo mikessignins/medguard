@@ -12,6 +12,9 @@ import { safeLogServerEvent } from '@/lib/app-event-log'
 
 export const runtime = 'nodejs'
 
+const APPROVED_COMMENT_LOCK_MESSAGE = 'The PDF is locked to new comments now that it is approved.'
+const EXPORTED_COMMENT_LOCK_MESSAGE = 'The PDF is locked to new comments after export.'
+
 type AuthenticatedMedic = {
   id: string
   name: string
@@ -64,11 +67,18 @@ async function getAuthenticatedMedic() {
 async function fetchScopedSubmission(authClient: AuthenticatedMedic['client'], submissionId: string) {
   const { data } = await authClient
     .from('submissions')
-    .select('id, business_id, site_id')
+    .select('id, business_id, site_id, status, exported_at')
     .eq('id', submissionId)
     .single()
 
   return data
+}
+
+function getCommentLockMessage(submission: Awaited<ReturnType<typeof fetchScopedSubmission>>) {
+  if (!submission) return null
+  if (submission.status === 'Approved') return APPROVED_COMMENT_LOCK_MESSAGE
+  if (submission.exported_at) return EXPORTED_COMMENT_LOCK_MESSAGE
+  return null
 }
 
 async function fetchComments(authClient: AuthenticatedMedic['client'], submissionId: string): Promise<MedicComment[]> {
@@ -119,6 +129,14 @@ export async function POST(
   const medic = await getAuthenticatedMedic()
   if (!medic) return new NextResponse('Unauthorized', { status: 401 })
 
+  const submission = await fetchScopedSubmission(medic.client, parsedId.value)
+  if (!submission) return new NextResponse('Submission not found', { status: 404 })
+  if (!hasMedicScopeAccess(medic, submission)) return new NextResponse('Forbidden', { status: 403 })
+  const commentLockMessage = getCommentLockMessage(submission)
+  if (commentLockMessage) {
+    return NextResponse.json({ error: commentLockMessage }, { status: 409 })
+  }
+
   const rateLimited = await enforceActionRateLimit({
     authClient: medic.client,
     action: 'emergency_comment_saved',
@@ -139,26 +157,12 @@ export async function POST(
 
   const { note, outcome } = parsed.data
 
-  const submission = await fetchScopedSubmission(medic.client, parsedId.value)
-  if (!submission) return new NextResponse('Submission not found', { status: 404 })
-  if (!hasMedicScopeAccess(medic, submission)) return new NextResponse('Forbidden', { status: 403 })
-
-  const now = new Date().toISOString()
-  const newComment = {
-    submission_id: parsedId.value,
-    business_id: submission.business_id,
-    site_id: submission.site_id,
-    medic_user_id: medic.id,
-    medic_name: medic.name,
-    note,
-    outcome: outcome ?? null,
-    created_at: now,
-    edited_at: null,
-  }
-
   const { data, error } = await medic.client
-    .from('submission_comments')
-    .insert(newComment)
+    .rpc('add_submission_comment', {
+      p_submission_id: parsedId.value,
+      p_note: note,
+      p_outcome: outcome ?? null,
+    })
     .select('id, medic_user_id, medic_name, note, outcome, created_at, edited_at')
     .single()
 

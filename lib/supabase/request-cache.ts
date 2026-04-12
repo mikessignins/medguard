@@ -54,7 +54,7 @@ export const getRequestUserAccount = cache(async (userId: string) => {
   const supabase = await getRequestClient()
   const { data } = await supabase
     .from('user_accounts')
-    .select('display_name, role, business_id, site_ids, contract_end_date, is_inactive')
+    .select('display_name, role, business_id, superuser_scope, site_ids, contract_end_date, is_inactive')
     .eq('id', userId)
     .single()
   await logRequestTiming('request_user_account', startedAt, {

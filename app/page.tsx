@@ -1,7 +1,23 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 
-export default async function Home() {
+export default async function Home({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>
+}) {
+  const resolvedSearchParams = await searchParams
+  const setupCode = typeof resolvedSearchParams.code === 'string' ? resolvedSearchParams.code : null
+  const setup = typeof resolvedSearchParams.setup === 'string' ? resolvedSearchParams.setup : null
+
+  if (setupCode) {
+    redirect(`/account?setup=password&code=${encodeURIComponent(setupCode)}`)
+  }
+
+  if (setup === 'password') {
+    redirect('/account?setup=password')
+  }
+
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
 

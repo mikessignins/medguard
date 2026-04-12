@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import PDFDocument from 'pdfkit'
 import { sanitize, streamToBuffer, F_REGULAR, F_BOLD, MARGIN, CONTENT_W, getAuthenticatedSuperuser } from '@/lib/pdf-helpers'
 import { logAndReturnInternalError, NO_STORE_HEADERS } from '@/lib/api-security'
+import { safeLogServerEvent } from '@/lib/app-event-log'
 
 export const runtime = 'nodejs'
 
@@ -28,7 +29,6 @@ export async function GET(request: NextRequest) {
     const to = (url.searchParams.get('to') || '').trim()
 
     if (!businessId) return new NextResponse('Missing business_id', { status: 400 })
-
     const { data: business } = await auth.authClient
       .from('businesses')
       .select('id, name')
@@ -48,7 +48,23 @@ export async function GET(request: NextRequest) {
         p_to: to ? `${to}T23:59:59Z` : null,
       },
     )
-    if (error) return logAndReturnInternalError('/api/superuser/reports/deidentified-pdf', error)
+    if (error) {
+      await safeLogServerEvent({
+        source: 'web_api',
+        action: 'superuser_deidentified_pdf_exported',
+        result: 'failure',
+        actorUserId: auth.user.id,
+        actorRole: auth.account.role,
+        actorName: auth.account.display_name,
+        businessId,
+        moduleKey: 'deidentified_reporting',
+        route: '/api/superuser/reports/deidentified-pdf',
+        targetId: businessId,
+        errorMessage: error.message,
+        context: { site_id: siteId, from, to },
+      })
+      return logAndReturnInternalError('/api/superuser/reports/deidentified-pdf', error)
+    }
 
     const rows = (metrics || []) as DeidentifiedConditionMetric[]
     const allSuppressed = rows.length > 0 && rows.every((row) => row.is_suppressed)
@@ -169,6 +185,20 @@ export async function GET(request: NextRequest) {
     doc.end()
     const buffer = await bufferPromise
     const filename = sanitize(`deidentified-report-${businessId}-${new Date().toISOString().slice(0, 10)}`) + '.pdf'
+
+    await safeLogServerEvent({
+      source: 'web_api',
+      action: 'superuser_deidentified_pdf_exported',
+      result: 'success',
+      actorUserId: auth.user.id,
+      actorRole: auth.account.role,
+      actorName: auth.account.display_name,
+      businessId,
+      moduleKey: 'deidentified_reporting',
+      route: '/api/superuser/reports/deidentified-pdf',
+      targetId: businessId,
+      context: { site_id: siteId, from, to },
+    })
 
     return new NextResponse(new Uint8Array(buffer), {
       status: 200,

@@ -8,6 +8,7 @@ import type { Business } from '@/lib/types'
 
 interface BusinessRow extends Business {
   adminCount: number
+  adminNames: string[]
   medicCount: number
   workerCount: number
   siteCount: number
@@ -99,7 +100,14 @@ export default function SuperuserDashboard({ businesses: initialBusinesses }: Pr
                       <p className="font-medium text-[var(--text-1)]">{biz.name}</p>
                       <p className="text-xs text-[var(--text-3)]">{biz.id}</p>
                     </td>
-                    <td className="px-4 py-3.5 text-center text-[var(--text-2)]">{biz.adminCount}</td>
+                    <td className="px-4 py-3.5 text-center text-[var(--text-2)]">
+                      <p>{biz.adminCount}</p>
+                      {biz.adminNames.length > 0 && (
+                        <p className="mt-0.5 max-w-[10rem] truncate text-xs text-[var(--text-3)]" title={biz.adminNames.join(', ')}>
+                          {biz.adminNames.join(', ')}
+                        </p>
+                      )}
+                    </td>
                     <td className="px-4 py-3.5 text-center text-[var(--text-2)]">{biz.medicCount}</td>
                     <td className="px-4 py-3.5 text-center text-[var(--text-2)]">{biz.workerCount}</td>
                     <td className="px-4 py-3.5 text-center text-[var(--text-2)]">{biz.siteCount}</td>

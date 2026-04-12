@@ -6,6 +6,7 @@ import type { Business } from '@/lib/types'
 
 interface BusinessRow extends Business {
   adminCount: number
+  adminNames: string[]
   medicCount: number
   workerCount: number
   siteCount: number
@@ -21,7 +22,7 @@ export default async function SuperuserPage() {
 
   const { data: account } = await supabase
     .from('user_accounts')
-    .select('role, business_id')
+    .select('role, business_id, superuser_scope')
     .eq('id', user.id)
     .single()
 
@@ -29,20 +30,14 @@ export default async function SuperuserPage() {
 
   const service = createServiceClient()
 
-  let businessesQuery = service
+  const { data: businesses } = await service
     .from('businesses')
     .select('*')
     .order('name')
 
-  if (account.business_id) {
-    businessesQuery = businessesQuery.eq('id', account.business_id)
-  }
-
-  const { data: businesses } = await businessesQuery
-
   const { data: allUsers } = await service
     .from('user_accounts')
-    .select('business_id, role')
+    .select('business_id, role, display_name')
 
   const { data: allSites } = await service
     .from('sites')
@@ -61,6 +56,7 @@ export default async function SuperuserPage() {
     return {
       ...biz,
       adminCount: bizUsers.filter(u => u.role === 'admin').length,
+      adminNames: bizUsers.filter(u => u.role === 'admin').map(u => u.display_name).filter(Boolean),
       medicCount: bizUsers.filter(u => u.role === 'medic').length,
       workerCount: bizUsers.filter(u => u.role === 'worker').length,
       siteCount: bizSites.length,

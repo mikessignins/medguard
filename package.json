@@ -11,6 +11,7 @@
     "start": "next start",
     "lint": "next lint",
     "security:check": "node scripts/security-check.mjs",
+    "security:rls": "node scripts/check-rls.mjs",
     "test": "vitest run",
     "test:watch": "vitest"
   },

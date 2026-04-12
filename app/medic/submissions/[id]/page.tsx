@@ -90,7 +90,12 @@ export default async function SubmissionPage({
 
   // Auto-tag as In Review when a medic opens a New submission
   if (raw.status === 'New') {
-    await supabase.from('submissions').update({ status: 'In Review' }).eq('id', raw.id)
+    await supabase.rpc('review_emergency_submission', {
+      p_submission_id: raw.id,
+      p_status: 'In Review',
+      p_note: null,
+      p_expected_version: raw.version ?? null,
+    })
     raw.status = 'In Review'
   }
 

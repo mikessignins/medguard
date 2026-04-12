@@ -41,6 +41,18 @@ function MetricCard({
   )
 }
 
+function isFailedCronResult(result: unknown) {
+  return !!result
+    && typeof result === 'object'
+    && 'ok' in result
+    && (result as { ok?: unknown }).ok === false
+}
+
+function getCronFailurePhase(result: unknown) {
+  if (!result || typeof result !== 'object' || !('phase' in result)) return null
+  return typeof result.phase === 'string' ? result.phase.replaceAll('_', ' ') : null
+}
+
 export default async function AdminPage() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -123,6 +135,8 @@ export default async function AdminPage() {
   const cronStale = cronLastRun
     ? now.getTime() - cronLastRun.getTime() > 25 * 60 * 60 * 1000
     : true
+  const cronFailed = isFailedCronResult(cronHealth?.last_result)
+  const cronFailurePhase = getCronFailurePhase(cronHealth?.last_result)
 
   return (
     <div>
@@ -135,11 +149,11 @@ export default async function AdminPage() {
 
       {/* Auto-purge cron health */}
       <div className={`mt-6 flex items-center gap-3 px-4 py-3 rounded-xl border text-sm ${
-        cronStale
+        cronStale || cronFailed
           ? 'bg-red-500/5 border-red-500/30 text-red-400'
           : 'bg-slate-800/40 border-slate-700/50 text-slate-500'
       }`}>
-        <span className={`w-2 h-2 rounded-full shrink-0 ${cronStale ? 'bg-red-400' : 'bg-emerald-400'}`} />
+        <span className={`w-2 h-2 rounded-full shrink-0 ${cronStale || cronFailed ? 'bg-red-400' : 'bg-emerald-400'}`} />
         {cronStale ? (
           <span>
             <span className="font-medium text-red-300">Auto-purge not running.</span>
@@ -147,6 +161,13 @@ export default async function AdminPage() {
               ? formatDistanceToNow(cronLastRun, { addSuffix: true })
               : 'never'
             }. Contact your system administrator.
+          </span>
+        ) : cronFailed ? (
+          <span>
+            <span className="font-medium text-red-300">Auto-purge needs attention.</span>
+            {' '}Last run {formatDistanceToNow(cronLastRun!, { addSuffix: true })}
+            {cronFailurePhase ? ` and failed during ${cronFailurePhase}.` : ' and reported a failure.'}
+            {' '}Contact your system administrator.
           </span>
         ) : (
           <span>

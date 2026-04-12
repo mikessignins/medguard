@@ -8,12 +8,35 @@ import {
   logApiError,
 } from '@/lib/api-security'
 
+async function recordPurgeCronHealth(
+  supabase: ReturnType<typeof createServiceClient>,
+  result: Record<string, unknown>,
+) {
+  await supabase.from('cron_health_log').upsert(
+    { cron_name: 'purge-exports', last_run_at: new Date().toISOString(), last_result: result },
+    { onConflict: 'cron_name' },
+  )
+}
+
+async function recordFailureAndReturn(
+  supabase: ReturnType<typeof createServiceClient>,
+  phase: string,
+  error: unknown,
+) {
+  await recordPurgeCronHealth(supabase, {
+    ok: false,
+    phase,
+    error: error && typeof error === 'object' && 'message' in error ? String(error.message) : 'Unexpected cron error',
+  })
+  return logAndReturnInternalError('/api/cron/purge-exports', error)
+}
+
 // Vercel invokes this daily with Authorization: Bearer <CRON_SECRET>
 export async function GET(request: Request) {
-  const cronSecret = getRequiredSecret('CRON_SECRET', 32)
+  const cronSecret = getRequiredSecret('CRON_SECRET')
   if (!cronSecret) {
     const errorId = createErrorId()
-    logApiError('/api/cron/purge-exports', errorId, 'CRON_SECRET is missing or too short')
+    logApiError('/api/cron/purge-exports', errorId, 'CRON_SECRET is missing')
     return internalServerError(errorId)
   }
 
@@ -35,7 +58,7 @@ export async function GET(request: Request) {
     .lt('exported_at', cutoff)
     .is('phi_purged_at', null)
 
-  if (subFetchError) return logAndReturnInternalError('/api/cron/purge-exports', subFetchError)
+  if (subFetchError) return recordFailureAndReturn(supabase, 'fetch_emergency_declarations', subFetchError)
 
   let subsPurged = 0
   if (subTargets && subTargets.length > 0) {
@@ -69,11 +92,11 @@ export async function GET(request: Request) {
       })
       .in('id', subTargets.map(r => r.id))
 
-    if (subUpdateError) return logAndReturnInternalError('/api/cron/purge-exports', subUpdateError)
+    if (subUpdateError) return recordFailureAndReturn(supabase, 'purge_emergency_declarations', subUpdateError)
 
     if (subAuditRows.length > 0) {
       const { error: subAuditError } = await supabase.from('purge_audit_log').insert(subAuditRows)
-      if (subAuditError) return logAndReturnInternalError('/api/cron/purge-exports', subAuditError)
+      if (subAuditError) return recordFailureAndReturn(supabase, 'audit_emergency_declarations', subAuditError)
     }
     subsPurged = subTargets.length
   }
@@ -85,7 +108,7 @@ export async function GET(request: Request) {
     .lt('exported_at', cutoff)
     .is('phi_purged_at', null)
 
-  if (medFetchError) return logAndReturnInternalError('/api/cron/purge-exports', medFetchError)
+  if (medFetchError) return recordFailureAndReturn(supabase, 'fetch_medication_declarations', medFetchError)
 
   let medsPurged = 0
   if (medTargets && medTargets.length > 0) {
@@ -120,11 +143,11 @@ export async function GET(request: Request) {
       })
       .in('id', medTargets.map(r => r.id))
 
-    if (medUpdateError) return logAndReturnInternalError('/api/cron/purge-exports', medUpdateError)
+    if (medUpdateError) return recordFailureAndReturn(supabase, 'purge_medication_declarations', medUpdateError)
 
     if (medAuditRows.length > 0) {
       const { error: medAuditError } = await supabase.from('purge_audit_log').insert(medAuditRows)
-      if (medAuditError) return logAndReturnInternalError('/api/cron/purge-exports', medAuditError)
+      if (medAuditError) return recordFailureAndReturn(supabase, 'audit_medication_declarations', medAuditError)
     }
     medsPurged = medTargets.length
   }
@@ -137,7 +160,7 @@ export async function GET(request: Request) {
     .lt('exported_at', cutoff)
     .is('phi_purged_at', null)
 
-  if (fatigueFetchError) return logAndReturnInternalError('/api/cron/purge-exports', fatigueFetchError)
+  if (fatigueFetchError) return recordFailureAndReturn(supabase, 'fetch_fatigue_assessments', fatigueFetchError)
 
   let fatiguePurged = 0
   if (fatigueTargets && fatigueTargets.length > 0) {
@@ -182,11 +205,11 @@ export async function GET(request: Request) {
       .eq('module_key', 'fatigue_assessment')
       .in('id', fatigueTargets.map((row) => row.id))
 
-    if (fatigueUpdateError) return logAndReturnInternalError('/api/cron/purge-exports', fatigueUpdateError)
+    if (fatigueUpdateError) return recordFailureAndReturn(supabase, 'purge_fatigue_assessments', fatigueUpdateError)
 
     if (fatigueAuditRows.length > 0) {
       const { error: fatigueAuditError } = await supabase.from('purge_audit_log').insert(fatigueAuditRows)
-      if (fatigueAuditError) return logAndReturnInternalError('/api/cron/purge-exports', fatigueAuditError)
+      if (fatigueAuditError) return recordFailureAndReturn(supabase, 'audit_fatigue_assessments', fatigueAuditError)
     }
     fatiguePurged = fatigueTargets.length
   }
@@ -199,7 +222,7 @@ export async function GET(request: Request) {
     .lt('exported_at', cutoff)
     .is('phi_purged_at', null)
 
-  if (psychosocialFetchError) return logAndReturnInternalError('/api/cron/purge-exports', psychosocialFetchError)
+  if (psychosocialFetchError) return recordFailureAndReturn(supabase, 'fetch_psychosocial_support_checkins', psychosocialFetchError)
 
   const psychosocialSupportTargets = (psychosocialTargets ?? []).filter(
     (entry) => {
@@ -252,16 +275,17 @@ export async function GET(request: Request) {
       .eq('module_key', 'psychosocial_health')
       .in('id', psychosocialSupportTargets.map((row) => row.id))
 
-    if (psychosocialUpdateError) return logAndReturnInternalError('/api/cron/purge-exports', psychosocialUpdateError)
+    if (psychosocialUpdateError) return recordFailureAndReturn(supabase, 'purge_psychosocial_support_checkins', psychosocialUpdateError)
 
     if (psychosocialAuditRows.length > 0) {
       const { error: psychosocialAuditError } = await supabase.from('purge_audit_log').insert(psychosocialAuditRows)
-      if (psychosocialAuditError) return logAndReturnInternalError('/api/cron/purge-exports', psychosocialAuditError)
+      if (psychosocialAuditError) return recordFailureAndReturn(supabase, 'audit_psychosocial_support_checkins', psychosocialAuditError)
     }
     psychosocialPurged = psychosocialSupportTargets.length
   }
 
   const result = {
+    ok: true,
     submissions_purged: subsPurged,
     med_declarations_purged: medsPurged,
     fatigue_assessments_purged: fatiguePurged,
@@ -269,10 +293,7 @@ export async function GET(request: Request) {
   }
 
   // Record successful run so admin dashboard can detect silent cron failures
-  await supabase.from('cron_health_log').upsert(
-    { cron_name: 'purge-exports', last_run_at: new Date().toISOString(), last_result: result },
-    { onConflict: 'cron_name' }
-  )
+  await recordPurgeCronHealth(supabase, result)
 
   return NextResponse.json(result)
 }

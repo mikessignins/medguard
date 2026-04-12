@@ -29,7 +29,7 @@ export default async function BusinessDetailPage({ params }: { params: Promise<{
 
   const { data: account } = await supabase
     .from('user_accounts')
-    .select('role, business_id')
+    .select('role, business_id, superuser_scope')
     .eq('id', user.id)
     .single()
 

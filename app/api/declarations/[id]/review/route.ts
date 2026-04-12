@@ -106,26 +106,12 @@ export async function PATCH(
     )
   }
 
-  // Build or preserve decision object
-  const decidedAt = new Date().toISOString()
-  const decision =
-    status === 'Approved' || status === 'Requires Follow-up'
-      ? {
-          outcome:           status,
-          note:              note?.trim() ?? null,
-          decided_by_user_id: userId,
-          decided_by_name:   medicAccount.display_name as string,
-          decided_at:        decidedAt,
-        }
-      : (current.decision ?? null)
-
-  const { data: updatedSubmission, error } = await authClient
-    .from('submissions')
-    .update({ status, decision })
-    .eq('id', parsedId.value)
-    .eq('version', current.version)
-    .select('id')
-    .maybeSingle()
+  const { error } = await authClient.rpc('review_emergency_submission', {
+    p_submission_id: parsedId.value,
+    p_status: status,
+    p_note: note ?? null,
+    p_expected_version: current.version,
+  })
 
   if (error) {
     await safeLogServerEvent({
@@ -143,16 +129,6 @@ export async function PATCH(
       context: { status },
     })
     return logAndReturnInternalError('/api/declarations/[id]/review', error)
-  }
-
-  if (!updatedSubmission) {
-    return NextResponse.json(
-      {
-        error: 'This form was updated by another user. Please refresh and try again.',
-        current_version: current.version,
-      },
-      { status: 409 }
-    )
   }
 
   await safeLogServerEvent({

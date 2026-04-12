@@ -21,6 +21,30 @@ function walk(dir) {
 
 const files = walk(join(root, 'app')).concat(walk(join(root, 'lib')))
 
+const allowedServiceClientFiles = new Set([
+  'app/admin/page.tsx',
+  'app/admin/purge-log/page.tsx',
+  'app/api/admin/contractor-medics/route.ts',
+  'app/api/admin/medics/[id]/password/route.ts',
+  'app/api/businesses/[id]/logo/route.ts',
+  'app/api/cron/purge-exports/route.ts',
+  'app/api/medic-signup/route.ts',
+  'app/api/superuser/businesses/route.ts',
+  'app/api/superuser/businesses/[id]/admins/route.ts',
+  'app/api/superuser/feedback/unread-count/route.ts',
+  'app/superuser/business/[id]/page.tsx',
+  'app/superuser/feedback/page.tsx',
+  'app/superuser/page.tsx',
+  'app/superuser/purge-log/page.tsx',
+  'app/superuser/reports/page.tsx',
+  'lib/admin-medics.ts',
+  'lib/app-event-log.ts',
+  'lib/billing.ts',
+  'lib/contractor-expiry-notifications.ts',
+  'lib/supabase/service.ts',
+  'lib/worker-account-names.ts',
+])
+
 for (const file of files) {
   const text = readFileSync(file, 'utf8')
   const rel = file.slice(root.length + 1)
@@ -35,6 +59,10 @@ for (const file of files) {
   ]
   if (!allowedServiceRoleFiles.includes(rel) && /SUPABASE_SERVICE_ROLE_KEY|createClient\(\s*process\.env\.NEXT_PUBLIC_SUPABASE_URL/.test(text)) {
     failures.push(`${rel}: use lib/supabase/service.ts for service-role access`)
+  }
+
+  if (!allowedServiceClientFiles.has(rel) && /createServiceClient\(\)/.test(text)) {
+    failures.push(`${rel}: createServiceClient() must be reviewed and added to the service-role allowlist`)
   }
 
   if (/app\/api\/.*\/route\.(ts|tsx)$/.test(rel) && /export async function (POST|PATCH|DELETE)\b/.test(text)) {

@@ -6,6 +6,8 @@ import { logAndReturnInternalError, requireSameOrigin } from '@/lib/api-security
 import { safeLogServerEvent } from '@/lib/app-event-log'
 import { enforceActionRateLimit } from '@/lib/rate-limit'
 import { requireAuthenticatedUser, requireRole } from '@/lib/route-access'
+import { getLoginUrl } from '@/lib/app-url'
+import { generateTemporaryPassword, sendTemporaryPasswordEmail } from '@/lib/account-credentials-email'
 import { z } from 'zod'
 
 export const runtime = 'nodejs'
@@ -13,18 +15,33 @@ export const runtime = 'nodejs'
 const contractorMedicSchema = z.object({
   display_name: z.string().trim().min(1, 'Full name is required').max(120, 'Full name is too long'),
   email: z.string().trim().email('A valid email address is required'),
-  password: z.string()
-    .min(12, 'Temporary password must be at least 12 characters')
-    .regex(/[A-Z]/, 'Temporary password must include an uppercase letter')
-    .regex(/[a-z]/, 'Temporary password must include a lowercase letter')
-    .regex(/[0-9]/, 'Temporary password must include a number')
-    .regex(/[^A-Za-z0-9]/, 'Temporary password must include a symbol'),
   site_ids: z.array(z.string().trim().min(1)).default([]),
   contract_end_date: z.union([
     z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Contract end date must be in YYYY-MM-DD format'),
     z.null(),
   ]).optional().default(null),
 })
+
+async function findAuthUserByEmail(
+  service: ReturnType<typeof createServiceClient>,
+  email: string,
+) {
+  const normalizedEmail = email.trim().toLowerCase()
+  let page = 1
+
+  while (page <= 20) {
+    const { data, error } = await service.auth.admin.listUsers({ page, perPage: 1000 })
+    if (error) throw error
+
+    const match = data.users.find((user) => user.email?.toLowerCase() === normalizedEmail)
+    if (match) return match
+
+    if (data.users.length < 1000) return null
+    page += 1
+  }
+
+  return null
+}
 
 export async function POST(req: Request) {
   const csrfError = requireSameOrigin(req)
@@ -83,20 +100,102 @@ export async function POST(req: Request) {
   }
 
   const service = createServiceClient()
+  const temporaryPassword = generateTemporaryPassword()
+  const normalizedEmail = body.email.toLowerCase()
+
+  const { data: existingAccounts, error: existingAccountsError } = await service
+    .from('user_accounts')
+    .select('id, business_id, role')
+    .eq('email', normalizedEmail)
+
+  if (existingAccountsError) {
+    return logAndReturnInternalError('/api/admin/contractor-medics', existingAccountsError)
+  }
+
+  if ((existingAccounts ?? []).length > 0) {
+    return NextResponse.json(
+      { error: 'A MedGuard account already exists for this email address.' },
+      { status: 409 },
+    )
+  }
+
+  let medicUserId: string | null = null
+  let createdAuthUser = false
 
   const { data: createdUser, error: createUserError } = await service.auth.admin.createUser({
-    email: body.email,
-    password: body.password,
+    email: normalizedEmail,
+    password: temporaryPassword,
     email_confirm: true,
     user_metadata: {
       display_name: body.display_name,
       role: 'medic',
       business_id: account!.business_id,
-      temporary_password_required: true,
     },
   })
 
   if (createUserError || !createdUser.user) {
+    if (createUserError?.message?.toLowerCase().includes('already been registered')) {
+      try {
+        const existingAuthUser = await findAuthUserByEmail(service, normalizedEmail)
+
+        if (existingAuthUser) {
+          const { error: updateUserError } = await service.auth.admin.updateUserById(existingAuthUser.id, {
+            password: temporaryPassword,
+            user_metadata: {
+              ...existingAuthUser.user_metadata,
+              display_name: body.display_name,
+              role: 'medic',
+              business_id: account!.business_id,
+            },
+          })
+
+          if (updateUserError) throw updateUserError
+          medicUserId = existingAuthUser.id
+        }
+      } catch (reuseError) {
+        await safeLogServerEvent({
+          source: 'web_api',
+          action: 'admin_contractor_medic_created',
+          result: 'failure',
+          actorUserId: userId,
+          actorRole: account!.role,
+          actorName: account!.display_name,
+          businessId: account!.business_id,
+          route: '/api/admin/contractor-medics',
+          errorMessage: reuseError instanceof Error ? reuseError.message : 'Failed to reuse existing auth user',
+          context: { target_email: normalizedEmail, site_count: normalizedSiteIds.length },
+        })
+        return NextResponse.json(
+          { error: 'Failed to repair existing medic sign-in account.' },
+          { status: 400 },
+        )
+      }
+    }
+
+    if (!medicUserId) {
+      await safeLogServerEvent({
+        source: 'web_api',
+        action: 'admin_contractor_medic_created',
+        result: 'failure',
+        actorUserId: userId,
+        actorRole: account!.role,
+        actorName: account!.display_name,
+        businessId: account!.business_id,
+        route: '/api/admin/contractor-medics',
+        errorMessage: createUserError?.message ?? 'Missing created user',
+        context: { target_email: normalizedEmail, site_count: normalizedSiteIds.length },
+      })
+      return NextResponse.json(
+        { error: 'Failed to create medic sign-in account.' },
+        { status: 400 },
+      )
+    }
+  } else {
+    medicUserId = createdUser.user.id
+    createdAuthUser = true
+  }
+
+  if (!medicUserId) {
     await safeLogServerEvent({
       source: 'web_api',
       action: 'admin_contractor_medic_created',
@@ -106,8 +205,8 @@ export async function POST(req: Request) {
       actorName: account!.display_name,
       businessId: account!.business_id,
       route: '/api/admin/contractor-medics',
-      errorMessage: createUserError?.message ?? 'Missing created user',
-      context: { target_email: body.email, site_count: normalizedSiteIds.length },
+      errorMessage: 'Missing medic user id',
+      context: { target_email: normalizedEmail, site_count: normalizedSiteIds.length },
     })
     return NextResponse.json(
       { error: 'Failed to create medic sign-in account.' },
@@ -115,7 +214,6 @@ export async function POST(req: Request) {
     )
   }
 
-  const medicUserId = createdUser.user.id
   const { error: userIndexError } = await service
     .from('user_index')
     .upsert({
@@ -124,7 +222,7 @@ export async function POST(req: Request) {
     }, { onConflict: 'user_id' })
 
   if (userIndexError) {
-    await service.auth.admin.deleteUser(medicUserId).catch(() => undefined)
+    if (createdAuthUser) await service.auth.admin.deleteUser(medicUserId).catch(() => undefined)
     await safeLogServerEvent({
       source: 'web_api',
       action: 'admin_contractor_medic_created',
@@ -146,14 +244,14 @@ export async function POST(req: Request) {
       id: medicUserId,
       business_id: account!.business_id,
       display_name: body.display_name,
-      email: body.email,
+      email: normalizedEmail,
       role: 'medic',
       site_ids: normalizedSiteIds,
       contract_end_date: body.contract_end_date,
     })
 
   if (accountInsertError) {
-    await service.auth.admin.deleteUser(medicUserId).catch(() => undefined)
+    if (createdAuthUser) await service.auth.admin.deleteUser(medicUserId).catch(() => undefined)
     try {
       await service.from('user_index').delete().eq('user_id', medicUserId)
     } catch {}
@@ -172,6 +270,23 @@ export async function POST(req: Request) {
     return logAndReturnInternalError('/api/admin/contractor-medics', accountInsertError)
   }
 
+  try {
+    await sendTemporaryPasswordEmail({
+      to: normalizedEmail,
+      displayName: body.display_name,
+      roleLabel: 'medic',
+      temporaryPassword,
+      loginUrl: getLoginUrl(req.url),
+    })
+  } catch (emailError) {
+    if (createdAuthUser) await service.auth.admin.deleteUser(medicUserId).catch(() => undefined)
+    try {
+      await service.from('user_index').delete().eq('user_id', medicUserId)
+      await service.from('user_accounts').delete().eq('id', medicUserId)
+    } catch {}
+    return logAndReturnInternalError('/api/admin/contractor-medics', emailError)
+  }
+
   await safeLogServerEvent({
     source: 'web_api',
     action: 'admin_contractor_medic_created',
@@ -183,9 +298,10 @@ export async function POST(req: Request) {
     route: '/api/admin/contractor-medics',
     targetId: medicUserId,
     context: {
-      target_email: body.email,
+      target_email: normalizedEmail,
       site_count: normalizedSiteIds.length,
       contract_end_date: body.contract_end_date,
+      reused_auth_user: !createdAuthUser,
     },
   })
 
@@ -194,7 +310,7 @@ export async function POST(req: Request) {
     user: {
       id: medicUserId,
       display_name: body.display_name,
-      email: body.email,
+      email: normalizedEmail,
       role: 'medic',
       site_ids: normalizedSiteIds,
       contract_end_date: body.contract_end_date,

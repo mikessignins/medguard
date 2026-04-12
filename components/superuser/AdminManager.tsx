@@ -12,21 +12,65 @@ interface Props {
 export default function AdminManager({ businessId, initialAdmins }: Props) {
   const supabase = createClient()
   const [admins, setAdmins] = useState(initialAdmins)
+  const [showAddForm, setShowAddForm] = useState(false)
+  const [newAdminName, setNewAdminName] = useState('')
+  const [newAdminEmail, setNewAdminEmail] = useState('')
   const [editingId, setEditingId] = useState<string | null>(null)
   const [draftName, setDraftName] = useState('')
   const [loadingId, setLoadingId] = useState<string | null>(null)
   const [error, setError] = useState('')
+  const [statusMessage, setStatusMessage] = useState('')
 
   function beginEdit(admin: Pick<UserAccount, 'id' | 'display_name' | 'email'>) {
     setEditingId(admin.id)
     setDraftName(admin.display_name)
     setError('')
+    setStatusMessage('')
   }
 
   function cancelEdit() {
     setEditingId(null)
     setDraftName('')
     setError('')
+  }
+
+  async function addAdmin(e: React.FormEvent) {
+    e.preventDefault()
+    const displayName = newAdminName.trim()
+    const email = newAdminEmail.trim()
+
+    if (!displayName || !email) {
+      setError('Enter the admin name and email.')
+      return
+    }
+
+    setLoadingId('new')
+    setError('')
+    setStatusMessage('')
+
+    try {
+      const response = await fetch(`/api/superuser/businesses/${businessId}/admins`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ display_name: displayName, email }),
+      })
+
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok) {
+        setError(payload.error || 'Failed to create admin.')
+        return
+      }
+
+      setAdmins(prev => [...prev, payload.admin])
+      setNewAdminName('')
+      setNewAdminEmail('')
+      setShowAddForm(false)
+      setStatusMessage(`Admin temporary password email sent to ${email}.`)
+    } catch {
+      setError('Could not reach the server. Please try again.')
+    } finally {
+      setLoadingId(null)
+    }
   }
 
   async function saveEdit(adminId: string) {
@@ -38,6 +82,7 @@ export default function AdminManager({ businessId, initialAdmins }: Props) {
 
     setLoadingId(adminId)
     setError('')
+    setStatusMessage('')
 
     const { error: rpcError } = await supabase.rpc('update_business_admin_display_name', {
       p_business_id: businessId,
@@ -53,6 +98,7 @@ export default function AdminManager({ businessId, initialAdmins }: Props) {
     }
 
     setAdmins(prev => prev.map(admin => admin.id === adminId ? { ...admin, display_name: nextName } : admin))
+    setStatusMessage('Admin display name updated.')
     cancelEdit()
   }
 
@@ -64,6 +110,7 @@ export default function AdminManager({ businessId, initialAdmins }: Props) {
 
     setLoadingId(admin.id)
     setError('')
+    setStatusMessage('')
 
     const { error: rpcError } = await supabase.rpc('delete_business_admin', {
       p_business_id: businessId,
@@ -78,6 +125,7 @@ export default function AdminManager({ businessId, initialAdmins }: Props) {
     }
 
     setAdmins(prev => prev.filter(item => item.id !== admin.id))
+    setStatusMessage(`${admin.display_name} was deleted.`)
     if (editingId === admin.id) cancelEdit()
   }
 
@@ -87,12 +135,70 @@ export default function AdminManager({ businessId, initialAdmins }: Props) {
         <h2 className="text-lg font-semibold text-[var(--text-1)]">
           Admins <span className="text-sm font-normal text-[var(--text-3)]">({admins.length})</span>
         </h2>
+        <button
+          onClick={() => {
+            setShowAddForm(prev => !prev)
+            setError('')
+            setStatusMessage('')
+          }}
+          className="rounded-lg bg-cyan-600 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-cyan-500"
+        >
+          {showAddForm ? 'Cancel' : '+ Add Admin'}
+        </button>
       </div>
 
       {error && (
         <div className="mb-3 rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-400">
           {error}
         </div>
+      )}
+
+      {statusMessage && (
+        <div className="mb-3 rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-400">
+          {statusMessage}
+        </div>
+      )}
+
+      {showAddForm && (
+        <form onSubmit={addAdmin} className="mb-4 rounded-xl border border-[var(--border-md)] bg-[var(--bg-card)] p-4">
+          <p className="mb-3 text-sm text-[var(--text-2)]">
+            Create another business admin and email them a temporary password.
+          </p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-[var(--text-3)]">
+                Full name
+              </label>
+              <input
+                value={newAdminName}
+                onChange={e => setNewAdminName(e.target.value)}
+                className="w-full rounded-lg border border-[var(--border-md)] bg-[var(--bg-surface)] px-3 py-2 text-sm text-[var(--text-1)] outline-none focus:border-cyan-500"
+                placeholder="Jane Smith"
+                required
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-[var(--text-3)]">
+                Email
+              </label>
+              <input
+                type="email"
+                value={newAdminEmail}
+                onChange={e => setNewAdminEmail(e.target.value)}
+                className="w-full rounded-lg border border-[var(--border-md)] bg-[var(--bg-surface)] px-3 py-2 text-sm text-[var(--text-1)] outline-none focus:border-cyan-500"
+                placeholder="jane@example.com"
+                required
+              />
+            </div>
+          </div>
+          <button
+            type="submit"
+            disabled={loadingId === 'new'}
+            className="mt-3 rounded-lg bg-cyan-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-cyan-500 disabled:opacity-50"
+          >
+            {loadingId === 'new' ? 'Sending...' : 'Send Temporary Password'}
+          </button>
+        </form>
       )}
 
       <div className="overflow-hidden rounded-xl border border-[var(--border-md)] bg-[var(--bg-card)]">

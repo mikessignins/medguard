@@ -65,27 +65,7 @@ export default async function MedicPsychosocialPage({
 
   if (raw.status === 'awaiting_medic_review' || raw.status === 'review_recommended') {
     const reviewStartedAt = new Date().toISOString()
-    await supabase
-      .from('module_submissions')
-      .update({
-        status: 'in_medic_review',
-        reviewed_at: reviewStartedAt,
-        reviewed_by: user.id,
-        review_payload: {
-          ...(typeof raw.review_payload === 'object' && raw.review_payload ? raw.review_payload : {}),
-          reviewStartedAt,
-          reviewedByUserId: user.id,
-          reviewedByName: account.display_name,
-          caseOwnerUserId: user.id,
-          caseOwnerName: account.display_name,
-        },
-      })
-      .eq('id', raw.id)
-      .in('status', ['awaiting_medic_review', 'review_recommended'])
-    raw.status = 'in_medic_review'
-    raw.reviewed_at = reviewStartedAt
-    raw.reviewed_by = user.id
-    raw.review_payload = {
+    const reviewPayload = {
       ...(typeof raw.review_payload === 'object' && raw.review_payload ? raw.review_payload : {}),
       reviewStartedAt,
       reviewedByUserId: user.id,
@@ -93,6 +73,18 @@ export default async function MedicPsychosocialPage({
       caseOwnerUserId: user.id,
       caseOwnerName: account.display_name,
     }
+    await supabase.rpc('review_module_submission', {
+      p_submission_id: raw.id,
+      p_module_key: 'psychosocial_health',
+      p_next_status: 'in_medic_review',
+      p_review_payload: reviewPayload,
+      p_expected_status: raw.status,
+      p_expected_reviewed_by: null,
+    })
+    raw.status = 'in_medic_review'
+    raw.reviewed_at = reviewStartedAt
+    raw.reviewed_by = user.id
+    raw.review_payload = reviewPayload
   }
 
   const [{ data: site }, { data: business }] = await Promise.all([

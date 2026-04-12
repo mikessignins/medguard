@@ -13,7 +13,7 @@ export default async function PendingPage() {
         <div className="text-5xl mb-4">&#9203;</div>
         <h1 className="text-2xl font-bold text-slate-800 mb-2">Awaiting Approval</h1>
         <p className="text-slate-600 mb-6">
-          Your account is pending approval from a site administrator. You will be notified once access has been granted.
+          Your account is pending approval from a business admin. You can sign in again after they approve your access.
         </p>
         <SignOutButton />
       </div>

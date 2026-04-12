@@ -115,25 +115,14 @@ export async function PATCH(
     reviewedByName: medicAccount.display_name,
   }
 
-  let updateQuery = authClient
-    .from('module_submissions')
-    .update({
-      status: 'resolved',
-      review_payload: reviewPayload,
-      reviewed_at: now,
-      reviewed_by: userId,
-    })
-    .eq('id', parsedId.value)
-    .eq('module_key', 'fatigue_assessment')
-    .eq('status', current.status)
-
-  updateQuery = current.reviewed_by
-    ? updateQuery.eq('reviewed_by', current.reviewed_by)
-    : updateQuery.is('reviewed_by', null)
-
-  const { data: updatedAssessment, error } = await updateQuery
-    .select('id')
-    .maybeSingle()
+  const { error } = await authClient.rpc('review_module_submission', {
+    p_submission_id: parsedId.value,
+    p_module_key: 'fatigue_assessment',
+    p_next_status: 'resolved',
+    p_review_payload: reviewPayload,
+    p_expected_status: current.status,
+    p_expected_reviewed_by: current.reviewed_by ? String(current.reviewed_by) : null,
+  })
 
   if (error) {
     await safeLogServerEvent({
@@ -151,13 +140,6 @@ export async function PATCH(
       context: { fit_for_work_decision: body.fitForWorkDecision },
     })
     return logAndReturnInternalError('/api/fatigue-assessments/[id]/review', error)
-  }
-
-  if (!updatedAssessment) {
-    return NextResponse.json(
-      { error: 'This fatigue review was updated by another medic. Please refresh and try again.' },
-      { status: 409 },
-    )
   }
 
   await safeLogServerEvent({

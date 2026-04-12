@@ -5,6 +5,7 @@ import {
   requireMedicScope,
   requireOneOfRoles,
   requireRole,
+  requireScopedBusinessAccess,
 } from '../route-access'
 
 describe('requireAuthenticatedUser', () => {
@@ -101,6 +102,22 @@ describe('requireMedicScope', () => {
       status: 403,
     })
     expect(requireMedicScope(account, null)).toEqual({
+      error: 'Forbidden',
+      status: 403,
+    })
+  })
+})
+
+describe('requireScopedBusinessAccess', () => {
+  it('allows superusers to access any business', () => {
+    expect(requireScopedBusinessAccess({
+      role: 'superuser',
+      business_id: null,
+    }, 'biz-2')).toBeNull()
+  })
+
+  it('blocks non-superuser roles', () => {
+    expect(requireScopedBusinessAccess({ role: 'admin', business_id: 'biz-1' }, 'biz-1')).toEqual({
       error: 'Forbidden',
       status: 403,
     })

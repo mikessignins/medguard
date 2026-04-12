@@ -8,10 +8,10 @@ import {
 import { sendContractorExpiryWarnings } from '@/lib/contractor-expiry-notifications'
 
 export async function GET(request: Request) {
-  const cronSecret = getRequiredSecret('CRON_SECRET', 32)
+  const cronSecret = getRequiredSecret('CRON_SECRET')
   if (!cronSecret) {
     const errorId = createErrorId()
-    logApiError('/api/cron/contractor-expiry', errorId, 'CRON_SECRET is missing or too short')
+    logApiError('/api/cron/contractor-expiry', errorId, 'CRON_SECRET is missing')
     return internalServerError(errorId)
   }
 
