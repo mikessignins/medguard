@@ -121,7 +121,7 @@ export default function AdminManager({ businessId, initialAdmins }: Props) {
 
   async function deleteAdmin(admin: Pick<UserAccount, 'id' | 'display_name' | 'email'>) {
     const confirmed = window.confirm(
-      `Delete admin ${admin.display_name}? This removes their MedPass admin access permanently.`
+      `Delete admin ${admin.display_name}? This removes their MedGuard admin access permanently.`
     )
     if (!confirmed) return
 

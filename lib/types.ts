@@ -80,6 +80,9 @@ export interface MedicationDeclaration {
   script_uploads: ScriptUpload[]
   exported_at: string | null
   exported_by_name?: string | null
+  export_confirmed_at?: string | null
+  export_confirmed_by?: string | null
+  export_confirmed_by_name?: string | null
   phi_purged_at: string | null
   is_test?: boolean
 }
@@ -213,6 +216,9 @@ export interface Submission {
   decision: Decision | null
   exported_at: string | null
   exported_by_name?: string | null
+  export_confirmed_at?: string | null
+  export_confirmed_by?: string | null
+  export_confirmed_by_name?: string | null
   phi_purged_at: string | null
   comments: MedicComment[]
   version?: number
@@ -328,6 +334,9 @@ export interface FatigueAssessment {
   reviewed_by: string | null
   exported_at?: string | null
   exported_by_name?: string | null
+  export_confirmed_at?: string | null
+  export_confirmed_by?: string | null
+  export_confirmed_by_name?: string | null
   phi_purged_at?: string | null
   is_test?: boolean | null
 }
@@ -532,6 +541,9 @@ export interface PsychosocialAssessment {
   reviewed_by: string | null
   exported_at?: string | null
   exported_by_name?: string | null
+  export_confirmed_at?: string | null
+  export_confirmed_by?: string | null
+  export_confirmed_by_name?: string | null
   phi_purged_at?: string | null
   is_test?: boolean | null
 }

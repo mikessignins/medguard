@@ -741,7 +741,7 @@ export default function SubmissionDetail({ submission, siteName, businessName, c
                   </div>
                 )}
                 <p className="text-sm text-slate-500">
-                  Outcome locked. You can still re-export this record until it is purged.
+                  Outcome locked. After exporting, confirm from the Exports page once the PDF is saved so MedGuard can remove stored health information.
                 </p>
               </div>
             )}
@@ -792,7 +792,7 @@ export default function SubmissionDetail({ submission, siteName, businessName, c
                     <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                     </svg>
-                    Exported {fmtDateTime(exportedAt)}. Available to re-export until it is purged.
+                    Exported {fmtDateTime(exportedAt)}. Confirm the saved PDF from the Exports page to remove stored health information.
                   </p>
                 )}
               </div>

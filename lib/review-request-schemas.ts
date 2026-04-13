@@ -76,6 +76,19 @@ export const fatiguePurgeRequestSchema = bulkIdsSchema
 export const medicationPurgeRequestSchema = bulkIdsSchema
 export const psychosocialPurgeRequestSchema = bulkIdsSchema
 
+export const exportConfirmationRequestSchema = z.object({
+  formType: z.enum([
+    'emergency_declaration',
+    'medication_declaration',
+    'fatigue_assessment',
+    'psychosocial_health',
+  ]),
+  id: z.string().min(1, 'Record id is required.'),
+  confirmed: z.literal(true, {
+    errorMap: () => ({ message: 'Export confirmation is required before health information can be removed.' }),
+  }),
+})
+
 export const emergencyReviewRequestSchema = z.object({
   status: z.enum(REVIEWABLE_SUBMISSION_STATUSES),
   note: nullableTrimmedString().optional(),

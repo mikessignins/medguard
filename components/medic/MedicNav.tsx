@@ -138,7 +138,7 @@ export default function MedicNav({
           </svg>
           <div className="min-w-0 flex-1">
             <p>Exports</p>
-            <p className="truncate text-[11px] font-normal opacity-75">Reviewed forms and retention</p>
+            <p className="truncate text-[11px] font-normal opacity-75">Review exports and PHI removal</p>
           </div>
         </Link>
       </div>

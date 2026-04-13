@@ -66,14 +66,14 @@ export async function POST(request: NextRequest) {
 
   const { data: assessments } = await authClient
     .from('module_submissions')
-    .select('id, business_id, site_id, payload, review_payload, status, exported_at, exported_by_name, reviewed_at, is_test')
+    .select('id, business_id, site_id, payload, review_payload, status, exported_at, export_confirmed_at, export_confirmed_by_name, exported_by_name, reviewed_at, is_test')
     .eq('module_key', 'fatigue_assessment')
     .in('id', ids)
 
   const purgeError = validatePurgeSelection(ids, assessments ?? [], {
     testFinalStatuses: ['resolved'],
     notFoundError: 'One or more fatigue assessments were not found.',
-    blockedError: 'All production fatigue assessments must be exported to PDF before purging. Reviewed test assessments can be purged without export.',
+    blockedError: 'All production fatigue assessments must be exported and confirmed before health information can be purged. Reviewed test assessments can be purged without export.',
   })
   if (purgeError) return NextResponse.json({ error: purgeError.error }, { status: purgeError.status })
 
@@ -110,6 +110,8 @@ export async function POST(request: NextRequest) {
       form_type: 'fatigue_assessment',
       exported_at: entry.exported_at ?? null,
       exported_by_name: entry.exported_by_name ?? null,
+      export_confirmed_at: entry.export_confirmed_at ?? null,
+      export_confirmed_by_name: entry.export_confirmed_by_name ?? null,
       approved_by_name: (reviewPayload?.reviewedByName as string) ?? null,
       approved_at: entry.reviewed_at ?? null,
     }

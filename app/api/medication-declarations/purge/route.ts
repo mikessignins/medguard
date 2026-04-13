@@ -63,10 +63,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ purged: 0 })
   }
 
-  // Fetch med decs before wiping. Production records must be exported; reviewed test records can be purged without export.
+  // Fetch med decs before wiping. Production records must be exported and confirmed; reviewed test records can be purged without export.
   const { data: medDecs } = await authClient
     .from('medication_declarations')
-    .select('id, business_id, site_id, site_name, worker_name, worker_dob, medic_review_status, exported_at, exported_by_name, medic_name, medic_reviewed_at, is_test')
+    .select('id, business_id, site_id, site_name, worker_name, worker_dob, medic_review_status, exported_at, export_confirmed_at, export_confirmed_by_name, exported_by_name, medic_name, medic_reviewed_at, is_test')
     .in('id', ids)
 
   const purgeError = validatePurgeSelection(
@@ -74,12 +74,14 @@ export async function POST(request: NextRequest) {
     (medDecs ?? []).map((declaration) => ({
       id: declaration.id,
       exported_at: declaration.exported_at,
+      export_confirmed_at: declaration.export_confirmed_at,
       is_test: declaration.is_test,
       status: declaration.medic_review_status,
     })),
     {
       testFinalStatuses: ['Normal Duties', 'Restricted Duties', 'Unfit for Work'],
       notFoundError: 'One or more declarations were not found.',
+      blockedError: 'All production medication declarations must be exported and confirmed before health information can be purged. Reviewed test records can be purged without export.',
     },
   )
   if (purgeError) return NextResponse.json({ error: purgeError.error }, { status: purgeError.status })
@@ -104,6 +106,8 @@ export async function POST(request: NextRequest) {
     form_type:        'medication_declaration',
     exported_at:      m.exported_at ?? null,
     exported_by_name: m.exported_by_name ?? null,
+    export_confirmed_at: m.export_confirmed_at ?? null,
+    export_confirmed_by_name: m.export_confirmed_by_name ?? null,
     approved_by_name: m.medic_name ?? null,
     approved_at:      m.medic_reviewed_at ?? null,
   }))

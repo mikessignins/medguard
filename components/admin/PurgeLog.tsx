@@ -13,6 +13,8 @@ interface PurgeLogEntry {
   form_type: string | null
   exported_at: string | null
   exported_by_name: string | null
+  export_confirmed_at: string | null
+  export_confirmed_by_name: string | null
   approved_by_name: string | null
   approved_at: string | null
 }
@@ -25,13 +27,16 @@ interface Props {
   totalPages: number
   pathname: string
   currentSearch: string
-  currentFormType: 'all' | 'emergency_declaration' | 'medication_declaration'
+  currentFormType: string
   showBusiness?: boolean
 }
 
 const FORM_TYPE_LABELS: Record<string, string> = {
   emergency_declaration: 'Emergency Decl.',
   medication_declaration: 'Med. Declaration',
+  fatigue_assessment: 'Fatigue',
+  psychosocial_support_checkin: 'Support Check-in',
+  psychosocial_post_incident_welfare: 'Post-incident Welfare',
 }
 
 export default function PurgeLog({
@@ -80,6 +85,9 @@ export default function PurgeLog({
             <option value="all">All form types</option>
             <option value="emergency_declaration">Emergency Declarations</option>
             <option value="medication_declaration">Medication Declarations</option>
+            <option value="fatigue_assessment">Fatigue Assessments</option>
+            <option value="psychosocial_support_checkin">Psychosocial Support Check-ins</option>
+            <option value="psychosocial_post_incident_welfare">Post-incident Welfare</option>
           </select>
         )}
 
@@ -179,6 +187,19 @@ export default function PurgeLog({
                                   {entry.exported_at && (
                                     <span className="text-slate-600 ml-1">
                                       · {(() => { try { return format(new Date(entry.exported_at), 'dd MMM yy, HH:mm') } catch { return '' } })()}
+                                    </span>
+                                  )}
+                                </span>
+                              </div>
+                            )}
+                            {entry.export_confirmed_by_name && (
+                              <div className="flex items-start gap-1.5">
+                                <span className="text-slate-600 w-16 shrink-0">Confirmed</span>
+                                <span className="text-slate-400">
+                                  {entry.export_confirmed_by_name}
+                                  {entry.export_confirmed_at && (
+                                    <span className="text-slate-600 ml-1">
+                                      · {(() => { try { return format(new Date(entry.export_confirmed_at), 'dd MMM yy, HH:mm') } catch { return '' } })()}
                                     </span>
                                   )}
                                 </span>

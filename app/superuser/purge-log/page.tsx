@@ -5,6 +5,13 @@ import PurgeLog from '@/components/admin/PurgeLog'
 import { clampPage, getPaginationRange, getTotalPages, parsePageParam } from '@/lib/pagination'
 
 const PAGE_SIZE = 25
+const FORM_TYPE_FILTERS = [
+  'emergency_declaration',
+  'medication_declaration',
+  'fatigue_assessment',
+  'psychosocial_support_checkin',
+  'psychosocial_post_incident_welfare',
+]
 
 interface SearchParams {
   page?: string
@@ -29,8 +36,9 @@ export default async function SuperuserPurgeLogPage({ searchParams }: { searchPa
   // Use service role to bypass RLS — superuser sees all businesses
   const service = createServiceClient()
   const query = (resolvedSearchParams.q ?? '').trim()
-  const formType = resolvedSearchParams.form_type === 'emergency_declaration' || resolvedSearchParams.form_type === 'medication_declaration'
-    ? resolvedSearchParams.form_type
+  const requestedFormType = resolvedSearchParams.form_type ?? ''
+  const formType = FORM_TYPE_FILTERS.includes(requestedFormType)
+    ? requestedFormType
     : 'all'
 
   let countQuery = service

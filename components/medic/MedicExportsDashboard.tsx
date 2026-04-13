@@ -20,11 +20,11 @@ import type {
 } from '@/lib/types'
 import { formatPsychosocialRiskLevel } from '@/lib/psychosocial'
 
-const AUTO_PURGE_DAYS = 7
 const FINAL_SUBMISSION_STATUSES: SubmissionStatus[] = ['Approved', 'Requires Follow-up']
 const FINAL_MED_DEC_STATUSES: MedDecReviewStatus[] = ['Normal Duties', 'Restricted Duties', 'Unfit for Work']
 const FINAL_FATIGUE_STATUS = 'resolved'
 const FINAL_PSYCHOSOCIAL_STATUS = 'resolved'
+type ExportConfirmFormType = 'emergency_declaration' | 'medication_declaration' | 'fatigue_assessment' | 'psychosocial_health'
 
 function isTestRecord(item: { is_test?: boolean | null }) {
   return item.is_test === true
@@ -53,22 +53,6 @@ function fmtDate(value: string | null | undefined) {
   } catch {
     return 'No date'
   }
-}
-
-function daysUntilPurge(exportedAt: string): number {
-  const purgeDate = new Date(new Date(exportedAt).getTime() + AUTO_PURGE_DAYS * 86400000)
-  return Math.ceil((purgeDate.getTime() - Date.now()) / 86400000)
-}
-
-function PurgeCountdown({ exportedAt }: { exportedAt: string }) {
-  const days = daysUntilPurge(exportedAt)
-  if (days <= 0) return <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-red-500/10 text-red-400 border border-red-500/20">Auto-purging</span>
-  const color = days <= 1
-    ? 'bg-red-500/10 text-red-400 border border-red-500/20'
-    : days <= 3
-      ? 'bg-orange-500/10 text-orange-400 border border-orange-500/20'
-      : 'bg-yellow-500/10 text-yellow-400 border border-yellow-500/20'
-  return <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${color}`}>Purges in {days}d</span>
 }
 
 function SitePicker({
@@ -142,11 +126,8 @@ interface Props {
 export default function MedicExportsDashboard({ sites, submissions, medDeclarations, fatigueAssessments, psychosocialAssessments, initialSite }: Props) {
   const router = useRouter()
   const [activeTab, setActiveTab] = useState(initialSite || sites[0]?.id || '')
-  const [selectedSubmissionIds, setSelectedSubmissionIds] = useState<Set<string>>(new Set())
   const [selectedTestSubmissionIds, setSelectedTestSubmissionIds] = useState<Set<string>>(new Set())
-  const [selectedMedDecIds, setSelectedMedDecIds] = useState<Set<string>>(new Set())
   const [selectedTestMedDecIds, setSelectedTestMedDecIds] = useState<Set<string>>(new Set())
-  const [selectedFatigueIds, setSelectedFatigueIds] = useState<Set<string>>(new Set())
   const [selectedTestFatigueIds, setSelectedTestFatigueIds] = useState<Set<string>>(new Set())
   const [submissionError, setSubmissionError] = useState('')
   const [medDecError, setMedDecError] = useState('')
@@ -155,22 +136,22 @@ export default function MedicExportsDashboard({ sites, submissions, medDeclarati
   const [purgingSubmissions, setPurgingSubmissions] = useState(false)
   const [purgingMedDecs, setPurgingMedDecs] = useState(false)
   const [purgingFatigue, setPurgingFatigue] = useState(false)
-  const [selectedPsychosocialIds, setSelectedPsychosocialIds] = useState<Set<string>>(new Set())
   const [selectedTestPsychosocialIds, setSelectedTestPsychosocialIds] = useState<Set<string>>(new Set())
   const [purgingPsychosocial, setPurgingPsychosocial] = useState(false)
+  const [confirmingExportId, setConfirmingExportId] = useState<string | null>(null)
 
   const siteSubmissions = submissions.filter((s) => s.site_id === activeTab && s.status !== 'Recalled')
   const readySubmissions = siteSubmissions.filter((s) => !isTestRecord(s) && !s.exported_at && !s.phi_purged_at && FINAL_SUBMISSION_STATUSES.includes(s.status))
-  const exportedSubmissions = siteSubmissions.filter((s) => !isTestRecord(s) && !!s.exported_at && !s.phi_purged_at)
+  const exportedSubmissions = siteSubmissions.filter((s) => !isTestRecord(s) && !!s.exported_at && !s.export_confirmed_at && !s.phi_purged_at)
   const testSubmissions = siteSubmissions.filter((s) => isTestRecord(s) && !s.phi_purged_at && FINAL_SUBMISSION_STATUSES.includes(s.status))
   const siteMedDecs = medDeclarations.filter((m) => m.site_id === activeTab)
   const readyMedDecs = siteMedDecs.filter((m) => !isTestRecord(m) && !m.exported_at && !m.phi_purged_at && FINAL_MED_DEC_STATUSES.includes(m.medic_review_status))
-  const exportedMedDecs = siteMedDecs.filter((m) => !isTestRecord(m) && !!m.exported_at && !m.phi_purged_at)
+  const exportedMedDecs = siteMedDecs.filter((m) => !isTestRecord(m) && !!m.exported_at && !m.export_confirmed_at && !m.phi_purged_at)
   const testMedDecs = siteMedDecs.filter((m) => isTestRecord(m) && !m.phi_purged_at && FINAL_MED_DEC_STATUSES.includes(m.medic_review_status))
 
   const siteFatigue = fatigueAssessments.filter((item) => item.site_id === activeTab)
   const readyFatigue = siteFatigue.filter((item) => !isTestRecord(item) && !item.exported_at && !item.phi_purged_at && item.status === FINAL_FATIGUE_STATUS)
-  const exportedFatigue = siteFatigue.filter((item) => !isTestRecord(item) && !!item.exported_at && !item.phi_purged_at)
+  const exportedFatigue = siteFatigue.filter((item) => !isTestRecord(item) && !!item.exported_at && !item.export_confirmed_at && !item.phi_purged_at)
   const testFatigue = siteFatigue.filter((item) => isTestRecord(item) && !item.phi_purged_at && item.status === FINAL_FATIGUE_STATUS)
 
   const sitePsychosocial = psychosocialAssessments.filter(
@@ -179,7 +160,7 @@ export default function MedicExportsDashboard({ sites, submissions, medDeclarati
       && ['support_check_in', 'post_incident_psychological_welfare'].includes(getPsychosocialWorkflowKind(item) ?? '')
   )
   const readyPsychosocial = sitePsychosocial.filter((item) => !isTestRecord(item) && !item.exported_at && !item.phi_purged_at && item.status === FINAL_PSYCHOSOCIAL_STATUS)
-  const exportedPsychosocial = sitePsychosocial.filter((item) => !isTestRecord(item) && !!item.exported_at && !item.phi_purged_at)
+  const exportedPsychosocial = sitePsychosocial.filter((item) => !isTestRecord(item) && !!item.exported_at && !item.export_confirmed_at && !item.phi_purged_at)
   const testPsychosocial = sitePsychosocial.filter((item) => isTestRecord(item) && !item.phi_purged_at && item.status === FINAL_PSYCHOSOCIAL_STATUS)
 
   const badgeCounts = Object.fromEntries(
@@ -206,6 +187,55 @@ export default function MedicExportsDashboard({ sites, submissions, medDeclarati
 
   function psychosocialHref(id: string) {
     return `/medic/psychosocial/${id}?view=exports&site=${activeTab}`
+  }
+
+  function pdfHref(formType: ExportConfirmFormType, id: string) {
+    switch (formType) {
+      case 'emergency_declaration':
+        return `/api/declarations/${id}/pdf`
+      case 'medication_declaration':
+        return `/api/medication-declarations/${id}/pdf`
+      case 'fatigue_assessment':
+        return `/api/fatigue-assessments/${id}/pdf`
+      case 'psychosocial_health':
+        return `/api/psychosocial-assessments/${id}/pdf`
+    }
+  }
+
+  async function confirmExportAndPurge({
+    formType,
+    id,
+    setError,
+  }: {
+    formType: ExportConfirmFormType
+    id: string
+    setError: (message: string) => void
+  }) {
+    const confirmed = window.confirm(
+      'Confirm this PDF has been successfully saved to the authorised medical record location. After confirmation, MedGuard will permanently remove the stored health information for this form and keep only the audit record.',
+    )
+    if (!confirmed) return
+
+    setConfirmingExportId(id)
+    setError('')
+    try {
+      const res = await fetch('/api/exports/confirm-and-purge', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ formType, id, confirmed: true }),
+      })
+      if (!res.ok) {
+        const data = await res.clone().json().catch(() => null)
+        const text = data?.error ? '' : await res.text().catch(() => '')
+        setError(data?.error || text || 'Export confirmation failed')
+        return
+      }
+      router.refresh()
+    } catch {
+      setError('Network error — please try again.')
+    } finally {
+      setConfirmingExportId(null)
+    }
   }
 
   function toggleSelected(setter: React.Dispatch<React.SetStateAction<Set<string>>>, id: string) {
@@ -256,7 +286,7 @@ export default function MedicExportsDashboard({ sites, submissions, medDeclarati
     }
   }
 
-  async function purgeSubmissions(ids = selectedSubmissionIds, clearSelection = () => setSelectedSubmissionIds(new Set())) {
+  async function purgeSubmissions(ids: Set<string>, clearSelection: () => void) {
     if (ids.size === 0) return
     setPurgingSubmissions(true)
     setSubmissionError('')
@@ -281,7 +311,7 @@ export default function MedicExportsDashboard({ sites, submissions, medDeclarati
     }
   }
 
-  async function purgeMedDecs(ids = selectedMedDecIds, clearSelection = () => setSelectedMedDecIds(new Set())) {
+  async function purgeMedDecs(ids: Set<string>, clearSelection: () => void) {
     await purgeRecords({
       ids,
       endpoint: '/api/medication-declarations/purge',
@@ -291,7 +321,7 @@ export default function MedicExportsDashboard({ sites, submissions, medDeclarati
     })
   }
 
-  async function purgeFatigueAssessments(ids = selectedFatigueIds, clearSelection = () => setSelectedFatigueIds(new Set())) {
+  async function purgeFatigueAssessments(ids: Set<string>, clearSelection: () => void) {
     await purgeRecords({
       ids,
       endpoint: '/api/fatigue-assessments/purge',
@@ -301,7 +331,7 @@ export default function MedicExportsDashboard({ sites, submissions, medDeclarati
     })
   }
 
-  async function purgePsychosocialAssessments(ids = selectedPsychosocialIds, clearSelection = () => setSelectedPsychosocialIds(new Set())) {
+  async function purgePsychosocialAssessments(ids: Set<string>, clearSelection: () => void) {
     await purgeRecords({
       ids,
       endpoint: '/api/psychosocial-assessments/purge',
@@ -325,21 +355,21 @@ export default function MedicExportsDashboard({ sites, submissions, medDeclarati
       <div className="medic-hero">
         <div className="max-w-3xl">
           <p className="medic-kicker">Exports &amp; Retention</p>
-          <h1 className="mt-2 text-3xl font-semibold tracking-tight text-[var(--medic-text)]">Reviewed forms, exports, and purge windows</h1>
+          <h1 className="mt-2 text-3xl font-semibold tracking-tight text-[var(--medic-text)]">Reviewed forms and export confirmation</h1>
           <p className="mt-3 max-w-3xl text-sm leading-6 text-[var(--medic-muted)]">
-          Reviewed declarations leave the active queue and live here. Once exported, PDFs stay available for {AUTO_PURGE_DAYS} days unless you purge them sooner.
+          Reviewed forms leave the active queue and live here until export is confirmed. Once a PDF is saved, MedGuard removes the stored health information and keeps the audit record.
           </p>
         </div>
-        <div className="medic-summary-pill">Retention window: {AUTO_PURGE_DAYS} days</div>
+        <div className="medic-summary-pill">PHI transit mode</div>
       </div>
 
       <SitePicker sites={sites} activeTab={activeTab} onChange={setActiveTab} badgeCounts={badgeCounts} />
 
       <div className="space-y-4">
-        <SectionHeader title="Emergency Medical Forms" subtitle="Final decisions become export-ready here and stay re-exportable until purged." />
+        <SectionHeader title="Emergency Medical Forms" subtitle="Final decisions become export-ready here. Confirm export only after the PDF is saved." />
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4"><p className="text-xs uppercase tracking-widest text-slate-500">Ready to Export</p><p className="mt-1 text-2xl font-bold text-cyan-400">{readySubmissions.length}</p></div>
-          <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4"><p className="text-xs uppercase tracking-widest text-slate-500">Exported</p><p className="mt-1 text-2xl font-bold text-amber-400">{exportedSubmissions.length}</p></div>
+          <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4"><p className="text-xs uppercase tracking-widest text-slate-500">Needs Confirmation</p><p className="mt-1 text-2xl font-bold text-amber-400">{exportedSubmissions.length}</p></div>
           <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4"><p className="text-xs uppercase tracking-widest text-slate-500">Test Cleanup</p><p className="mt-1 text-2xl font-bold text-emerald-400">{testSubmissions.length}</p></div>
         </div>
 
@@ -361,30 +391,22 @@ export default function MedicExportsDashboard({ sites, submissions, medDeclarati
         {exportedSubmissions.length > 0 && (
           <div className="space-y-3 rounded-xl border border-slate-700/50 bg-slate-800/60 p-4">
             <div className="flex items-center justify-between gap-3 flex-wrap">
-              <p className="text-xs font-semibold uppercase tracking-widest text-slate-500">Exported and Available</p>
-              <div className="flex items-center gap-2">
-                <button onClick={() => setSelectedSubmissionIds(selectedSubmissionIds.size === exportedSubmissions.length ? new Set() : new Set(exportedSubmissions.map((sub) => sub.id)))} className="text-sm text-cyan-400 hover:underline">
-                  {selectedSubmissionIds.size === exportedSubmissions.length ? 'Deselect all' : 'Select all'}
-                </button>
-                {selectedSubmissionIds.size > 0 && (
-                  <button onClick={() => purgeSubmissions()} disabled={purgingSubmissions} className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50">
-                    {purgingSubmissions ? 'Purging…' : `Purge selected (${selectedSubmissionIds.size})`}
-                  </button>
-                )}
-              </div>
+              <p className="text-xs font-semibold uppercase tracking-widest text-slate-500">Export Confirmation Required</p>
             </div>
             {submissionError && <p className="text-sm text-red-400">{submissionError}</p>}
             <div className="rounded-xl border border-slate-700/50 overflow-hidden">
               {exportedSubmissions.map((sub, i) => (
                 <div key={sub.id} className={`flex items-center gap-3 px-4 py-4 ${i > 0 ? 'border-t border-slate-700/50' : ''}`}>
-                  <input type="checkbox" checked={selectedSubmissionIds.has(sub.id)} onChange={() => toggleSelected(setSelectedSubmissionIds, sub.id)} className="w-4 h-4 rounded border-slate-600 bg-slate-700 text-red-500 cursor-pointer" />
-                  <Link href={submissionHref(sub.id)} className="flex-1 text-left flex items-center justify-between hover:bg-slate-700/30 rounded-lg px-2 py-1 -mx-2 -my-1 transition-colors">
+                  <Link href={submissionHref(sub.id)} className="flex-1 text-left hover:bg-slate-700/30 rounded-lg px-2 py-1 -mx-2 -my-1 transition-colors">
                     <div>
                       <p className="font-semibold text-slate-100">{sub.worker_snapshot?.fullName || 'Unknown Worker'}</p>
                       <p className="text-sm text-slate-500 mt-1">{fmtDate(sub.visit_date)} · {sub.shift_type || 'N/A'}</p>
                     </div>
-                    {sub.exported_at && <PurgeCountdown exportedAt={sub.exported_at} />}
                   </Link>
+                  <a href={pdfHref('emergency_declaration', sub.id)} className="px-3 py-2 rounded-lg border border-slate-600 text-slate-200 text-sm hover:bg-slate-700/50">Download again</a>
+                  <button onClick={() => confirmExportAndPurge({ formType: 'emergency_declaration', id: sub.id, setError: setSubmissionError })} disabled={confirmingExportId === sub.id} className="px-3 py-2 rounded-lg bg-red-600 hover:bg-red-500 text-white text-sm font-medium disabled:opacity-50">
+                    {confirmingExportId === sub.id ? 'Removing…' : 'Confirm and remove PHI'}
+                  </button>
                 </div>
               ))}
             </div>
@@ -429,10 +451,10 @@ export default function MedicExportsDashboard({ sites, submissions, medDeclarati
       </div>
 
       <div className="space-y-4">
-        <SectionHeader title="Confidential Medication Declarations" subtitle="Final medication reviews stay here for export and the 7-day retention window." />
+        <SectionHeader title="Confidential Medication Declarations" subtitle="Final medication reviews stay here until export is confirmed and stored health information is removed." />
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4"><p className="text-xs uppercase tracking-widest text-slate-500">Ready to Export</p><p className="mt-1 text-2xl font-bold text-violet-400">{readyMedDecs.length}</p></div>
-          <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4"><p className="text-xs uppercase tracking-widest text-slate-500">Exported</p><p className="mt-1 text-2xl font-bold text-amber-400">{exportedMedDecs.length}</p></div>
+          <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4"><p className="text-xs uppercase tracking-widest text-slate-500">Needs Confirmation</p><p className="mt-1 text-2xl font-bold text-amber-400">{exportedMedDecs.length}</p></div>
           <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4"><p className="text-xs uppercase tracking-widest text-slate-500">Test Cleanup</p><p className="mt-1 text-2xl font-bold text-emerald-400">{testMedDecs.length}</p></div>
         </div>
 
@@ -454,30 +476,22 @@ export default function MedicExportsDashboard({ sites, submissions, medDeclarati
         {exportedMedDecs.length > 0 && (
           <div className="space-y-3 rounded-xl border border-slate-700/50 bg-slate-800/60 p-4">
             <div className="flex items-center justify-between gap-3 flex-wrap">
-              <p className="text-xs font-semibold uppercase tracking-widest text-slate-500">Exported and Available</p>
-              <div className="flex items-center gap-2">
-                <button onClick={() => setSelectedMedDecIds(selectedMedDecIds.size === exportedMedDecs.length ? new Set() : new Set(exportedMedDecs.map((m) => m.id)))} className="text-sm text-cyan-400 hover:underline">
-                  {selectedMedDecIds.size === exportedMedDecs.length ? 'Deselect all' : 'Select all'}
-                </button>
-                {selectedMedDecIds.size > 0 && (
-                  <button onClick={() => purgeMedDecs()} disabled={purgingMedDecs} className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50">
-                    {purgingMedDecs ? 'Purging…' : `Purge selected (${selectedMedDecIds.size})`}
-                  </button>
-                )}
-              </div>
+              <p className="text-xs font-semibold uppercase tracking-widest text-slate-500">Export Confirmation Required</p>
             </div>
             {medDecError && <p className="text-sm text-red-400">{medDecError}</p>}
             <div className="rounded-xl border border-slate-700/50 overflow-hidden">
               {exportedMedDecs.map((m, i) => (
                 <div key={m.id} className={`flex items-center gap-3 px-4 py-4 ${i > 0 ? 'border-t border-slate-700/50' : ''}`}>
-                  <input type="checkbox" checked={selectedMedDecIds.has(m.id)} onChange={() => toggleSelected(setSelectedMedDecIds, m.id)} className="w-4 h-4 rounded border-slate-600 bg-slate-700 text-red-500 cursor-pointer" />
-                  <Link href={medDecHref(m.id)} className="flex-1 text-left flex items-center justify-between hover:bg-slate-700/30 rounded-lg px-2 py-1 -mx-2 -my-1 transition-colors">
+                  <Link href={medDecHref(m.id)} className="flex-1 text-left hover:bg-slate-700/30 rounded-lg px-2 py-1 -mx-2 -my-1 transition-colors">
                     <div>
                       <p className="font-semibold text-slate-100">{m.worker_name || 'Unknown Worker'}</p>
                       <p className="text-sm text-slate-500 mt-1">{fmtDate(m.submitted_at)} · {m.medications?.length ?? 0} medication{(m.medications?.length ?? 0) === 1 ? '' : 's'}</p>
                     </div>
-                    {m.exported_at && <PurgeCountdown exportedAt={m.exported_at} />}
                   </Link>
+                  <a href={pdfHref('medication_declaration', m.id)} className="px-3 py-2 rounded-lg border border-slate-600 text-slate-200 text-sm hover:bg-slate-700/50">Download again</a>
+                  <button onClick={() => confirmExportAndPurge({ formType: 'medication_declaration', id: m.id, setError: setMedDecError })} disabled={confirmingExportId === m.id} className="px-3 py-2 rounded-lg bg-red-600 hover:bg-red-500 text-white text-sm font-medium disabled:opacity-50">
+                    {confirmingExportId === m.id ? 'Removing…' : 'Confirm and remove PHI'}
+                  </button>
                 </div>
               ))}
             </div>
@@ -522,10 +536,10 @@ export default function MedicExportsDashboard({ sites, submissions, medDeclarati
       </div>
 
       <div className="space-y-4">
-        <SectionHeader title="Psychosocial Cases" subtitle="Reviewed psychosocial support and post-incident welfare cases can be exported into the record and retained until purged. Wellbeing pulses are excluded." />
+        <SectionHeader title="Psychosocial Cases" subtitle="Reviewed psychosocial support and post-incident welfare cases stay here until export is confirmed. Wellbeing pulses are excluded." />
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4"><p className="text-xs uppercase tracking-widest text-slate-500">Ready to Export</p><p className="mt-1 text-2xl font-bold text-violet-400">{readyPsychosocial.length}</p></div>
-          <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4"><p className="text-xs uppercase tracking-widest text-slate-500">Exported</p><p className="mt-1 text-2xl font-bold text-amber-400">{exportedPsychosocial.length}</p></div>
+          <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4"><p className="text-xs uppercase tracking-widest text-slate-500">Needs Confirmation</p><p className="mt-1 text-2xl font-bold text-amber-400">{exportedPsychosocial.length}</p></div>
           <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4"><p className="text-xs uppercase tracking-widest text-slate-500">Test Cleanup</p><p className="mt-1 text-2xl font-bold text-emerald-400">{testPsychosocial.length}</p></div>
         </div>
 
@@ -551,30 +565,22 @@ export default function MedicExportsDashboard({ sites, submissions, medDeclarati
         {exportedPsychosocial.length > 0 && (
           <div className="space-y-3 rounded-xl border border-slate-700/50 bg-slate-800/60 p-4">
             <div className="flex items-center justify-between gap-3 flex-wrap">
-              <p className="text-xs font-semibold uppercase tracking-widest text-slate-500">Exported and Available</p>
-              <div className="flex items-center gap-2">
-                <button onClick={() => setSelectedPsychosocialIds(selectedPsychosocialIds.size === exportedPsychosocial.length ? new Set() : new Set(exportedPsychosocial.map((item) => item.id)))} className="text-sm text-cyan-400 hover:underline">
-                  {selectedPsychosocialIds.size === exportedPsychosocial.length ? 'Deselect all' : 'Select all'}
-                </button>
-                {selectedPsychosocialIds.size > 0 && (
-                  <button onClick={() => purgePsychosocialAssessments()} disabled={purgingPsychosocial} className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50">
-                    {purgingPsychosocial ? 'Purging…' : `Purge selected (${selectedPsychosocialIds.size})`}
-                  </button>
-                )}
-              </div>
+              <p className="text-xs font-semibold uppercase tracking-widest text-slate-500">Export Confirmation Required</p>
             </div>
             {psychosocialError && <p className="text-sm text-red-400">{psychosocialError}</p>}
             <div className="rounded-xl border border-slate-700/50 overflow-hidden">
               {exportedPsychosocial.map((item, i) => (
                 <div key={item.id} className={`flex items-center gap-3 px-4 py-4 ${i > 0 ? 'border-t border-slate-700/50' : ''}`}>
-                  <input type="checkbox" checked={selectedPsychosocialIds.has(item.id)} onChange={() => toggleSelected(setSelectedPsychosocialIds, item.id)} className="w-4 h-4 rounded border-slate-600 bg-slate-700 text-red-500 cursor-pointer" />
-                  <Link href={psychosocialHref(item.id)} className="flex-1 text-left flex items-center justify-between hover:bg-slate-700/30 rounded-lg px-2 py-1 -mx-2 -my-1 transition-colors">
+                  <Link href={psychosocialHref(item.id)} className="flex-1 text-left hover:bg-slate-700/30 rounded-lg px-2 py-1 -mx-2 -my-1 transition-colors">
                     <div>
                       <p className="font-semibold text-slate-100">{getPsychosocialWorkerName(item)}</p>
                       <p className="text-sm text-slate-500 mt-1">{fmtDate(item.submitted_at)} · {formatPsychosocialWorkflowKind(getPsychosocialWorkflowKind(item) || 'support_check_in')} · {formatPsychosocialRiskLevel(item.payload.scoreSummary.derivedPulseRiskLevel)} risk</p>
                     </div>
-                    {item.exported_at && <PurgeCountdown exportedAt={item.exported_at} />}
                   </Link>
+                  <a href={pdfHref('psychosocial_health', item.id)} className="px-3 py-2 rounded-lg border border-slate-600 text-slate-200 text-sm hover:bg-slate-700/50">Download again</a>
+                  <button onClick={() => confirmExportAndPurge({ formType: 'psychosocial_health', id: item.id, setError: setPsychosocialError })} disabled={confirmingExportId === item.id} className="px-3 py-2 rounded-lg bg-red-600 hover:bg-red-500 text-white text-sm font-medium disabled:opacity-50">
+                    {confirmingExportId === item.id ? 'Removing…' : 'Confirm and remove PHI'}
+                  </button>
                 </div>
               ))}
             </div>
@@ -622,10 +628,10 @@ export default function MedicExportsDashboard({ sites, submissions, medDeclarati
       </div>
 
       <div className="space-y-4">
-        <SectionHeader title="Fatigue Assessments" subtitle="Medic-reviewed fatigue outcomes can be exported into the business medical record and kept available until purged." />
+        <SectionHeader title="Fatigue Assessments" subtitle="Medic-reviewed fatigue outcomes stay here until export is confirmed and stored health information is removed." />
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4"><p className="text-xs uppercase tracking-widest text-slate-500">Ready to Export</p><p className="mt-1 text-2xl font-bold text-violet-400">{readyFatigue.length}</p></div>
-          <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4"><p className="text-xs uppercase tracking-widest text-slate-500">Exported</p><p className="mt-1 text-2xl font-bold text-amber-400">{exportedFatigue.length}</p></div>
+          <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4"><p className="text-xs uppercase tracking-widest text-slate-500">Needs Confirmation</p><p className="mt-1 text-2xl font-bold text-amber-400">{exportedFatigue.length}</p></div>
           <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4"><p className="text-xs uppercase tracking-widest text-slate-500">Test Cleanup</p><p className="mt-1 text-2xl font-bold text-emerald-400">{testFatigue.length}</p></div>
         </div>
 
@@ -651,30 +657,22 @@ export default function MedicExportsDashboard({ sites, submissions, medDeclarati
         {exportedFatigue.length > 0 && (
           <div className="space-y-3 rounded-xl border border-slate-700/50 bg-slate-800/60 p-4">
             <div className="flex items-center justify-between gap-3 flex-wrap">
-              <p className="text-xs font-semibold uppercase tracking-widest text-slate-500">Exported and Available</p>
-              <div className="flex items-center gap-2">
-                <button onClick={() => setSelectedFatigueIds(selectedFatigueIds.size === exportedFatigue.length ? new Set() : new Set(exportedFatigue.map((item) => item.id)))} className="text-sm text-cyan-400 hover:underline">
-                  {selectedFatigueIds.size === exportedFatigue.length ? 'Deselect all' : 'Select all'}
-                </button>
-                {selectedFatigueIds.size > 0 && (
-                  <button onClick={() => purgeFatigueAssessments()} disabled={purgingFatigue} className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50">
-                    {purgingFatigue ? 'Purging…' : `Purge selected (${selectedFatigueIds.size})`}
-                  </button>
-                )}
-              </div>
+              <p className="text-xs font-semibold uppercase tracking-widest text-slate-500">Export Confirmation Required</p>
             </div>
             {fatigueError && <p className="text-sm text-red-400">{fatigueError}</p>}
             <div className="rounded-xl border border-slate-700/50 overflow-hidden">
               {exportedFatigue.map((item, i) => (
                 <div key={item.id} className={`flex items-center gap-3 px-4 py-4 ${i > 0 ? 'border-t border-slate-700/50' : ''}`}>
-                  <input type="checkbox" checked={selectedFatigueIds.has(item.id)} onChange={() => toggleSelected(setSelectedFatigueIds, item.id)} className="w-4 h-4 rounded border-slate-600 bg-slate-700 text-red-500 cursor-pointer" />
-                  <Link href={fatigueHref(item.id)} className="flex-1 text-left flex items-center justify-between hover:bg-slate-700/30 rounded-lg px-2 py-1 -mx-2 -my-1 transition-colors">
+                  <Link href={fatigueHref(item.id)} className="flex-1 text-left hover:bg-slate-700/30 rounded-lg px-2 py-1 -mx-2 -my-1 transition-colors">
                     <div>
                       <p className="font-semibold text-slate-100">{item.payload.workerAssessment.workerNameSnapshot || 'Unknown Worker'}</p>
                       <p className="text-sm text-slate-500 mt-1">{fmtDate(item.submitted_at)} · {formatFatigueDecision(item.review_payload.fitForWorkDecision)}</p>
                     </div>
-                    {item.exported_at && <PurgeCountdown exportedAt={item.exported_at} />}
                   </Link>
+                  <a href={pdfHref('fatigue_assessment', item.id)} className="px-3 py-2 rounded-lg border border-slate-600 text-slate-200 text-sm hover:bg-slate-700/50">Download again</a>
+                  <button onClick={() => confirmExportAndPurge({ formType: 'fatigue_assessment', id: item.id, setError: setFatigueError })} disabled={confirmingExportId === item.id} className="px-3 py-2 rounded-lg bg-red-600 hover:bg-red-500 text-white text-sm font-medium disabled:opacity-50">
+                    {confirmingExportId === item.id ? 'Removing…' : 'Confirm and remove PHI'}
+                  </button>
                 </div>
               ))}
             </div>
@@ -724,20 +722,20 @@ export default function MedicExportsDashboard({ sites, submissions, medDeclarati
 }
 type MedicExportsSubmission = Pick<
   Submission,
-  'id' | 'business_id' | 'site_id' | 'worker_snapshot' | 'visit_date' | 'shift_type' | 'status' | 'submitted_at' | 'exported_at' | 'phi_purged_at' | 'is_test'
+  'id' | 'business_id' | 'site_id' | 'worker_snapshot' | 'visit_date' | 'shift_type' | 'status' | 'submitted_at' | 'exported_at' | 'export_confirmed_at' | 'phi_purged_at' | 'is_test'
 >
 
 type MedicExportsMedDec = Pick<
   MedicationDeclaration,
-  'id' | 'business_id' | 'site_id' | 'worker_name' | 'submitted_at' | 'medic_review_status' | 'exported_at' | 'phi_purged_at' | 'medications' | 'is_test'
+  'id' | 'business_id' | 'site_id' | 'worker_name' | 'submitted_at' | 'medic_review_status' | 'exported_at' | 'export_confirmed_at' | 'phi_purged_at' | 'medications' | 'is_test'
 >
 
 type MedicExportsFatigue = Pick<
   FatigueAssessment,
-  'id' | 'business_id' | 'site_id' | 'status' | 'payload' | 'review_payload' | 'submitted_at' | 'exported_at' | 'phi_purged_at' | 'is_test'
+  'id' | 'business_id' | 'site_id' | 'status' | 'payload' | 'review_payload' | 'submitted_at' | 'exported_at' | 'export_confirmed_at' | 'phi_purged_at' | 'is_test'
 >
 
 type MedicExportsPsychosocial = Pick<
   PsychosocialAssessment,
-  'id' | 'business_id' | 'site_id' | 'status' | 'payload' | 'review_payload' | 'submitted_at' | 'exported_at' | 'phi_purged_at' | 'is_test'
+  'id' | 'business_id' | 'site_id' | 'status' | 'payload' | 'review_payload' | 'submitted_at' | 'exported_at' | 'export_confirmed_at' | 'phi_purged_at' | 'is_test'
 >

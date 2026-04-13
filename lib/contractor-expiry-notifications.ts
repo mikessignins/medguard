@@ -96,7 +96,7 @@ function emailHtml({
       <p>
         Please review whether access should be extended or allowed to expire.
       </p>
-      <p style="color: #475569;">Sent automatically by MedM8.</p>
+      <p style="color: #475569;">Sent automatically by MedGuard.</p>
     </div>
   `
 }
@@ -177,7 +177,7 @@ export async function sendContractorExpiryWarnings(now = new Date()) {
 
       await sendEmail({
         to: admin.email,
-        subject: `[MedM8] Contractor medic expiry in ${medic.daysRemaining} day${medic.daysRemaining === 1 ? '' : 's'}`,
+        subject: `[MedGuard] Contractor medic expiry in ${medic.daysRemaining} day${medic.daysRemaining === 1 ? '' : 's'}`,
         html: emailHtml({
           adminName: admin.display_name,
           medicName: medic.display_name,

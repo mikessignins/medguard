@@ -62,9 +62,9 @@ export default async function SuperuserLayout({ children }: { children: React.Re
         {/* Logo */}
         <div className="dashboard-sidebar-logo border-b px-5 py-4">
           <div className="flex items-center gap-3">
-            <Image src="/medm8-icon.png" alt="MedPass" width={32} height={32} className="rounded-lg" />
+            <Image src="/medm8-icon.png" alt="MedGuard" width={32} height={32} className="rounded-lg" />
             <div className="flex-1 min-w-0">
-              <p className="text-base font-bold leading-tight text-[var(--text-1)]">MedPass</p>
+              <p className="text-base font-bold leading-tight text-[var(--text-1)]">MedGuard</p>
               <p className="text-cyan-400 text-xs font-medium">Superuser Portal</p>
             </div>
             <ThemeToggle compact />

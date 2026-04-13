@@ -64,10 +64,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ purged: 0 })
   }
 
-  // 3. Fetch submission data before wiping. Production records must be exported; reviewed test records can be purged without export.
+  // 3. Fetch submission data before wiping. Production records must be exported and confirmed; reviewed test records can be purged without export.
   const { data: submissions } = await authClient
     .from('submissions')
-    .select('id, business_id, site_id, site_name, worker_snapshot, status, exported_at, exported_by_name, decision, is_test')
+    .select('id, business_id, site_id, site_name, worker_snapshot, status, exported_at, export_confirmed_at, export_confirmed_by_name, exported_by_name, decision, is_test')
     .in('id', ids)
 
   const purgeError = validatePurgeSelection(ids, submissions ?? [], {
@@ -100,6 +100,8 @@ export async function POST(request: NextRequest) {
       form_type:        'emergency_declaration',
       exported_at:      sub.exported_at ?? null,
       exported_by_name: sub.exported_by_name ?? null,
+      export_confirmed_at: sub.export_confirmed_at ?? null,
+      export_confirmed_by_name: sub.export_confirmed_by_name ?? null,
       approved_by_name: (decision?.decided_by_name as string) ?? null,
       approved_at:      (decision?.decided_at as string) ?? null,
     }

@@ -347,7 +347,7 @@ export default function MedDecDetail({ medDec, siteName, businessName, queueCont
 
             {isDecisionLocked && (
               <div className="mb-4 rounded-lg border border-slate-700 bg-slate-900/40 px-3 py-2 text-sm text-slate-400">
-                Outcome locked. You can still add comments and re-export this declaration until it is purged.
+                Outcome locked. After exporting, confirm from the Exports page once the PDF is saved so MedGuard can remove stored health information.
               </div>
             )}
 

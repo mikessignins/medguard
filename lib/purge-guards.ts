@@ -1,6 +1,7 @@
 export interface PurgeCandidate {
   id: string
   exported_at: string | null
+  export_confirmed_at?: string | null
   is_test?: boolean | null
   status?: string | null
 }
@@ -28,11 +29,11 @@ export function validatePurgeSelection(
   }
 
   if (submissions.some((submission) => {
-    if (submission.exported_at) return false
+    if (submission.exported_at && submission.export_confirmed_at) return false
     return !(submission.is_test && submission.status && testFinalStatuses.includes(submission.status))
   })) {
     return {
-      error: options.blockedError ?? 'All production records must be exported to PDF before purging. Reviewed test records can be purged without export.',
+      error: options.blockedError ?? 'All production records must be exported and confirmed before health information can be purged. Reviewed test records can be purged without export.',
       status: 400,
     }
   }
