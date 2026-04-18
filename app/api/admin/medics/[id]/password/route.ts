@@ -63,7 +63,7 @@ export async function POST(
     .select('id, display_name, email, role, business_id')
     .eq('id', resolvedParams.id)
     .eq('business_id', account!.business_id)
-    .in('role', ['medic', 'pending_medic'])
+    .in('role', ['medic', 'pending_medic', 'occ_health', 'pending_occ_health'])
     .maybeSingle()
 
   if (targetError) {
@@ -83,7 +83,7 @@ export async function POST(
   }
 
   if (!targetMedic) {
-    return NextResponse.json({ error: 'Medic account not found for this business.' }, { status: 404 })
+    return NextResponse.json({ error: 'Staff account not found for this business.' }, { status: 404 })
   }
 
   const service = createServiceClient()

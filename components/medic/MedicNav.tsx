@@ -35,6 +35,11 @@ const MODULE_ICON: Record<ModuleKey, JSX.Element> = {
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.7 6.4A8 8 0 104 12c0 2.1.8 3.9 2.1 5.3.9 1 1.4 1.9 1.4 2.7h9c0-.8.5-1.7 1.4-2.7A8 8 0 005.7 6.4z" />
     </svg>
   ),
+  health_surveillance: (
+    <svg className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10m-12 9h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+    </svg>
+  ),
   fit_for_work_plus: (
     <svg className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5h6m-7 4h8m-8 4h8m-9 6h10a2 2 0 002-2V7.828a2 2 0 00-.586-1.414l-2.828-2.828A2 2 0 0014.172 3H7a2 2 0 00-2 2v12a2 2 0 002 2z" />

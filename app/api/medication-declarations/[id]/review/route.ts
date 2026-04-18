@@ -68,7 +68,13 @@ export async function PATCH(
   const parsed = await parseJsonBody(request, medicationReviewRequestSchema)
   if (!parsed.success) return parsed.response
 
-  const { medic_review_status, medic_comments, review_required } = parsed.data
+  const {
+    medic_review_status,
+    medic_comments,
+    review_required,
+    medical_officer_name,
+    medical_officer_practice,
+  } = parsed.data
 
   if (!VALID_STATUSES.includes(medic_review_status)) {
     return NextResponse.json({ error: 'Invalid status' }, { status: 400 })
@@ -85,7 +91,7 @@ export async function PATCH(
   const scopeError = requireMedicScope(medicAccount, current)
   if (scopeError) return NextResponse.json({ error: scopeError.error }, { status: scopeError.status })
 
-  const transitionError = validateMedicationReviewTransition(current.medic_review_status)
+  const transitionError = validateMedicationReviewTransition(current.medic_review_status, medic_review_status)
   if (transitionError) {
     return NextResponse.json(
       { error: transitionError.error },
@@ -99,6 +105,8 @@ export async function PATCH(
     p_medic_comments: medic_comments ?? '',
     p_review_required: review_required,
     p_expected_status: current.medic_review_status,
+    p_medical_officer_name: medical_officer_name ?? null,
+    p_medical_officer_practice: medical_officer_practice ?? null,
   })
 
   if (error) {
@@ -114,8 +122,16 @@ export async function PATCH(
       route: '/api/medication-declarations/[id]/review',
       targetId: parsedId.value,
       errorMessage: error.message,
-      context: { medic_review_status },
+      context: {
+        medic_review_status,
+        review_required,
+        medical_officer_name: medical_officer_name ?? null,
+        medical_officer_practice: medical_officer_practice ?? null,
+      },
     })
+    if (typeof error.message === 'string' && error.message.trim().length > 0) {
+      return NextResponse.json({ error: error.message }, { status: 422 })
+    }
     return logAndReturnInternalError('/api/medication-declarations/[id]/review', error)
   }
 
@@ -130,7 +146,12 @@ export async function PATCH(
     moduleKey: 'confidential_medication',
     route: '/api/medication-declarations/[id]/review',
     targetId: parsedId.value,
-    context: { medic_review_status },
+    context: {
+      medic_review_status,
+      review_required,
+      medical_officer_name: medical_officer_name ?? null,
+      medical_officer_practice: medical_officer_practice ?? null,
+    },
   })
 
   void enqueueDeclarationProcessing({

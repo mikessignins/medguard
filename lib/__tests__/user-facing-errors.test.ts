@@ -19,6 +19,20 @@ describe('getUserFacingErrorMessage', () => {
     ).toBe('Email delivery is not configured yet. Add the Resend email settings in Vercel and try again.')
   })
 
+  it('surfaces missing database schema objects as a migration issue', () => {
+    expect(
+      getUserFacingErrorMessage({
+        message: 'Could not find the function public.review_emergency_submission(text, text, text, integer) in the schema cache',
+      }),
+    ).toBe('This environment is missing a required database migration. Apply the latest Supabase migrations and try again.')
+
+    expect(
+      getUserFacingErrorMessage({
+        message: 'relation "public.submission_comments" does not exist',
+      }),
+    ).toBe('This environment is missing a required database migration. Apply the latest Supabase migrations and try again.')
+  })
+
   it('uses a caller-specific fallback for unknown errors', () => {
     expect(getUserFacingErrorMessage(new Error('database exploded'), 'Please try again later.')).toBe(
       'Please try again later.',

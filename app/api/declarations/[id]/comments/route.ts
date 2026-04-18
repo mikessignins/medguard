@@ -9,6 +9,7 @@ import { logAndReturnInternalError, requireSameOrigin } from '@/lib/api-security
 import { submissionCommentRequestSchema } from '@/lib/review-request-schemas'
 import { enforceActionRateLimit } from '@/lib/rate-limit'
 import { safeLogServerEvent } from '@/lib/app-event-log'
+import { createServiceClient } from '@/lib/supabase/service'
 
 export const runtime = 'nodejs'
 
@@ -96,22 +97,21 @@ export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const resolvedParams = await params
-  const parsedId = parseUuidParam(resolvedParams.id, 'Submission id')
-  if (!parsedId.success) return parsedId.response
-
-  const medic = await getAuthenticatedMedic()
-  if (!medic) return new NextResponse('Unauthorized', { status: 401 })
-
-  const submission = await fetchScopedSubmission(medic.client, parsedId.value)
-  if (!submission) return new NextResponse('Submission not found', { status: 404 })
-  if (!hasMedicScopeAccess(medic, submission)) return new NextResponse('Forbidden', { status: 403 })
-
   try {
+    const resolvedParams = await params
+    const parsedId = parseUuidParam(resolvedParams.id, 'Submission id')
+    if (!parsedId.success) return parsedId.response
+
+    const medic = await getAuthenticatedMedic()
+    if (!medic) return new NextResponse('Unauthorized', { status: 401 })
+
+    const submission = await fetchScopedSubmission(medic.client, parsedId.value)
+    if (!submission) return new NextResponse('Submission not found', { status: 404 })
+    if (!hasMedicScopeAccess(medic, submission)) return new NextResponse('Forbidden', { status: 403 })
+
     return NextResponse.json(await fetchComments(medic.client, parsedId.value))
   } catch (error) {
-    console.error('[comments/GET] error:', error)
-    return new NextResponse('Failed to load comments', { status: 500 })
+    return logAndReturnInternalError('/api/declarations/[id]/comments', error)
   }
 }
 
@@ -119,85 +119,134 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const resolvedParams = await params
-  const parsedId = parseUuidParam(resolvedParams.id, 'Submission id')
-  if (!parsedId.success) return parsedId.response
+  try {
+    const resolvedParams = await params
+    const parsedId = parseUuidParam(resolvedParams.id, 'Submission id')
+    if (!parsedId.success) return parsedId.response
 
-  const csrfError = requireSameOrigin(request)
-  if (csrfError) return csrfError
+    const csrfError = requireSameOrigin(request)
+    if (csrfError) return csrfError
 
-  const medic = await getAuthenticatedMedic()
-  if (!medic) return new NextResponse('Unauthorized', { status: 401 })
+    const medic = await getAuthenticatedMedic()
+    if (!medic) return new NextResponse('Unauthorized', { status: 401 })
 
-  const submission = await fetchScopedSubmission(medic.client, parsedId.value)
-  if (!submission) return new NextResponse('Submission not found', { status: 404 })
-  if (!hasMedicScopeAccess(medic, submission)) return new NextResponse('Forbidden', { status: 403 })
-  const commentLockMessage = getCommentLockMessage(submission)
-  if (commentLockMessage) {
-    return NextResponse.json({ error: commentLockMessage }, { status: 409 })
-  }
+    const submission = await fetchScopedSubmission(medic.client, parsedId.value)
+    if (!submission) return new NextResponse('Submission not found', { status: 404 })
+    if (!hasMedicScopeAccess(medic, submission)) return new NextResponse('Forbidden', { status: 403 })
+    const commentLockMessage = getCommentLockMessage(submission)
+    if (commentLockMessage) {
+      return NextResponse.json({ error: commentLockMessage }, { status: 409 })
+    }
 
-  const rateLimited = await enforceActionRateLimit({
-    authClient: medic.client,
-    action: 'emergency_comment_saved',
-    actorUserId: medic.id,
-    actorName: medic.name,
-    businessId: medic.business_id,
-    moduleKey: 'emergency_declaration',
-    route: '/api/declarations/[id]/comments',
-    targetId: parsedId.value,
-    limit: 12,
-    windowMs: 60_000,
-    errorMessage: 'Too many comments were submitted. Please wait a minute and try again.',
-  })
-  if (rateLimited) return rateLimited
-
-  const parsed = await parseJsonBody(request, submissionCommentRequestSchema)
-  if (!parsed.success) return parsed.response
-
-  const { note, outcome } = parsed.data
-
-  const { data, error } = await medic.client
-    .rpc('add_submission_comment', {
-      p_submission_id: parsedId.value,
-      p_note: note,
-      p_outcome: outcome ?? null,
-    })
-    .select('id, medic_user_id, medic_name, note, outcome, created_at, edited_at')
-    .single()
-
-  if (error) {
-    await safeLogServerEvent({
-      source: 'web_api',
+    const rateLimited = await enforceActionRateLimit({
+      authClient: medic.client,
       action: 'emergency_comment_saved',
-      result: 'failure',
       actorUserId: medic.id,
       actorName: medic.name,
       businessId: medic.business_id,
       moduleKey: 'emergency_declaration',
       route: '/api/declarations/[id]/comments',
       targetId: parsedId.value,
-      errorMessage: error.message,
+      limit: 12,
+      windowMs: 60_000,
+      errorMessage: 'Too many comments were submitted. Please wait a minute and try again.',
     })
+    if (rateLimited) return rateLimited
+
+    const parsed = await parseJsonBody(request, submissionCommentRequestSchema)
+    if (!parsed.success) return parsed.response
+
+    const { note, outcome } = parsed.data
+    let data: unknown = null
+    let error: { message: string } | null = null
+
+    try {
+      const service = createServiceClient()
+      const { data: serviceData, error: serviceError } = await service
+        .rpc('add_submission_comment_authorized', {
+          p_actor_user_id: medic.id,
+          p_submission_id: parsedId.value,
+          p_note: note,
+          p_outcome: outcome ?? null,
+        })
+        .single()
+
+      if (serviceError) {
+        console.warn('[comments/POST] authorized RPC failed; falling back to authenticated RPC', {
+          submissionId: parsedId.value,
+          actorUserId: medic.id,
+          message: serviceError.message,
+        })
+
+        const fallback = await medic.client
+          .rpc('add_submission_comment', {
+            p_submission_id: parsedId.value,
+            p_note: note,
+            p_outcome: outcome ?? null,
+          })
+          .select('id, medic_user_id, medic_name, note, outcome, created_at, edited_at')
+          .single()
+
+        data = fallback.data
+        error = fallback.error
+      } else {
+        data = serviceData
+      }
+    } catch (serviceError) {
+      console.warn('[comments/POST] authorized RPC path threw; falling back to authenticated RPC', {
+        submissionId: parsedId.value,
+        actorUserId: medic.id,
+        message: serviceError instanceof Error ? serviceError.message : String(serviceError),
+      })
+
+      const fallback = await medic.client
+        .rpc('add_submission_comment', {
+          p_submission_id: parsedId.value,
+          p_note: note,
+          p_outcome: outcome ?? null,
+        })
+        .select('id, medic_user_id, medic_name, note, outcome, created_at, edited_at')
+        .single()
+
+      data = fallback.data
+      error = fallback.error
+    }
+
+    if (error) {
+      await safeLogServerEvent({
+        source: 'web_api',
+        action: 'emergency_comment_saved',
+        result: 'failure',
+        actorUserId: medic.id,
+        actorName: medic.name,
+        businessId: medic.business_id,
+        moduleKey: 'emergency_declaration',
+        route: '/api/declarations/[id]/comments',
+        targetId: parsedId.value,
+        errorMessage: error.message,
+      })
+      return logAndReturnInternalError('/api/declarations/[id]/comments', error)
+    }
+
+    const comment = parseSubmissionComments(data ? [data] : [])[0]
+    if (!comment) {
+      return new NextResponse('Failed to parse saved comment', { status: 500 })
+    }
+
+    await safeLogServerEvent({
+      source: 'web_api',
+      action: 'emergency_comment_saved',
+      result: 'success',
+      actorUserId: medic.id,
+      actorName: medic.name,
+      businessId: medic.business_id,
+      moduleKey: 'emergency_declaration',
+      route: '/api/declarations/[id]/comments',
+      targetId: parsedId.value,
+    })
+
+    return NextResponse.json(comment, { status: 201 })
+  } catch (error) {
     return logAndReturnInternalError('/api/declarations/[id]/comments', error)
   }
-
-  const comment = parseSubmissionComments(data ? [data] : [])[0]
-  if (!comment) {
-    return new NextResponse('Failed to parse saved comment', { status: 500 })
-  }
-
-  await safeLogServerEvent({
-    source: 'web_api',
-    action: 'emergency_comment_saved',
-    result: 'success',
-    actorUserId: medic.id,
-    actorName: medic.name,
-    businessId: medic.business_id,
-    moduleKey: 'emergency_declaration',
-    route: '/api/declarations/[id]/comments',
-    targetId: parsedId.value,
-  })
-
-  return NextResponse.json(comment, { status: 201 })
 }

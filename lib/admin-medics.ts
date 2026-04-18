@@ -17,3 +17,21 @@ export async function expireMedicContracts(businessId: string) {
     throw new Error(error.message)
   }
 }
+
+export async function expireOccHealthContracts(businessId: string) {
+  const service = createServiceClient()
+  const now = new Date().toISOString()
+
+  const { error } = await service
+    .from('user_accounts')
+    .update({ is_inactive: true })
+    .eq('business_id', businessId)
+    .eq('role', 'occ_health')
+    .eq('is_inactive', false)
+    .not('contract_end_date', 'is', null)
+    .lt('contract_end_date', now)
+
+  if (error) {
+    throw new Error(error.message)
+  }
+}

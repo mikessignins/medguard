@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createServiceClient } from '@/lib/supabase/service'
 import { redirect } from 'next/navigation'
 import type { PsychosocialHazardMetric } from '@/lib/psychosocial'
+import ReportsFilterForm from '@/components/superuser/ReportsFilterForm'
 
 interface SearchParams {
   business_id?: string
@@ -53,18 +54,19 @@ export default async function SuperuserReportsPage({ searchParams }: { searchPar
     .select('id, name')
     .order('name', { ascending: true })
 
+  const { data: allSites } = await service
+    .from('sites')
+    .select('id, business_id, name')
+    .order('name', { ascending: true })
+
   const selectedBusinessId = resolvedSearchParams.business_id ?? ''
-  const selectedSiteId = resolvedSearchParams.site_id ?? 'all'
   const fromDate = resolvedSearchParams.from ?? ''
   const toDate = resolvedSearchParams.to ?? ''
-
-  const { data: sites } = selectedBusinessId
-    ? await service
-      .from('sites')
-      .select('id, name')
-      .eq('business_id', selectedBusinessId)
-      .order('name', { ascending: true })
-    : { data: [] as Array<{ id: string; name: string }> }
+  const sites = (allSites || []).filter((site) => site.business_id === selectedBusinessId)
+  const requestedSiteId = resolvedSearchParams.site_id ?? 'all'
+  const selectedSiteId = requestedSiteId === 'all' || sites.some((site) => site.id === requestedSiteId)
+    ? requestedSiteId
+    : 'all'
 
   let metrics: DeidentifiedConditionMetric[] = []
   let reportError: string | null = null
@@ -171,73 +173,15 @@ export default async function SuperuserReportsPage({ searchParams }: { searchPar
         </p>
       </div>
 
-      <form className="grid grid-cols-1 gap-4 rounded-xl border border-[var(--border-md)] bg-[var(--bg-card)] p-5 md:grid-cols-5">
-        <div className="md:col-span-2">
-          <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-[var(--text-2)]">Business</label>
-          <select
-            name="business_id"
-            defaultValue={selectedBusinessId}
-            className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2 text-sm text-[var(--text-1)]"
-            required
-          >
-            <option value="">Select business…</option>
-            {(businesses || []).map((biz) => (
-              <option key={biz.id} value={biz.id}>{biz.name}</option>
-            ))}
-          </select>
-        </div>
-
-        <div>
-          <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-[var(--text-2)]">Site</label>
-          <select
-            name="site_id"
-            defaultValue={selectedSiteId}
-            className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2 text-sm text-[var(--text-1)]"
-          >
-            <option value="all">All sites</option>
-            {(sites || []).map((site) => (
-              <option key={site.id} value={site.id}>{site.name}</option>
-            ))}
-          </select>
-        </div>
-
-        <div>
-          <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-[var(--text-2)]">From</label>
-          <input
-            type="date"
-            name="from"
-            defaultValue={fromDate}
-            className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2 text-sm text-[var(--text-1)]"
-          />
-        </div>
-
-        <div>
-          <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-[var(--text-2)]">To</label>
-          <input
-            type="date"
-            name="to"
-            defaultValue={toDate}
-            className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2 text-sm text-[var(--text-1)]"
-          />
-        </div>
-
-        <div className="md:col-span-5 flex flex-wrap gap-3">
-          <button
-            type="submit"
-            className="rounded-lg bg-cyan-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-cyan-500"
-          >
-            Pull Report
-          </button>
-          {pdfHref && (
-            <a
-              href={pdfHref}
-              className="rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-4 py-2 text-sm font-medium text-cyan-300 transition-colors hover:bg-cyan-500/20"
-            >
-              Export PDF
-            </a>
-          )}
-        </div>
-      </form>
+      <ReportsFilterForm
+        businesses={businesses || []}
+        sites={allSites || []}
+        selectedBusinessId={selectedBusinessId}
+        selectedSiteId={selectedSiteId}
+        fromDate={fromDate}
+        toDate={toDate}
+        pdfHref={pdfHref}
+      />
 
       {selectedBusinessId && (
         <div className="space-y-6">

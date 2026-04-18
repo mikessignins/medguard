@@ -56,7 +56,7 @@ type MedicDashboardSubmission = Pick<
 
 type MedicDashboardMedDec = Pick<
   MedicationDeclaration,
-  'id' | 'business_id' | 'site_id' | 'worker_name' | 'submitted_at' | 'medic_review_status' | 'exported_at' | 'phi_purged_at' | 'medications' | 'has_recent_injury_or_illness' | 'has_side_effects'
+  'id' | 'business_id' | 'site_id' | 'worker_name' | 'submitted_at' | 'medic_review_status' | 'exported_at' | 'phi_purged_at' | 'medications' | 'has_recent_injury_or_illness' | 'has_side_effects' | 'review_required' | 'medical_officer_review_required'
 >
 
 type MedicDashboardFatigue = FatigueAssessment

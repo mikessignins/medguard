@@ -12,6 +12,7 @@ export type WebPortalDestination =
   | '/suspended'
   | '/expired'
   | '/pending'
+  | '/surveillance'
   | '/medic'
   | '/admin'
   | '/superuser'
@@ -32,6 +33,8 @@ export function resolveWebPortalDestination(
   if (input.isInactive) return null
 
   if (input.role === 'pending_medic') return '/pending'
+  if (input.role === 'pending_occ_health') return '/pending'
+  if (input.role === 'occ_health') return '/surveillance'
   if (input.role === 'medic') return '/medic'
   if (input.role === 'admin') return '/admin'
   if (input.role === 'superuser') return '/superuser'
@@ -43,4 +46,10 @@ export function canAccessMedicPortal(
   input: WebPortalAccessInput
 ): boolean {
   return resolveWebPortalDestination(input) === '/medic'
+}
+
+export function canAccessSurveillancePortal(
+  input: WebPortalAccessInput
+): boolean {
+  return resolveWebPortalDestination(input) === '/surveillance'
 }

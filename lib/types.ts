@@ -1,4 +1,11 @@
-export type UserRole = 'worker' | 'medic' | 'admin' | 'pending_medic' | 'superuser'
+export type UserRole =
+  | 'worker'
+  | 'medic'
+  | 'admin'
+  | 'pending_medic'
+  | 'occ_health'
+  | 'pending_occ_health'
+  | 'superuser'
 
 export type SubmissionStatus = 'New' | 'In Review' | 'Approved' | 'Requires Follow-up' | 'Recalled'
 
@@ -76,6 +83,9 @@ export interface MedicationDeclaration {
   medic_name: string
   medic_comments: string
   review_required: boolean
+  medical_officer_review_required?: boolean
+  medical_officer_name?: string | null
+  medical_officer_practice?: string | null
   medic_reviewed_at: string | null
   script_uploads: ScriptUpload[]
   exported_at: string | null
@@ -233,6 +243,395 @@ export interface WorkerMembership {
   site_ids: string[]
   joined_at: string
   is_active: boolean
+}
+
+export type WorkerRoleSource = 'catalogue' | 'other'
+
+export interface BusinessWorkerRole {
+  id: string
+  business_id: string
+  name: string
+  normalized_name: string
+  is_active: boolean
+  sort_order: number | null
+  created_by: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface WorkerOperationalProfile {
+  id: string
+  worker_user_id: string
+  business_id: string
+  worker_display_name: string
+  selected_worker_role_id: string | null
+  job_role_name: string
+  job_role_source: WorkerRoleSource
+  other_role_text: string | null
+  requires_health_surveillance: boolean
+  surveillance_declared_at: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface BusinessWorkerRoleSuggestion {
+  id: string
+  business_id: string
+  worker_user_id: string
+  submitted_text: string
+  normalized_text: string
+  status: 'pending' | 'approved' | 'merged' | 'rejected'
+  approved_role_id: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type SurveillanceProgramCode =
+  | 'general'
+  | 'respiratory'
+  | 'hearing'
+  | 'chemical'
+  | 'dust'
+  | 'other'
+
+export type SurveillanceTypeCode = string
+
+export type SurveillanceEnrolmentStatus = 'active' | 'paused' | 'completed' | 'removed'
+
+export type SurveillanceAppointmentStatus =
+  | 'scheduled'
+  | 'confirmed'
+  | 'completed'
+  | 'rescheduled'
+  | 'cancelled'
+  | 'did_not_attend'
+
+export type SurveillanceOutcomeStatus =
+  | 'completed'
+  | 'followup_required'
+  | 'external_review_required'
+  | 'temporary_restriction'
+  | 'cleared'
+
+export type SurveillanceWorkerSource = 'app_user' | 'manual_entry'
+
+export interface SurveillanceType {
+  id: string
+  business_id: string
+  code: SurveillanceTypeCode
+  name: string
+  description: string | null
+  default_interval_days: number
+  baseline_interval_days: number | null
+  legacy_program_code: SurveillanceProgramCode | null
+  is_active: boolean
+  created_by: string | null
+  updated_by: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface SurveillanceTypeFrequencyRule {
+  id: string
+  business_id: string
+  surveillance_type_id: string
+  site_id: string | null
+  worker_role_id: string | null
+  seg_code: string | null
+  hazard_code: string | null
+  baseline_interval_days: number | null
+  recurring_interval_days: number
+  priority: number
+  is_active: boolean
+  created_by: string
+  updated_by: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface SurveillanceAssignmentRule {
+  id: string
+  business_id: string
+  surveillance_type_id: string
+  site_id: string | null
+  worker_role_id: string | null
+  seg_code: string | null
+  hazard_code: string | null
+  exposure_level_category: string | null
+  baseline_required: boolean
+  is_active: boolean
+  created_by: string
+  updated_by: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface SurveillanceReasonCode {
+  id: string
+  business_id: string
+  category: 'cancelled' | 'rescheduled' | 'did_not_attend' | 'review_required' | 'deactivated'
+  code: string
+  label: string
+  is_active: boolean
+  created_by: string | null
+  updated_by: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface SurveillanceProvider {
+  id: string
+  business_id: string
+  name: string
+  provider_type: string | null
+  contact_email: string | null
+  contact_phone: string | null
+  is_active: boolean
+  created_by: string | null
+  updated_by: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface SurveillanceProviderLocation {
+  id: string
+  provider_id: string
+  business_id: string
+  site_id: string | null
+  location_name: string
+  address_text: string | null
+  supports_remote: boolean
+  capacity_notes: string | null
+  is_active: boolean
+  created_by: string | null
+  updated_by: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface SurveillanceNotification {
+  id: string
+  business_id: string
+  surveillance_worker_id: string
+  appointment_id: string | null
+  enrolment_id: string | null
+  notification_type: string
+  delivery_channel: string
+  scheduled_for: string
+  sent_at: string | null
+  delivery_status: 'pending' | 'sent' | 'failed' | 'acknowledged' | 'cancelled'
+  template_version: string | null
+  provider_message_id?: string | null
+  delivery_error?: string | null
+  attempt_count?: number
+  last_attempted_at?: string | null
+  created_by: string | null
+  created_at: string
+}
+
+export interface SurveillanceNotificationRecipient {
+  id: string
+  notification_id: string
+  business_id: string
+  target_user_id: string | null
+  target_role: string | null
+  delivery_address: string | null
+  acknowledged_at: string | null
+  created_at: string
+}
+
+export interface SurveillanceEscalationPolicy {
+  business_id: string
+  due_soon_days: number
+  occ_health_overdue_days: number
+  supervisor_overdue_days: number
+  manager_overdue_days: number
+  is_active: boolean
+  created_at: string
+  updated_by: string | null
+  updated_at: string
+}
+
+export interface SurveillanceWorkerRoster {
+  id: string
+  business_id: string
+  surveillance_worker_id: string
+  roster_pattern: string
+  shift_type: string | null
+  current_swing_start: string | null
+  current_swing_end: string | null
+  source_system: string | null
+  source_ref: string | null
+  /** First day of cycle 1. All swing windows are projected forward from this date. */
+  anchor_date: string | null
+  /** JSON array of {days, period} segments defining one complete roster cycle. */
+  roster_cycle_json: Array<{ days: number; period: 'on' | 'off' }> | null
+  created_by: string | null
+  updated_by: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface SurveillanceWorkerAvailabilityException {
+  id: string
+  business_id: string
+  surveillance_worker_id: string
+  exception_type: 'leave' | 'training' | 'restricted_duties' | 'off_site' | 'other'
+  starts_at: string
+  ends_at: string
+  notes_operational: string | null
+  created_by: string | null
+  created_at: string
+}
+
+export interface SurveillanceReviewTask {
+  id: string
+  business_id: string
+  surveillance_worker_id: string
+  enrolment_id: string | null
+  task_type: 'new_starter_baseline' | 'role_change_review' | 'site_transfer_review' | 'self_declared_review' | 'bulk_enrolment_review'
+  status: 'open' | 'in_progress' | 'completed' | 'cancelled'
+  assigned_to: string | null
+  due_at: string | null
+  notes_operational: string | null
+  created_by: string | null
+  updated_by: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface SurveillanceWorker {
+  id: string
+  business_id: string
+  app_user_id: string | null
+  worker_source: SurveillanceWorkerSource
+  display_name: string
+  phone: string | null
+  email: string | null
+  selected_worker_role_id: string | null
+  job_role_name: string
+  site_id: string | null
+  site_name: string | null
+  employee_number?: string | null
+  employment_type?: string | null
+  employing_entity?: string | null
+  contractor_company_name?: string | null
+  engagement_status?: string | null
+  mobilisation_date?: string | null
+  demobilisation_date?: string | null
+  department?: string | null
+  business_unit?: string | null
+  workgroup_name?: string | null
+  operational_area?: string | null
+  jurisdiction_code?: string | null
+  requires_health_surveillance: boolean
+  notes_operational: string | null
+  is_active: boolean
+  created_by: string
+  updated_by: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface SurveillanceProgram {
+  id: string
+  business_id: string
+  code: SurveillanceProgramCode
+  name: string
+  description: string | null
+  is_active: boolean
+  interval_days: number
+  created_at: string
+  updated_at: string
+}
+
+export interface SurveillanceEnrolment {
+  id: string
+  business_id: string
+  surveillance_worker_id: string
+  worker_user_id: string | null
+  worker_display_name: string
+  program_id: string
+  surveillance_type_id?: string | null
+  assignment_source?: string | null
+  baseline_required?: boolean
+  baseline_completed_at?: string | null
+  frequency_override_days?: number | null
+  review_required?: boolean
+  review_reason_code_id?: string | null
+  deactivated_at?: string | null
+  deactivated_reason_code_id?: string | null
+  status: SurveillanceEnrolmentStatus
+  enrolled_at: string
+  next_due_at: string | null
+  next_appointment_at: string | null
+  created_by: string
+  updated_by: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface SurveillanceAppointment {
+  id: string
+  business_id: string
+  enrolment_id: string
+  surveillance_worker_id: string
+  worker_user_id: string | null
+  worker_display_name: string
+  program_id: string
+  surveillance_type_id?: string | null
+  assigned_staff_user_id: string | null
+  assigned_staff_name: string | null
+  site_id: string | null
+  provider_id?: string | null
+  provider_location_id?: string | null
+  status_reason_code_id?: string | null
+  confirmed_by_worker_at?: string | null
+  provider_acknowledged_at?: string | null
+  appointment_window_start?: string | null
+  appointment_window_end?: string | null
+  rescheduled_from_appointment_id?: string | null
+  scheduled_at: string
+  location: string | null
+  appointment_type: string
+  status: SurveillanceAppointmentStatus
+  pre_appointment_instructions: string | null
+  cancelled_reason: string | null
+  completed_at: string | null
+  created_by: string
+  updated_by: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface SurveillanceOutcomeMinimal {
+  id: string
+  business_id: string
+  appointment_id: string
+  surveillance_worker_id: string
+  worker_user_id: string | null
+  worker_display_name: string
+  recorded_by: string
+  recorded_by_name: string | null
+  outcome_status: SurveillanceOutcomeStatus
+  restriction_flag: boolean
+  next_due_at: string | null
+  outcome_received_at?: string | null
+  outcome_communicated_at?: string | null
+  corrective_action_required?: boolean
+  corrective_action_ref?: string | null
+  operational_notes: string | null
+  external_record_ref?: string | null
+  created_at: string
+}
+
+export interface SurveillanceDashboardMetrics {
+  upcoming_count: number
+  due_soon_count: number
+  overdue_count: number
+  completed_today_count: number
+  completed_week_count: number
+  active_enrolment_count: number
 }
 
 export type FatigueAssessmentContext =

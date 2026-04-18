@@ -12,6 +12,21 @@ import { enqueueDeclarationProcessing } from '@/lib/declaration-processing'
 
 export const runtime = 'nodejs'
 
+function isMissingModuleReviewRpc(message: string | null | undefined) {
+  return !!message && /function .*review_module_submission.* does not exist|could not find the function .*review_module_submission/i.test(message)
+}
+
+function normalizeFatigueStatus(status: string | null | undefined) {
+  switch (status) {
+    case 'in_review':
+      return 'in_medic_review'
+    case 'reviewed':
+      return 'resolved'
+    default:
+      return status ?? 'awaiting_medic_review'
+  }
+}
+
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
@@ -92,14 +107,16 @@ export async function PATCH(
       ? String(existingReviewPayload.reviewedByUserId)
       : (current.reviewed_by ? String(current.reviewed_by) : null)
 
-  if (current.status === 'resolved') {
+  const normalizedCurrentStatus = normalizeFatigueStatus(current.status)
+
+  if (normalizedCurrentStatus === 'resolved') {
     return NextResponse.json(
       { error: 'This fatigue review has already been finalised and can no longer be changed.' },
       { status: 409 },
     )
   }
 
-  if (current.status === 'in_medic_review' && lockedReviewerId && lockedReviewerId !== userId) {
+  if (normalizedCurrentStatus === 'in_medic_review' && lockedReviewerId && lockedReviewerId !== userId) {
     return NextResponse.json(
       { error: 'Another medic has already claimed this fatigue review.' },
       { status: 409 },
@@ -110,19 +127,33 @@ export async function PATCH(
   const reviewPayload = {
     ...(existingReviewPayload ?? {}),
     ...body,
+    handoverNotes: null,
+    medicOrEsoComments: null,
     reviewStartedAt: existingReviewPayload?.reviewStartedAt ?? now,
     reviewedByUserId: userId,
     reviewedByName: medicAccount.display_name,
   }
 
-  const { error } = await authClient.rpc('review_module_submission', {
-    p_submission_id: parsedId.value,
-    p_module_key: 'fatigue_assessment',
-    p_next_status: 'resolved',
-    p_review_payload: reviewPayload,
-    p_expected_status: current.status,
-    p_expected_reviewed_by: current.reviewed_by ? String(current.reviewed_by) : null,
-  })
+  const preferredRpc = await authClient.rpc('review_module_submission', {
+      p_submission_id: parsedId.value,
+      p_module_key: 'fatigue_assessment',
+      p_next_status: 'resolved',
+      p_review_payload: reviewPayload,
+      p_expected_status: current.status,
+      p_expected_reviewed_by: current.reviewed_by ? String(current.reviewed_by) : null,
+    })
+
+  const fallbackRpc = preferredRpc.error && isMissingModuleReviewRpc(preferredRpc.error.message)
+    ? await authClient.rpc('review_module_submission', {
+        p_submission_id: parsedId.value,
+        p_status: 'reviewed',
+        p_review_payload: reviewPayload,
+      })
+    : null
+
+  const error = preferredRpc.error && !isMissingModuleReviewRpc(preferredRpc.error.message)
+    ? preferredRpc.error
+    : fallbackRpc?.error ?? preferredRpc.error ?? null
 
   if (error) {
     await safeLogServerEvent({
@@ -137,8 +168,15 @@ export async function PATCH(
       route: '/api/fatigue-assessments/[id]/review',
       targetId: parsedId.value,
       errorMessage: error.message,
-      context: { fit_for_work_decision: body.fitForWorkDecision },
+      context: {
+        fit_for_work_decision: body.fitForWorkDecision,
+        preferred_rpc_error: preferredRpc.error?.message ?? null,
+        fallback_rpc_error: fallbackRpc?.error?.message ?? null,
+      },
     })
+    if (typeof error.message === 'string' && error.message.trim().length > 0) {
+      return NextResponse.json({ error: error.message }, { status: 422 })
+    }
     return logAndReturnInternalError('/api/fatigue-assessments/[id]/review', error)
   }
 

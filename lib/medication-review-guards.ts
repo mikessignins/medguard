@@ -16,9 +16,10 @@ export function isFinalMedicationReviewStatus(status: MedDecReviewStatus): boole
 }
 
 export function validateMedicationReviewTransition(
-  currentStatus: MedDecReviewStatus
+  currentStatus: MedDecReviewStatus,
+  nextStatus: MedDecReviewStatus,
 ): MedicationReviewGuardFailure | null {
-  if (isFinalMedicationReviewStatus(currentStatus)) {
+  if (isFinalMedicationReviewStatus(currentStatus) && currentStatus !== nextStatus) {
     return {
       error: `Cannot change outcome from terminal state '${currentStatus}'.`,
       status: 422,

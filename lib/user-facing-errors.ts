@@ -6,6 +6,10 @@ const ERROR_MESSAGE_MAP: Array<[RegExp, string]> = [
     'Email delivery is not configured yet. Add the Resend email settings in Vercel and try again.',
   ],
   [
+    /could not find the function .* in the schema cache|function .* does not exist|relation .* does not exist|column .* does not exist/i,
+    'This environment is missing a required database migration. Apply the latest Supabase migrations and try again.',
+  ],
+  [
     /infinite recursion detected in policy for relation "user_accounts"/i,
     'We could not save your account details because account permissions need attention. Please contact support.',
   ],

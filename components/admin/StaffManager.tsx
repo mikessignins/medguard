@@ -1,13 +1,20 @@
 'use client'
+
 import { useState } from 'react'
 import { format } from 'date-fns'
 import { createClient } from '@/lib/supabase/client'
 import type { UserAccount, Site } from '@/lib/types'
 
+type StaffRole = 'medic' | 'occ_health'
+type PendingStaffRole = 'pending_medic' | 'pending_occ_health'
+
 interface Props {
   pendingMedics: UserAccount[]
   activeMedics: UserAccount[]
   inactiveMedics: UserAccount[]
+  pendingOccHealth: UserAccount[]
+  activeOccHealth: UserAccount[]
+  inactiveOccHealth: UserAccount[]
   sites: Site[]
   businessId: string
 }
@@ -33,6 +40,37 @@ interface PasswordResetForm {
   confirmPassword: string
 }
 
+interface StaffSectionConfig {
+  role: StaffRole
+  pendingRole: PendingStaffRole
+  singularLabel: string
+  pluralLabel: string
+  pendingLabel: string
+  contractorLabel: string
+  signupHref: string
+}
+
+const STAFF_CONFIG: Record<StaffRole, StaffSectionConfig> = {
+  medic: {
+    role: 'medic',
+    pendingRole: 'pending_medic',
+    singularLabel: 'Medic',
+    pluralLabel: 'Medics',
+    pendingLabel: 'pending medics',
+    contractorLabel: 'Medic',
+    signupHref: '/medic-signup',
+  },
+  occ_health: {
+    role: 'occ_health',
+    pendingRole: 'pending_occ_health',
+    singularLabel: 'Occ Health',
+    pluralLabel: 'Occ Health Staff',
+    pendingLabel: 'pending occ health staff',
+    contractorLabel: 'Occ Health',
+    signupHref: '/occ-health-signup',
+  },
+}
+
 const EMPTY_CONTRACTOR: ContractorForm = {
   display_name: '',
   email: '',
@@ -47,51 +85,67 @@ const EMPTY_PASSWORD_RESET: PasswordResetForm = {
 }
 
 export default function StaffManager({
-  pendingMedics: initialPending,
-  activeMedics: initialActive,
-  inactiveMedics: initialInactive,
+  pendingMedics: initialPendingMedics,
+  activeMedics: initialActiveMedics,
+  inactiveMedics: initialInactiveMedics,
+  pendingOccHealth: initialPendingOccHealth,
+  activeOccHealth: initialActiveOccHealth,
+  inactiveOccHealth: initialInactiveOccHealth,
   sites,
   businessId,
 }: Props) {
   const supabase = createClient()
 
-  const [pendingMedics, setPendingMedics] = useState(initialPending)
-  const [activeMedics, setActiveMedics] = useState(initialActive)
-  const [inactiveMedics, setInactiveMedics] = useState(initialInactive)
+  const [pendingStaff, setPendingStaff] = useState<Record<StaffRole, UserAccount[]>>({
+    medic: initialPendingMedics,
+    occ_health: initialPendingOccHealth,
+  })
+  const [activeStaff, setActiveStaff] = useState<Record<StaffRole, UserAccount[]>>({
+    medic: initialActiveMedics,
+    occ_health: initialActiveOccHealth,
+  })
+  const [inactiveStaff, setInactiveStaff] = useState<Record<StaffRole, UserAccount[]>>({
+    medic: initialInactiveMedics,
+    occ_health: initialInactiveOccHealth,
+  })
   const [loading, setLoading] = useState<string | null>(null)
   const [error, setError] = useState('')
   const [statusMessage, setStatusMessage] = useState('')
 
   const [showSiteModal, setShowSiteModal] = useState(false)
-  const [modalMedic, setModalMedic] = useState<UserAccount | null>(null)
+  const [modalStaff, setModalStaff] = useState<UserAccount | null>(null)
   const [selectedSiteIds, setSelectedSiteIds] = useState<string[]>([])
   const [contractEndDate, setContractEndDate] = useState('')
   const [isApproving, setIsApproving] = useState(false)
+  const [modalRole, setModalRole] = useState<StaffRole>('medic')
 
   const [showContractorForm, setShowContractorForm] = useState(false)
+  const [contractorRole, setContractorRole] = useState<StaffRole>('medic')
   const [contractorForm, setContractorForm] = useState<ContractorForm>(EMPTY_CONTRACTOR)
   const [contractorLoading, setContractorLoading] = useState(false)
   const [contractorError, setContractorError] = useState('')
   const [contractorSuccess, setContractorSuccess] = useState('')
   const [contractorResult, setContractorResult] = useState<ContractorAccountResult | null>(null)
+
   const [showResetPasswordModal, setShowResetPasswordModal] = useState(false)
-  const [resetPasswordMedic, setResetPasswordMedic] = useState<UserAccount | null>(null)
+  const [resetPasswordStaff, setResetPasswordStaff] = useState<UserAccount | null>(null)
   const [resetPasswordForm, setResetPasswordForm] = useState<PasswordResetForm>(EMPTY_PASSWORD_RESET)
   const [resetPasswordLoading, setResetPasswordLoading] = useState(false)
   const [resetPasswordError, setResetPasswordError] = useState('')
 
-  function openSiteModal(medic: UserAccount, approving: boolean) {
-    setModalMedic(medic)
-    setSelectedSiteIds(medic.site_ids || [])
-    setContractEndDate(medic.contract_end_date || '')
+  function openSiteModal(staff: UserAccount, role: StaffRole, approving: boolean) {
+    setModalStaff(staff)
+    setModalRole(role)
+    setSelectedSiteIds(staff.site_ids || [])
+    setContractEndDate(staff.contract_end_date || '')
     setIsApproving(approving)
     setShowSiteModal(true)
     setError('')
     setStatusMessage('')
   }
 
-  function openResetPasswordModal(medic: UserAccount) {
-    setResetPasswordMedic(medic)
+  function openResetPasswordModal(staff: UserAccount) {
+    setResetPasswordStaff(staff)
     setResetPasswordForm(EMPTY_PASSWORD_RESET)
     setResetPasswordError('')
     setShowResetPasswordModal(true)
@@ -105,6 +159,16 @@ export default function StaffManager({
     return Array.from(bytes, byte => chars[byte % chars.length]).join('')
   }
 
+  function getSiteNames(siteIds: string[]) {
+    return siteIds.map(id => sites.find(site => site.id === id)?.name || id).filter(Boolean)
+  }
+
+  function isExpiredContractValue(contractEndDate: string | null | undefined) {
+    if (!contractEndDate) return false
+    const expiry = new Date(`${contractEndDate}T23:59:59`)
+    return expiry.getTime() < Date.now()
+  }
+
   function toggleSite(siteId: string) {
     setSelectedSiteIds(prev =>
       prev.includes(siteId) ? prev.filter(id => id !== siteId) : [...prev, siteId]
@@ -112,35 +176,62 @@ export default function StaffManager({
   }
 
   function toggleContractorSite(siteId: string) {
-    setContractorForm(f => ({
-      ...f,
-      site_ids: f.site_ids.includes(siteId)
-        ? f.site_ids.filter(id => id !== siteId)
-        : [...f.site_ids, siteId],
+    setContractorForm(form => ({
+      ...form,
+      site_ids: form.site_ids.includes(siteId)
+        ? form.site_ids.filter(id => id !== siteId)
+        : [...form.site_ids, siteId],
     }))
   }
 
+  function moveStaffMember(role: StaffRole, target: 'pending' | 'active' | 'inactive', user: UserAccount) {
+    setPendingStaff(prev => ({
+      ...prev,
+      [role]: prev[role].filter(member => member.id !== user.id),
+    }))
+    setActiveStaff(prev => ({
+      ...prev,
+      [role]: prev[role].filter(member => member.id !== user.id),
+    }))
+    setInactiveStaff(prev => ({
+      ...prev,
+      [role]: prev[role].filter(member => member.id !== user.id),
+    }))
+
+    if (target === 'pending') {
+      setPendingStaff(prev => ({ ...prev, [role]: [...prev[role], user] }))
+      return
+    }
+
+    if (target === 'active') {
+      setActiveStaff(prev => ({ ...prev, [role]: [...prev[role], user] }))
+      return
+    }
+
+    setInactiveStaff(prev => ({ ...prev, [role]: [...prev[role], user] }))
+  }
+
   async function saveModal() {
-    if (!modalMedic) return
-    setLoading(modalMedic.id)
+    if (!modalStaff) return
+    setLoading(modalStaff.id)
     setError('')
     setStatusMessage('')
 
     const expiredContract = isExpiredContractValue(contractEndDate || null)
-    const nextInactive = expiredContract ? true : modalMedic.is_inactive ?? false
-
+    const nextInactive = expiredContract ? true : modalStaff.is_inactive ?? false
+    const approvedRole = modalRole
     const updates: Record<string, unknown> = {
       site_ids: selectedSiteIds,
       contract_end_date: contractEndDate || null,
       is_inactive: nextInactive,
     }
 
-    if (isApproving) updates.role = 'medic'
+    if (isApproving) updates.role = approvedRole
 
     const { error: updateError } = await supabase
       .from('user_accounts')
       .update(updates)
-      .eq('id', modalMedic.id)
+      .eq('id', modalStaff.id)
 
     if (updateError) {
       setError(updateError.message)
@@ -148,60 +239,47 @@ export default function StaffManager({
       return
     }
 
-    // Audit log — fire-and-forget, non-blocking
     fetch('/api/admin/audit', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        action: isApproving ? 'medic_approved' : 'site_assignment_changed',
-        target_user_id: modalMedic.id,
-        target_name: modalMedic.display_name,
+        action: isApproving
+          ? `${approvedRole}_approved`
+          : `${approvedRole}_site_assignment_changed`,
+        target_user_id: modalStaff.id,
+        target_name: modalStaff.display_name,
         detail: {
+          role: approvedRole,
           site_ids: selectedSiteIds,
           site_names: getSiteNames(selectedSiteIds),
           contract_end_date: contractEndDate || null,
         },
       }),
-    }).catch(() => { /* non-blocking */ })
+    }).catch(() => {})
 
-    const updated = { ...modalMedic, ...updates } as UserAccount
+    const updated = { ...modalStaff, ...updates, role: isApproving ? approvedRole : modalStaff.role } as UserAccount
+    moveStaffMember(modalRole, nextInactive ? 'inactive' : 'active', updated)
 
-    if (isApproving && !nextInactive) {
-      setPendingMedics(prev => prev.filter(m => m.id !== modalMedic.id))
-      setActiveMedics(prev => [...prev, updated])
-    } else if (isApproving && nextInactive) {
-      setPendingMedics(prev => prev.filter(m => m.id !== modalMedic.id))
-      setInactiveMedics(prev => [...prev, updated])
-    } else {
-      setActiveMedics(prev => prev.filter(m => m.id !== modalMedic.id))
-      setInactiveMedics(prev => prev.filter(m => m.id !== modalMedic.id))
-      if (nextInactive) {
-        setInactiveMedics(prev => [...prev, updated])
-      } else {
-        setActiveMedics(prev => [...prev, updated])
-      }
-    }
-
-    if (expiredContract) {
-      setStatusMessage(`${modalMedic.display_name} has an expired contract and was moved to the inactive list.`)
-    } else {
-      setStatusMessage(`${modalMedic.display_name} was updated.`)
-    }
+    setStatusMessage(
+      expiredContract
+        ? `${modalStaff.display_name} has an expired contract and was moved to the inactive list.`
+        : `${modalStaff.display_name} was updated.`,
+    )
 
     setLoading(null)
     setShowSiteModal(false)
-    setModalMedic(null)
+    setModalStaff(null)
   }
 
-  async function deactivateMedic(medic: UserAccount) {
-    if (!confirm(`Move ${medic.display_name} to the inactive list? They can be reactivated later.`)) return
-    setLoading(medic.id)
+  async function deactivateStaff(staff: UserAccount, role: StaffRole) {
+    if (!confirm(`Move ${staff.display_name} to the inactive list? They can be reactivated later.`)) return
+    setLoading(staff.id)
     setError('')
 
     const { error: updateError } = await supabase
       .from('user_accounts')
       .update({ is_inactive: true })
-      .eq('id', medic.id)
+      .eq('id', staff.id)
 
     if (updateError) {
       setError(updateError.message)
@@ -213,33 +291,31 @@ export default function StaffManager({
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        action: 'medic_deactivated',
-        target_user_id: medic.id,
-        target_name: medic.display_name,
+        action: `${role}_deactivated`,
+        target_user_id: staff.id,
+        target_name: staff.display_name,
       }),
-    }).catch(() => { /* non-blocking */ })
+    }).catch(() => {})
 
-    const updated = { ...medic, is_inactive: true }
-    setActiveMedics(prev => prev.filter(m => m.id !== medic.id))
-    setInactiveMedics(prev => [...prev, updated])
-    setStatusMessage(`${medic.display_name} was moved to the inactive list.`)
+    moveStaffMember(role, 'inactive', { ...staff, is_inactive: true })
+    setStatusMessage(`${staff.display_name} was moved to the inactive list.`)
     setLoading(null)
   }
 
-  async function reactivateMedic(medic: UserAccount) {
-    if (isExpiredContractValue(medic.contract_end_date)) {
-      setError(`Update ${medic.display_name}'s contract end date before reactivating them.`)
+  async function reactivateStaff(staff: UserAccount, role: StaffRole) {
+    if (isExpiredContractValue(staff.contract_end_date)) {
+      setError(`Update ${staff.display_name}'s contract end date before reactivating them.`)
       return
     }
-    if (!confirm(`Reactivate ${medic.display_name}? They will return to the active medic list.`)) return
-    setLoading(medic.id)
+    if (!confirm(`Reactivate ${staff.display_name}? They will return to the active staff list.`)) return
+    setLoading(staff.id)
     setError('')
     setStatusMessage('')
 
     const { error: updateError } = await supabase
       .from('user_accounts')
       .update({ is_inactive: false })
-      .eq('id', medic.id)
+      .eq('id', staff.id)
 
     if (updateError) {
       setError(updateError.message)
@@ -251,21 +327,19 @@ export default function StaffManager({
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        action: 'medic_reactivated',
-        target_user_id: medic.id,
-        target_name: medic.display_name,
+        action: `${role}_reactivated`,
+        target_user_id: staff.id,
+        target_name: staff.display_name,
       }),
-    }).catch(() => { /* non-blocking */ })
+    }).catch(() => {})
 
-    const updated = { ...medic, is_inactive: false }
-    setInactiveMedics(prev => prev.filter(m => m.id !== medic.id))
-    setActiveMedics(prev => [...prev, updated])
-    setStatusMessage(`${medic.display_name} was reactivated.`)
+    moveStaffMember(role, 'active', { ...staff, is_inactive: false })
+    setStatusMessage(`${staff.display_name} was reactivated.`)
     setLoading(null)
   }
 
-  async function resetMedicPassword() {
-    if (!resetPasswordMedic) return
+  async function resetStaffPassword() {
+    if (!resetPasswordStaff) return
     setResetPasswordError('')
     setError('')
     setStatusMessage('')
@@ -283,7 +357,7 @@ export default function StaffManager({
     setResetPasswordLoading(true)
 
     try {
-      const response = await fetch(`/api/admin/medics/${resetPasswordMedic.id}/password`, {
+      const response = await fetch(`/api/admin/medics/${resetPasswordStaff.id}/password`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ temporary_password: resetPasswordForm.temporary_password }),
@@ -291,7 +365,7 @@ export default function StaffManager({
 
       const payload = await response.json().catch(() => ({}))
       if (!response.ok) {
-        setResetPasswordError(payload.error || 'Failed to reset medic password.')
+        setResetPasswordError(payload.error || 'Failed to reset staff password.')
         return
       }
 
@@ -299,17 +373,15 @@ export default function StaffManager({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          action: 'medic_password_reset',
-          target_user_id: resetPasswordMedic.id,
-          target_name: resetPasswordMedic.display_name,
+          action: `${resetPasswordStaff.role}_password_reset`,
+          target_user_id: resetPasswordStaff.id,
+          target_name: resetPasswordStaff.display_name,
         }),
-      }).catch(() => { /* non-blocking */ })
+      }).catch(() => {})
 
       setShowResetPasswordModal(false)
-      setStatusMessage(
-        `Temporary password updated for ${resetPasswordMedic.display_name}. Share it directly with them.`,
-      )
-      setResetPasswordMedic(null)
+      setStatusMessage(`Temporary password updated for ${resetPasswordStaff.display_name}. Share it directly with them.`)
+      setResetPasswordStaff(null)
       setResetPasswordForm(EMPTY_PASSWORD_RESET)
     } catch {
       setResetPasswordError('Could not reach the server. Please try again.')
@@ -318,7 +390,7 @@ export default function StaffManager({
     }
   }
 
-  async function addContractorMedic(e: React.FormEvent) {
+  async function addContractorStaff(e: React.FormEvent) {
     e.preventDefault()
     setContractorLoading(true)
     setContractorError('')
@@ -334,28 +406,26 @@ export default function StaffManager({
           temporary_password: contractorForm.temporary_password,
           site_ids: contractorForm.site_ids,
           contract_end_date: contractorForm.contract_end_date || null,
+          role: contractorRole,
         }),
       })
 
       const payload = await response.json().catch(() => ({}))
       if (!response.ok) {
-        setContractorError(payload.error || 'Failed to create medic account.')
+        setContractorError(payload.error || 'Failed to create staff account.')
         return
       }
 
-      setActiveMedics(prev => [
-        ...prev,
-        {
-          id: payload.user.id,
-          business_id: businessId,
-          display_name: contractorForm.display_name.trim(),
-          email: contractorForm.email.trim(),
-          role: 'medic',
-          site_ids: contractorForm.site_ids,
-          contract_end_date: contractorForm.contract_end_date || null,
-          is_inactive: false,
-        },
-      ])
+      moveStaffMember(contractorRole, 'active', {
+        id: payload.user.id,
+        business_id: businessId,
+        display_name: contractorForm.display_name.trim(),
+        email: contractorForm.email.trim(),
+        role: contractorRole,
+        site_ids: contractorForm.site_ids,
+        contract_end_date: contractorForm.contract_end_date || null,
+        is_inactive: false,
+      } as UserAccount)
     } catch {
       setContractorError('Could not reach the server. Please try again.')
       return
@@ -363,8 +433,8 @@ export default function StaffManager({
       setContractorLoading(false)
     }
 
-    setContractorSuccess(`Contractor medic account created for ${contractorForm.email}. Share the temporary password directly with them.`)
-    setStatusMessage(`Contractor medic account created for ${contractorForm.display_name}.`)
+    setContractorSuccess(`${STAFF_CONFIG[contractorRole].singularLabel} account created for ${contractorForm.email}. Share the temporary password directly with them.`)
+    setStatusMessage(`${STAFF_CONFIG[contractorRole].singularLabel} account created for ${contractorForm.display_name}.`)
     setContractorResult({
       display_name: contractorForm.display_name.trim(),
       email: contractorForm.email.trim(),
@@ -377,583 +447,498 @@ export default function StaffManager({
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        action: 'contractor_medic_created',
+        action: `contractor_${contractorRole}_created`,
         target_name: contractorForm.display_name.trim(),
         detail: {
+          role: contractorRole,
           email: contractorForm.email.trim(),
           site_names: getSiteNames(contractorForm.site_ids),
           contract_end_date: contractorForm.contract_end_date || null,
         },
       }),
-    }).catch(() => { /* non-blocking */ })
+    }).catch(() => {})
 
     setContractorForm(EMPTY_CONTRACTOR)
   }
 
-  function getSiteNames(siteIds: string[]) {
-    return siteIds.map(id => sites.find(s => s.id === id)?.name || id).filter(Boolean)
-  }
-
-  function isExpiredContractValue(contractEndDate: string | null | undefined) {
-    if (!contractEndDate) return false
-    const expiry = new Date(`${contractEndDate}T23:59:59`)
-    return expiry.getTime() < Date.now()
-  }
-
   const inputCls = 'w-full px-4 py-2.5 bg-slate-800/60 border border-slate-700 rounded-lg focus:outline-none focus:border-cyan-500 text-sm text-slate-100 placeholder-slate-500'
+
+  function renderStaffList(role: StaffRole, listType: 'pending' | 'active' | 'inactive') {
+    const config = STAFF_CONFIG[role]
+    const staffList = listType === 'pending' ? pendingStaff[role] : listType === 'active' ? activeStaff[role] : inactiveStaff[role]
+
+    if (listType === 'pending') {
+      return (
+        <div>
+          <h2 className="mb-3 text-base font-semibold text-slate-300">
+            Pending {config.pluralLabel}
+            {staffList.length > 0 ? (
+              <span className="ml-2 text-sm font-normal text-orange-400">({staffList.length} waiting)</span>
+            ) : null}
+          </h2>
+          {staffList.length === 0 ? (
+            <p className="text-sm italic text-slate-500">No {config.pendingLabel}.</p>
+          ) : (
+            <div className="overflow-hidden rounded-xl border border-slate-700/50 bg-slate-800/60">
+              {staffList.map((staff, index) => (
+                <div
+                  key={staff.id}
+                  className={`flex items-center justify-between px-5 py-4 ${index > 0 ? 'border-t border-slate-700/50' : ''}`}
+                >
+                  <div>
+                    <p className="font-medium text-slate-100">{staff.display_name}</p>
+                    <p className="text-sm text-slate-500">{staff.email}</p>
+                  </div>
+                  <button
+                    onClick={() => openSiteModal(staff, role, true)}
+                    disabled={loading === staff.id}
+                    className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-emerald-500 disabled:opacity-50"
+                  >
+                    {loading === staff.id ? 'Processing...' : 'Approve'}
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )
+    }
+
+    const isInactive = listType === 'inactive'
+
+    return (
+      <div>
+        <h2 className="mb-3 text-base font-semibold text-slate-300">
+          {isInactive ? `Inactive ${config.pluralLabel}` : `Active ${config.pluralLabel}`}
+          {staffList.length > 0 ? (
+            <span className="ml-2 text-sm font-normal text-slate-500">({staffList.length})</span>
+          ) : null}
+        </h2>
+        {staffList.length === 0 ? (
+          <p className="text-sm italic text-slate-500">No {isInactive ? `inactive ${config.pluralLabel.toLowerCase()}` : `active ${config.pluralLabel.toLowerCase()}`}.</p>
+        ) : (
+          <div className="overflow-hidden rounded-xl border border-slate-700/50 bg-slate-800/60">
+            {staffList.map((staff, index) => {
+              const siteNames = getSiteNames(staff.site_ids || [])
+              const isContractor = !!staff.contract_end_date
+              const hasExpiredContract = isExpiredContractValue(staff.contract_end_date)
+
+              return (
+                <div
+                  key={staff.id}
+                  className={`flex items-center justify-between gap-4 px-5 py-4 ${index > 0 ? 'border-t border-slate-700/50' : ''}`}
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <p className="font-medium text-slate-100">{staff.display_name}</p>
+                      {isInactive ? (
+                        <span className="rounded-full border border-slate-600/60 bg-slate-700/70 px-2 py-0.5 text-xs text-slate-300">Inactive</span>
+                      ) : null}
+                      {isContractor ? (
+                        <span className="rounded-full border border-amber-500/20 bg-amber-500/15 px-2 py-0.5 text-xs text-amber-400">Contractor</span>
+                      ) : null}
+                      {hasExpiredContract ? (
+                        <span className="rounded-full border border-red-500/20 bg-red-500/10 px-2 py-0.5 text-xs text-red-400">Expired Contract</span>
+                      ) : null}
+                    </div>
+                    <p className="text-sm text-slate-500">{staff.email}</p>
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {siteNames.length > 0 ? (
+                        siteNames.map(name => (
+                          <span key={name} className="rounded-full bg-slate-700/50 px-2 py-0.5 text-xs text-slate-400">
+                            {name}
+                          </span>
+                        ))
+                      ) : (
+                        <span className="text-xs italic text-slate-600">No sites assigned</span>
+                      )}
+                    </div>
+                    {staff.contract_end_date ? (
+                      <p className="mt-1 text-xs text-amber-500">
+                        Contract ends: {format(new Date(staff.contract_end_date), 'dd MMM yyyy')}
+                      </p>
+                    ) : null}
+                  </div>
+                  <div className="flex shrink-0 gap-2">
+                    <button
+                      onClick={() => openResetPasswordModal(staff)}
+                      disabled={loading === staff.id}
+                      className="rounded-lg bg-slate-700 px-3 py-2 text-sm font-medium text-slate-300 transition-colors hover:bg-slate-600 disabled:opacity-50"
+                    >
+                      Reset Password
+                    </button>
+                    <button
+                      onClick={() => openSiteModal(staff, role, false)}
+                      disabled={loading === staff.id}
+                      className="rounded-lg bg-slate-700 px-3 py-2 text-sm font-medium text-slate-300 transition-colors hover:bg-slate-600 disabled:opacity-50"
+                    >
+                      Edit
+                    </button>
+                    {isInactive ? (
+                      <button
+                        onClick={() => reactivateStaff(staff, role)}
+                        disabled={loading === staff.id}
+                        className="rounded-lg bg-emerald-600 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-emerald-500 disabled:opacity-50"
+                      >
+                        {loading === staff.id ? '...' : 'Reactivate'}
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => deactivateStaff(staff, role)}
+                        disabled={loading === staff.id}
+                        className="rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-sm font-medium text-red-400 transition-colors hover:bg-red-500/20 disabled:opacity-50"
+                      >
+                        {loading === staff.id ? '...' : 'Deactivate'}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  const modalConfig = STAFF_CONFIG[modalRole]
+  const contractorConfig = STAFF_CONFIG[contractorRole]
 
   return (
     <div className="space-y-8">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-slate-100">Staff Management</h1>
-        <button
-          onClick={() => {
-            setShowContractorForm(true)
-            setContractorError('')
-            setContractorSuccess('')
-            setContractorResult(null)
-          }}
-          className="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white text-sm font-medium rounded-lg transition-colors"
-        >
-          + Add Contractor Medic
-        </button>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-100">Staff Management</h1>
+          <p className="mt-1 text-sm text-slate-500">
+            Approve and manage medic and occ health staff access for this business.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={() => {
+              setContractorRole('medic')
+              setShowContractorForm(true)
+              setContractorError('')
+              setContractorSuccess('')
+              setContractorResult(null)
+            }}
+            className="rounded-lg bg-cyan-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-cyan-500"
+          >
+            + Add Medic
+          </button>
+          <button
+            onClick={() => {
+              setContractorRole('occ_health')
+              setShowContractorForm(true)
+              setContractorError('')
+              setContractorSuccess('')
+              setContractorResult(null)
+            }}
+            className="rounded-lg bg-teal-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-teal-500"
+          >
+            + Add Occ Health
+          </button>
+        </div>
       </div>
 
-      {error && (
-        <div className="bg-red-500/10 border border-red-500/20 text-red-400 text-sm px-4 py-3 rounded-lg">
+      <div className="rounded-xl border border-slate-700/50 bg-slate-900/50 p-4 text-sm text-slate-400">
+        External signup links:
+        <a href={STAFF_CONFIG.medic.signupHref} className="ml-2 text-cyan-400 hover:text-cyan-300">Medic</a>
+        <span className="mx-2 text-slate-600">•</span>
+        <a href={STAFF_CONFIG.occ_health.signupHref} className="text-cyan-400 hover:text-cyan-300">Occ Health</a>
+      </div>
+
+      {error ? (
+        <div className="rounded-lg border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-400">
           {error}
         </div>
-      )}
+      ) : null}
 
-      {statusMessage && (
-        <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-sm px-4 py-3 rounded-lg">
+      {statusMessage ? (
+        <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-400">
           {statusMessage}
         </div>
-      )}
+      ) : null}
 
-      {/* Pending Medics */}
-      <div>
-        <h2 className="text-base font-semibold text-slate-300 mb-3">
-          Pending Approval
-          {pendingMedics.length > 0 && (
-            <span className="ml-2 text-sm font-normal text-orange-400">({pendingMedics.length} waiting)</span>
-          )}
-        </h2>
-        {pendingMedics.length === 0 ? (
-          <p className="text-slate-500 text-sm italic">No pending medics.</p>
-        ) : (
-          <div className="bg-slate-800/60 border border-slate-700/50 rounded-xl overflow-hidden">
-            {pendingMedics.map((medic, i) => (
-              <div
-                key={medic.id}
-                className={`px-5 py-4 flex items-center justify-between ${i > 0 ? 'border-t border-slate-700/50' : ''}`}
-              >
-                <div>
-                  <p className="font-medium text-slate-100">{medic.display_name}</p>
-                  <p className="text-sm text-slate-500">{medic.email}</p>
-                </div>
-                <button
-                  onClick={() => openSiteModal(medic, true)}
-                  disabled={loading === medic.id}
-                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
-                >
-                  {loading === medic.id ? 'Processing...' : 'Approve'}
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
+      <div className="grid gap-8 xl:grid-cols-2">
+        <div className="space-y-8">
+          {renderStaffList('medic', 'pending')}
+          {renderStaffList('medic', 'active')}
+          {renderStaffList('medic', 'inactive')}
+        </div>
+        <div className="space-y-8">
+          {renderStaffList('occ_health', 'pending')}
+          {renderStaffList('occ_health', 'active')}
+          {renderStaffList('occ_health', 'inactive')}
+        </div>
       </div>
 
-      {/* Active Medics */}
-      <div>
-        <h2 className="text-base font-semibold text-slate-300 mb-3">
-          Active Medics
-          {activeMedics.length > 0 && (
-            <span className="ml-2 text-sm font-normal text-slate-500">({activeMedics.length})</span>
-          )}
-        </h2>
-        {activeMedics.length === 0 ? (
-          <p className="text-slate-500 text-sm italic">No active medics.</p>
-        ) : (
-          <div className="bg-slate-800/60 border border-slate-700/50 rounded-xl overflow-hidden">
-            {activeMedics.map((medic, i) => {
-              const siteNames = getSiteNames(medic.site_ids || [])
-              const isContractor = !!medic.contract_end_date
-              const hasExpiredContract = isExpiredContractValue(medic.contract_end_date)
-              return (
-                <div
-                  key={medic.id}
-                  className={`px-5 py-4 flex items-center justify-between gap-4 ${i > 0 ? 'border-t border-slate-700/50' : ''}`}
-                >
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <p className="font-medium text-slate-100">{medic.display_name}</p>
-                      {isContractor && (
-                        <span className="text-xs bg-amber-500/15 text-amber-400 border border-amber-500/20 px-2 py-0.5 rounded-full">Contractor</span>
-                      )}
-                      {hasExpiredContract && (
-                        <span className="text-xs bg-red-500/10 text-red-400 border border-red-500/20 px-2 py-0.5 rounded-full">Expired Contract</span>
-                      )}
-                    </div>
-                    <p className="text-sm text-slate-500">{medic.email}</p>
-                    <div className="flex flex-wrap gap-1.5 mt-2">
-                      {siteNames.length > 0 ? (
-                        siteNames.map(name => (
-                          <span key={name} className="text-xs bg-slate-700/50 text-slate-400 px-2 py-0.5 rounded-full">
-                            {name}
-                          </span>
-                        ))
-                      ) : (
-                        <span className="text-xs text-slate-600 italic">No sites assigned</span>
-                      )}
-                    </div>
-                    {medic.contract_end_date && (
-                      <p className="text-xs text-amber-500 mt-1">
-                        Contract ends: {format(new Date(medic.contract_end_date), 'dd MMM yyyy')}
-                      </p>
-                    )}
-                  </div>
-                  <div className="flex gap-2 shrink-0">
-                    <button
-                      onClick={() => openResetPasswordModal(medic)}
-                      disabled={loading === medic.id}
-                      className="px-3 py-2 bg-slate-700 hover:bg-slate-600 text-slate-300 text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
-                    >
-                      Reset Password
-                    </button>
-                    <button
-                      onClick={() => openSiteModal(medic, false)}
-                      disabled={loading === medic.id}
-                      className="px-3 py-2 bg-slate-700 hover:bg-slate-600 text-slate-300 text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
-                    >
-                      Edit
-                    </button>
-                    <button
-                      onClick={() => deactivateMedic(medic)}
-                      disabled={loading === medic.id}
-                      className="px-3 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
-                    >
-                      {loading === medic.id ? '...' : 'Deactivate'}
-                    </button>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        )}
-      </div>
-
-      {/* Inactive Medics */}
-      <div>
-        <h2 className="text-base font-semibold text-slate-300 mb-3">
-          Inactive Medics
-          {inactiveMedics.length > 0 && (
-            <span className="ml-2 text-sm font-normal text-slate-500">({inactiveMedics.length})</span>
-          )}
-        </h2>
-        {inactiveMedics.length === 0 ? (
-          <p className="text-slate-500 text-sm italic">No inactive medics.</p>
-        ) : (
-          <div className="bg-slate-800/60 border border-slate-700/50 rounded-xl overflow-hidden">
-            {inactiveMedics.map((medic, i) => {
-              const siteNames = getSiteNames(medic.site_ids || [])
-              const isContractor = !!medic.contract_end_date
-              const hasExpiredContract = isExpiredContractValue(medic.contract_end_date)
-              return (
-                <div
-                  key={medic.id}
-                  className={`px-5 py-4 flex items-center justify-between gap-4 ${i > 0 ? 'border-t border-slate-700/50' : ''}`}
-                >
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <p className="font-medium text-slate-100">{medic.display_name}</p>
-                      <span className="text-xs bg-slate-700/70 text-slate-300 border border-slate-600/60 px-2 py-0.5 rounded-full">Inactive</span>
-                      {isContractor && (
-                        <span className="text-xs bg-amber-500/15 text-amber-400 border border-amber-500/20 px-2 py-0.5 rounded-full">Contractor</span>
-                      )}
-                      {hasExpiredContract && (
-                        <span className="text-xs bg-red-500/10 text-red-400 border border-red-500/20 px-2 py-0.5 rounded-full">Expired Contract</span>
-                      )}
-                    </div>
-                    <p className="text-sm text-slate-500">{medic.email}</p>
-                    <div className="flex flex-wrap gap-1.5 mt-2">
-                      {siteNames.length > 0 ? (
-                        siteNames.map(name => (
-                          <span key={name} className="text-xs bg-slate-700/50 text-slate-400 px-2 py-0.5 rounded-full">
-                            {name}
-                          </span>
-                        ))
-                      ) : (
-                        <span className="text-xs text-slate-600 italic">No sites assigned</span>
-                      )}
-                    </div>
-                    {medic.contract_end_date && (
-                      <p className="text-xs text-amber-500 mt-1">
-                        Contract ends: {format(new Date(medic.contract_end_date), 'dd MMM yyyy')}
-                      </p>
-                    )}
-                  </div>
-                  <div className="flex gap-2 shrink-0">
-                    <button
-                      onClick={() => openResetPasswordModal(medic)}
-                      disabled={loading === medic.id}
-                      className="px-3 py-2 bg-slate-700 hover:bg-slate-600 text-slate-300 text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
-                    >
-                      Reset Password
-                    </button>
-                    <button
-                      onClick={() => openSiteModal(medic, false)}
-                      disabled={loading === medic.id}
-                      className="px-3 py-2 bg-slate-700 hover:bg-slate-600 text-slate-300 text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
-                    >
-                      Edit
-                    </button>
-                    <button
-                      onClick={() => reactivateMedic(medic)}
-                      disabled={loading === medic.id}
-                      className="px-3 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
-                    >
-                      {loading === medic.id ? '...' : 'Reactivate'}
-                    </button>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        )}
-      </div>
-
-      {/* Site Assignment Modal */}
-      {showSiteModal && modalMedic && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-          <div className="bg-slate-900 border border-slate-700/50 rounded-2xl shadow-2xl w-full max-w-md p-6">
-            <h3 className="text-lg font-semibold text-slate-100 mb-1">
-              {isApproving ? 'Approve Medic' : 'Edit Medic'}
+      {showSiteModal && modalStaff ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 px-4">
+          <div className="w-full max-w-lg rounded-2xl border border-slate-700 bg-slate-900 p-6">
+            <h3 className="text-lg font-semibold text-slate-100">
+              {isApproving ? `Approve ${modalConfig.singularLabel}` : `Edit ${modalConfig.singularLabel}`}
             </h3>
-            <p className="text-sm text-slate-500 mb-5">{modalMedic.display_name}</p>
+            <p className="mt-1 text-sm text-slate-400">{modalStaff.display_name}</p>
 
-            <div className="mb-5">
-              <p className="text-sm font-medium text-slate-300 mb-2">Assign Sites</p>
-              {sites.length === 0 ? (
-                <p className="text-sm text-slate-500 italic">No sites available. Add sites first.</p>
-              ) : (
-                <div className="space-y-2 max-h-48 overflow-y-auto">
+            <div className="mt-5 space-y-4">
+              <div>
+                <label className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-slate-400">Assigned sites</label>
+                <div className="max-h-56 space-y-2 overflow-auto rounded-lg border border-slate-700 bg-slate-800/60 p-3">
                   {sites.map(site => (
-                    <label key={site.id} className="flex items-center gap-3 cursor-pointer">
+                    <label key={site.id} className="flex items-center gap-3 text-sm text-slate-200">
                       <input
                         type="checkbox"
                         checked={selectedSiteIds.includes(site.id)}
                         onChange={() => toggleSite(site.id)}
-                        className="rounded border-slate-600 bg-slate-700 text-cyan-500 focus:ring-cyan-500"
+                        className="h-4 w-4 rounded border-slate-600 bg-slate-900 text-cyan-500"
                       />
-                      <span className="text-sm text-slate-300">
-                        {site.name}
-                        {site.is_office && <span className="ml-1 text-xs text-slate-500">(Office)</span>}
-                      </span>
+                      <span>{site.name}</span>
                     </label>
                   ))}
                 </div>
-              )}
-            </div>
-
-            <div className="mb-5">
-              <label className="block text-sm font-medium text-slate-400 mb-1">
-                Contract End Date <span className="text-slate-600 font-normal">(optional — for contractors)</span>
-              </label>
-              <input
-                type="date"
-                value={contractEndDate}
-                onChange={e => setContractEndDate(e.target.value)}
-                className={inputCls}
-              />
-            </div>
-
-            {error && (
-              <div className="mb-4 bg-red-500/10 border border-red-500/20 text-red-400 text-sm px-3 py-2 rounded-lg">
-                {error}
               </div>
-            )}
 
-            <div className="flex gap-3">
+              <div>
+                <label className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-slate-400">Contract end date</label>
+                <input
+                  type="date"
+                  value={contractEndDate}
+                  onChange={e => setContractEndDate(e.target.value)}
+                  className={inputCls}
+                />
+              </div>
+            </div>
+
+            <div className="mt-6 flex justify-end gap-3">
               <button
-                onClick={saveModal}
-                disabled={!!loading}
-                className="flex-1 px-4 py-2.5 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg font-medium text-sm transition-colors disabled:opacity-50"
-              >
-                {loading ? 'Saving...' : isApproving ? 'Approve & Save' : 'Save Changes'}
-              </button>
-              <button
-                onClick={() => { setShowSiteModal(false); setModalMedic(null); setError('') }}
-                disabled={!!loading}
-                className="px-4 py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg font-medium text-sm transition-colors"
+                onClick={() => {
+                  setShowSiteModal(false)
+                  setModalStaff(null)
+                }}
+                className="rounded-lg border border-slate-700 px-4 py-2 text-sm text-slate-300 transition-colors hover:bg-slate-800"
               >
                 Cancel
+              </button>
+              <button
+                onClick={saveModal}
+                disabled={loading === modalStaff.id}
+                className="rounded-lg bg-cyan-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-cyan-500 disabled:opacity-50"
+              >
+                {loading === modalStaff.id ? 'Saving...' : isApproving ? 'Approve' : 'Save changes'}
               </button>
             </div>
           </div>
         </div>
-      )}
+      ) : null}
 
-      {/* Add Contractor Medic Modal */}
-      {showContractorForm && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-          <div className="bg-slate-900 border border-slate-700/50 rounded-2xl shadow-2xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto">
-            <h3 className="text-lg font-semibold text-slate-100 mb-1">Add Contractor Medic</h3>
-            <p className="text-sm text-slate-500 mb-5">
-              Create a medic account and set the temporary password you will give them directly.
-            </p>
-
-            {contractorSuccess ? (
-              <div className="space-y-4">
-                <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-sm px-4 py-3 rounded-lg">
-                  {contractorSuccess}
-                </div>
-                {contractorResult && (
-                  <div className="rounded-xl border border-slate-700 bg-slate-950/60 p-4 space-y-3">
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Credentials To Share</p>
-                      <p className="mt-1 text-sm text-slate-300">{contractorResult.display_name}</p>
-                    </div>
-                    <div>
-                      <p className="text-[11px] uppercase tracking-wide text-slate-500">Email</p>
-                      <p className="mt-1 text-sm font-medium text-slate-100 break-all">{contractorResult.email}</p>
-                    </div>
-                    <div>
-                      <p className="text-[11px] uppercase tracking-wide text-slate-500">Temporary Password</p>
-                      <p className="mt-1 break-all font-mono text-sm font-medium text-slate-100">{contractorResult.temporary_password}</p>
-                    </div>
-                    <div>
-                      <p className="text-[11px] uppercase tracking-wide text-slate-500">Assigned Sites</p>
-                      <p className="mt-1 text-sm text-slate-300">
-                        {contractorResult.site_names.length > 0 ? contractorResult.site_names.join(', ') : 'No sites assigned yet'}
-                      </p>
-                    </div>
-                    {contractorResult.contract_end_date && (
-                      <div>
-                        <p className="text-[11px] uppercase tracking-wide text-slate-500">Contract End Date</p>
-                        <p className="mt-1 text-sm text-slate-300">
-                          {format(new Date(contractorResult.contract_end_date), 'dd MMM yyyy')}
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                )}
-                <div className="flex gap-3">
-                  <button
-                    onClick={() => {
-                      setContractorSuccess('')
-                      setContractorError('')
-                      setContractorResult(null)
-                    }}
-                    className="flex-1 px-4 py-2.5 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg font-medium text-sm transition-colors"
-                  >
-                    Create Another
-                  </button>
-                  <button
-                    onClick={() => {
-                      setShowContractorForm(false)
-                      setContractorSuccess('')
-                      setContractorError('')
-                      setContractorResult(null)
-                    }}
-                    className="px-4 py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg font-medium text-sm transition-colors"
-                  >
-                    Done
-                  </button>
-                </div>
+      {showContractorForm ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 px-4">
+          <div className="w-full max-w-2xl rounded-2xl border border-slate-700 bg-slate-900 p-6">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h3 className="text-lg font-semibold text-slate-100">Add {contractorConfig.contractorLabel}</h3>
+                <p className="mt-1 text-sm text-slate-400">
+                  Create an approved staff account directly for this business.
+                </p>
               </div>
-            ) : (
-              <form onSubmit={addContractorMedic} className="space-y-4">
+              <button
+                onClick={() => setShowContractorForm(false)}
+                className="rounded-lg border border-slate-700 px-3 py-2 text-sm text-slate-300 transition-colors hover:bg-slate-800"
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="mt-4 flex gap-2">
+              {(['medic', 'occ_health'] as StaffRole[]).map(role => (
+                <button
+                  key={role}
+                  type="button"
+                  onClick={() => setContractorRole(role)}
+                  className={`rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                    contractorRole === role
+                      ? 'bg-cyan-600 text-white'
+                      : 'border border-slate-700 text-slate-300 hover:bg-slate-800'
+                  }`}
+                >
+                  {STAFF_CONFIG[role].pluralLabel}
+                </button>
+              ))}
+            </div>
+
+            <form onSubmit={addContractorStaff} className="mt-5 space-y-4">
+              <div className="grid gap-4 md:grid-cols-2">
                 <div>
-                  <label className="block text-sm font-medium text-slate-400 mb-1">Full Name *</label>
+                  <label className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-slate-400">Full name</label>
                   <input
-                    type="text"
                     value={contractorForm.display_name}
-                    onChange={e => setContractorForm(f => ({ ...f, display_name: e.target.value }))}
+                    onChange={e => setContractorForm(form => ({ ...form, display_name: e.target.value }))}
                     required
                     className={inputCls}
-                    placeholder="Jane Smith"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-400 mb-1">Email *</label>
+                  <label className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-slate-400">Email</label>
                   <input
                     type="email"
                     value={contractorForm.email}
-                    onChange={e => setContractorForm(f => ({ ...f, email: e.target.value }))}
+                    onChange={e => setContractorForm(form => ({ ...form, email: e.target.value }))}
                     required
                     className={inputCls}
-                    placeholder="jane@example.com"
                   />
                 </div>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2">
                 <div>
-                  <label className="block text-sm font-medium text-slate-400 mb-1">Temporary Password *</label>
+                  <label className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-slate-400">Temporary password</label>
                   <div className="flex gap-2">
                     <input
-                      type="text"
                       value={contractorForm.temporary_password}
-                      onChange={e => setContractorForm(f => ({ ...f, temporary_password: e.target.value }))}
+                      onChange={e => setContractorForm(form => ({ ...form, temporary_password: e.target.value }))}
                       required
                       minLength={8}
                       className={inputCls}
-                      placeholder="Min 8 characters"
                     />
                     <button
                       type="button"
-                      onClick={() => setContractorForm(f => ({ ...f, temporary_password: generateTemporaryPassword() }))}
-                      className="px-3 py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg font-medium text-sm transition-colors"
+                      onClick={() => setContractorForm(form => ({ ...form, temporary_password: generateTemporaryPassword() }))}
+                      className="rounded-lg border border-slate-700 px-3 py-2 text-sm text-slate-300 transition-colors hover:bg-slate-800"
                     >
                       Generate
                     </button>
                   </div>
                 </div>
-                <p className="rounded-lg border border-cyan-500/20 bg-cyan-500/10 px-3 py-2 text-sm text-cyan-200">
-                  Give this temporary password to the medic directly. They will change it after they sign in.
-                </p>
                 <div>
-                  <label className="block text-sm font-medium text-slate-400 mb-1">
-                    Contract End Date <span className="text-slate-600 font-normal">(optional)</span>
-                  </label>
+                  <label className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-slate-400">Contract end date</label>
                   <input
                     type="date"
                     value={contractorForm.contract_end_date}
-                    onChange={e => setContractorForm(f => ({ ...f, contract_end_date: e.target.value }))}
+                    onChange={e => setContractorForm(form => ({ ...form, contract_end_date: e.target.value }))}
                     className={inputCls}
                   />
                 </div>
-                <div>
-                  <p className="text-sm font-medium text-slate-400 mb-2">Assign Sites</p>
-                  {sites.length === 0 ? (
-                    <p className="text-sm text-slate-500 italic">No sites available.</p>
-                  ) : (
-                    <div className="space-y-2 max-h-40 overflow-y-auto">
-                      {sites.map(site => (
-                        <label key={site.id} className="flex items-center gap-3 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={contractorForm.site_ids.includes(site.id)}
-                            onChange={() => toggleContractorSite(site.id)}
-                            className="rounded border-slate-600 bg-slate-700 text-cyan-500 focus:ring-cyan-500"
-                          />
-                          <span className="text-sm text-slate-300">
-                            {site.name}
-                            {site.is_office && <span className="ml-1 text-xs text-slate-500">(Office)</span>}
-                          </span>
-                        </label>
-                      ))}
-                    </div>
-                  )}
-                </div>
+              </div>
 
-                {contractorError && (
-                  <div className="bg-red-500/10 border border-red-500/20 text-red-400 text-sm px-3 py-2 rounded-lg">
-                    {contractorError}
-                  </div>
-                )}
-
-                <div className="flex gap-3 pt-1">
-                  <button
-                    type="submit"
-                    disabled={contractorLoading}
-                    className="flex-1 px-4 py-2.5 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg font-medium text-sm transition-colors disabled:opacity-50"
-                  >
-                    {contractorLoading ? 'Creating...' : 'Create Account'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowContractorForm(false)
-                      setContractorError('')
-                      setContractorSuccess('')
-                      setContractorResult(null)
-                    }}
-                    disabled={contractorLoading}
-                    className="px-4 py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg font-medium text-sm transition-colors"
-                  >
-                    Cancel
-                  </button>
+              <div>
+                <label className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-slate-400">Assigned sites</label>
+                <div className="max-h-56 space-y-2 overflow-auto rounded-lg border border-slate-700 bg-slate-800/60 p-3">
+                  {sites.map(site => (
+                    <label key={site.id} className="flex items-center gap-3 text-sm text-slate-200">
+                      <input
+                        type="checkbox"
+                        checked={contractorForm.site_ids.includes(site.id)}
+                        onChange={() => toggleContractorSite(site.id)}
+                        className="h-4 w-4 rounded border-slate-600 bg-slate-900 text-cyan-500"
+                      />
+                      <span>{site.name}</span>
+                    </label>
+                  ))}
                 </div>
-              </form>
-            )}
+              </div>
+
+              {contractorError ? (
+                <div className="rounded-lg border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-400">
+                  {contractorError}
+                </div>
+              ) : null}
+
+              {contractorSuccess ? (
+                <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-400">
+                  {contractorSuccess}
+                </div>
+              ) : null}
+
+              {contractorResult ? (
+                <div className="rounded-lg border border-slate-700 bg-slate-800/60 p-4 text-sm text-slate-300">
+                  <p className="font-medium text-slate-100">{contractorResult.display_name}</p>
+                  <p className="mt-1">{contractorResult.email}</p>
+                  <p className="mt-1 font-mono text-cyan-300">{contractorResult.temporary_password}</p>
+                </div>
+              ) : null}
+
+              <div className="flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowContractorForm(false)}
+                  className="rounded-lg border border-slate-700 px-4 py-2 text-sm text-slate-300 transition-colors hover:bg-slate-800"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={contractorLoading}
+                  className="rounded-lg bg-cyan-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-cyan-500 disabled:opacity-50"
+                >
+                  {contractorLoading ? 'Creating...' : `Create ${contractorConfig.contractorLabel}`}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
-      )}
+      ) : null}
 
-      {showResetPasswordModal && resetPasswordMedic && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-          <div className="bg-slate-900 border border-slate-700/50 rounded-2xl shadow-2xl w-full max-w-md p-6">
-            <h3 className="text-lg font-semibold text-slate-100 mb-1">Reset Medic Password</h3>
-            <p className="text-sm text-slate-500 mb-5">
-              Set a new temporary password for {resetPasswordMedic.display_name} and give it to them directly.
-            </p>
+      {showResetPasswordModal && resetPasswordStaff ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 px-4">
+          <div className="w-full max-w-md rounded-2xl border border-slate-700 bg-slate-900 p-6">
+            <h3 className="text-lg font-semibold text-slate-100">Reset Password</h3>
+            <p className="mt-1 text-sm text-slate-400">{resetPasswordStaff.display_name}</p>
 
-            <div className="space-y-4">
+            <div className="mt-5 space-y-4">
               <div>
-                <label className="block text-sm font-medium text-slate-400 mb-1">Temporary Password *</label>
+                <label className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-slate-400">Temporary password</label>
                 <div className="flex gap-2">
                   <input
                     type="text"
                     value={resetPasswordForm.temporary_password}
                     onChange={e => setResetPasswordForm(form => ({ ...form, temporary_password: e.target.value }))}
-                    minLength={8}
                     className={inputCls}
-                    placeholder="Min 8 characters"
                   />
                   <button
                     type="button"
-                    onClick={() => {
-                      const generated = generateTemporaryPassword()
-                      setResetPasswordForm({ temporary_password: generated, confirmPassword: generated })
-                    }}
-                    className="px-3 py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg font-medium text-sm transition-colors"
+                    onClick={() => setResetPasswordForm(form => ({ ...form, temporary_password: generateTemporaryPassword() }))}
+                    className="rounded-lg border border-slate-700 px-3 py-2 text-sm text-slate-300 transition-colors hover:bg-slate-800"
                   >
                     Generate
                   </button>
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-400 mb-1">Confirm Temporary Password *</label>
+                <label className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-slate-400">Confirm password</label>
                 <input
                   type="text"
                   value={resetPasswordForm.confirmPassword}
                   onChange={e => setResetPasswordForm(form => ({ ...form, confirmPassword: e.target.value }))}
-                  minLength={8}
                   className={inputCls}
-                  placeholder="Re-enter password"
                 />
               </div>
-              {resetPasswordError && (
-                <div className="bg-red-500/10 border border-red-500/20 text-red-400 text-sm px-3 py-2 rounded-lg">
+
+              {resetPasswordError ? (
+                <div className="rounded-lg border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-400">
                   {resetPasswordError}
                 </div>
-              )}
+              ) : null}
+            </div>
 
-              <div className="flex gap-3">
-                <button
-                  onClick={resetMedicPassword}
-                  disabled={resetPasswordLoading}
-                  className="flex-1 px-4 py-2.5 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg font-medium text-sm transition-colors disabled:opacity-50"
-                >
-                  {resetPasswordLoading ? 'Updating...' : 'Update Temporary Password'}
-                </button>
-                <button
-                  onClick={() => {
-                    setShowResetPasswordModal(false)
-                    setResetPasswordMedic(null)
-                    setResetPasswordForm(EMPTY_PASSWORD_RESET)
-                    setResetPasswordError('')
-                  }}
-                  disabled={resetPasswordLoading}
-                  className="px-4 py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg font-medium text-sm transition-colors"
-                >
-                  Cancel
-                </button>
-              </div>
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                onClick={() => setShowResetPasswordModal(false)}
+                className="rounded-lg border border-slate-700 px-4 py-2 text-sm text-slate-300 transition-colors hover:bg-slate-800"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={resetStaffPassword}
+                disabled={resetPasswordLoading}
+                className="rounded-lg bg-cyan-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-cyan-500 disabled:opacity-50"
+              >
+                {resetPasswordLoading ? 'Saving...' : 'Reset password'}
+              </button>
             </div>
           </div>
         </div>
-      )}
+      ) : null}
     </div>
   )
 }

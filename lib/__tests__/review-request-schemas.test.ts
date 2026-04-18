@@ -33,10 +33,14 @@ describe('medicationReviewRequestSchema', () => {
     expect(medicationReviewRequestSchema.parse({
       medic_review_status: 'Restricted Duties',
       medic_comments: '  monitor fatigue  ',
+      medical_officer_name: '  Dr Smith  ',
+      medical_officer_practice: '  Pilbara Medical  ',
     })).toEqual({
       medic_review_status: 'Restricted Duties',
       medic_comments: 'monitor fatigue',
       review_required: false,
+      medical_officer_name: 'Dr Smith',
+      medical_officer_practice: 'Pilbara Medical',
     })
   })
 

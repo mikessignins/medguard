@@ -16,7 +16,7 @@ const STATUS_COLORS: Record<MedDecReviewStatus, string> = {
 interface Props {
   medDeclarations: Array<Pick<
     MedicationDeclaration,
-    'id' | 'site_id' | 'worker_name' | 'submitted_at' | 'medic_review_status' | 'exported_at' | 'phi_purged_at' | 'medications' | 'has_recent_injury_or_illness' | 'has_side_effects'
+    'id' | 'site_id' | 'worker_name' | 'submitted_at' | 'medic_review_status' | 'exported_at' | 'phi_purged_at' | 'medications' | 'has_recent_injury_or_illness' | 'has_side_effects' | 'review_required' | 'medical_officer_review_required'
   >>
   siteId: string
   exportsHref?: string
@@ -64,6 +64,7 @@ export default function MedDecSection({ medDeclarations, siteId, exportsHref = '
         <div className="space-y-2 mb-6">
           {active.map((m, idx) => {
             const hasSideEffects = m.has_side_effects || m.has_recent_injury_or_illness
+            const requiresMedicalOfficerReview = m.medical_officer_review_required || m.review_required
             return (
               <Link
                 key={m.id}
@@ -74,6 +75,11 @@ export default function MedDecSection({ medDeclarations, siteId, exportsHref = '
                   <div className="flex items-center gap-2 mb-1">
                     <p className="font-semibold text-[var(--medic-text)]">{m.worker_name || 'Unknown Worker'}</p>
                     {hasSideEffects && <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" title="Health flags" />}
+                    {requiresMedicalOfficerReview && (
+                      <span className="rounded-full border border-cyan-500/20 bg-cyan-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-cyan-300">
+                        MRO review
+                      </span>
+                    )}
                   </div>
                   <p className="text-sm text-[var(--medic-muted)]">
                     {m.medications?.length ?? 0} medication{(m.medications?.length ?? 0) !== 1 ? 's' : ''}

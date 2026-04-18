@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import StaffManager from '@/components/admin/StaffManager'
-import { expireMedicContracts } from '@/lib/admin-medics'
+import { expireMedicContracts, expireOccHealthContracts } from '@/lib/admin-medics'
 
 export default async function AdminStaffPage() {
   const supabase = await createClient()
@@ -17,9 +17,20 @@ export default async function AdminStaffPage() {
   if (!account) redirect('/login')
 
   const businessId = account.business_id
-  await expireMedicContracts(businessId)
+  await Promise.all([
+    expireMedicContracts(businessId),
+    expireOccHealthContracts(businessId),
+  ])
 
-  const [{ data: pendingMedics }, { data: activeMedics }, { data: inactiveMedics }, { data: sites }] = await Promise.all([
+  const [
+    { data: pendingMedics },
+    { data: activeMedics },
+    { data: inactiveMedics },
+    { data: pendingOccHealth },
+    { data: activeOccHealth },
+    { data: inactiveOccHealth },
+    { data: sites },
+  ] = await Promise.all([
     supabase
       .from('user_accounts')
       .select('*')
@@ -38,6 +49,23 @@ export default async function AdminStaffPage() {
       .eq('role', 'medic')
       .eq('is_inactive', true),
     supabase
+      .from('user_accounts')
+      .select('*')
+      .eq('business_id', businessId)
+      .eq('role', 'pending_occ_health'),
+    supabase
+      .from('user_accounts')
+      .select('*')
+      .eq('business_id', businessId)
+      .eq('role', 'occ_health')
+      .eq('is_inactive', false),
+    supabase
+      .from('user_accounts')
+      .select('*')
+      .eq('business_id', businessId)
+      .eq('role', 'occ_health')
+      .eq('is_inactive', true),
+    supabase
       .from('sites')
       .select('*')
       .eq('business_id', businessId),
@@ -48,6 +76,9 @@ export default async function AdminStaffPage() {
       pendingMedics={pendingMedics || []}
       activeMedics={activeMedics || []}
       inactiveMedics={inactiveMedics || []}
+      pendingOccHealth={pendingOccHealth || []}
+      activeOccHealth={activeOccHealth || []}
+      inactiveOccHealth={inactiveOccHealth || []}
       sites={sites || []}
       businessId={businessId}
     />

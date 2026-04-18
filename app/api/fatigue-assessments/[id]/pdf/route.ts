@@ -8,6 +8,7 @@ import type { FatigueAssessment, FatigueMedicReviewPayload, FatigueModulePayload
 import { enforceActionRateLimit } from '@/lib/rate-limit'
 import { safeLogServerEvent } from '@/lib/app-event-log'
 import { logAndReturnInternalError, NO_STORE_HEADERS } from '@/lib/api-security'
+import { parseSubmissionComments } from '@/lib/submission-comments'
 import {
   streamToBuffer,
   sanitize,
@@ -162,7 +163,7 @@ async function generateFatiguePdf(id: string) {
     )
   }
 
-  if (raw.status !== 'resolved') {
+  if (!['resolved', 'reviewed'].includes(String(raw.status ?? ''))) {
     return new NextResponse(
       `Only medic-reviewed fatigue assessments can be exported. Current status: ${raw.status ?? 'Unknown'}.`,
       { status: 422 },
@@ -187,9 +188,15 @@ async function generateFatiguePdf(id: string) {
       .eq('id', raw.business_id)
       .single(),
   ])
+  const { data: rawComments } = await supabase
+    .from('fatigue_assessment_comments')
+    .select('id, medic_user_id, medic_name, note, outcome, created_at, edited_at')
+    .eq('submission_id', raw.id)
+    .order('created_at', { ascending: true })
 
   const siteName = site?.name || raw.site_id || ''
   const businessName = business?.name || raw.business_id || ''
+  const comments = parseSubmissionComments(rawComments ?? [])
 
   let logoBuffer: Buffer | null = null
   const businessLogoUrl = resolveBusinessLogoUrl(business, 'light')
@@ -265,14 +272,13 @@ async function generateFatiguePdf(id: string) {
     ['TRANSPORT ARRANGED', formatBool(reviewPayload.transportArranged), 'SENT TO ROOM', formatBool(reviewPayload.sentToRoom)],
     ['SENT HOME', formatBool(reviewPayload.sentHome), 'HIGHER MEDICAL REVIEW', formatBool(reviewPayload.requiresHigherMedicalReview)],
     ['FOLLOW-UP REQUIRED', formatBool(reviewPayload.requiresFollowUp), 'RESTRICTIONS', reviewPayload.restrictions || '—'],
-    ['HANDOVER NOTES', reviewPayload.handoverNotes || '—'],
   ])
-  renderAuditEntries(doc, 'MEDIC OR ESO COMMENTS', reviewPayload.medicOrEsoComments ? [{
-    authorName: reviewPayload.reviewedByName || account.display_name,
-    createdAt: raw.reviewed_at,
-    note: reviewPayload.medicOrEsoComments,
-    actionLabel: formatDecision(reviewPayload.fitForWorkDecision),
-  }] : [])
+  renderAuditEntries(doc, 'MEDIC COMMENTS', comments.map((comment) => ({
+    authorName: comment.medic_name,
+    createdAt: comment.created_at,
+    note: comment.note,
+    actionLabel: comment.outcome ?? null,
+  })))
   renderExportAuditSummary(doc, {
     exportedByName: account.display_name,
     exportedAt: exportRenderedAt,

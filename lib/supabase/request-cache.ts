@@ -9,7 +9,6 @@
  */
 
 import { cache } from 'react'
-import { unstable_cache } from 'next/cache'
 import { logRequestTiming, startRequestTimer } from '@/lib/request-timing'
 import { createClient } from '@/lib/supabase/server'
 
@@ -69,22 +68,11 @@ export const getRequestUserAccount = cache(async (userId: string) => {
 
 export const getRequestBusinessModules = cache(async (businessId: string) => {
   const startedAt = startRequestTimer()
-  const loadBusinessModules = unstable_cache(
-    async () => {
-      const supabase = await getRequestClient()
-      const { data } = await supabase
-        .from('business_modules')
-        .select('business_id, module_key, enabled, config')
-        .eq('business_id', businessId)
-      return data ?? []
-    },
-    ['business-modules', businessId],
-    {
-      revalidate: 60,
-      tags: [`business-modules:${businessId}`],
-    },
-  )
-  const data = await loadBusinessModules()
+  const supabase = await getRequestClient()
+  const { data } = await supabase
+    .from('business_modules')
+    .select('business_id, module_key, enabled, config')
+    .eq('business_id', businessId)
   await logRequestTiming('request_business_modules', startedAt, {
     module_count: data?.length ?? 0,
   })
@@ -93,23 +81,12 @@ export const getRequestBusinessModules = cache(async (businessId: string) => {
 
 export const getRequestBusiness = cache(async (businessId: string) => {
   const startedAt = startRequestTimer()
-  const loadBusiness = unstable_cache(
-    async () => {
-      const supabase = await getRequestClient()
-      const { data } = await supabase
-        .from('businesses')
-        .select('name, logo_url, logo_url_light, logo_url_dark, is_suspended')
-        .eq('id', businessId)
-        .single()
-      return data
-    },
-    ['business-profile', businessId],
-    {
-      revalidate: 60,
-      tags: [`business-profile:${businessId}`],
-    },
-  )
-  const data = await loadBusiness()
+  const supabase = await getRequestClient()
+  const { data } = await supabase
+    .from('businesses')
+    .select('name, logo_url, logo_url_light, logo_url_dark, is_suspended')
+    .eq('id', businessId)
+    .single()
   await logRequestTiming('request_business', startedAt, {
     found: Boolean(data),
     suspended: Boolean(data?.is_suspended),

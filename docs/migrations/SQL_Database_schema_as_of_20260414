@@ -62,6 +62,22 @@ CREATE TABLE public.cron_health_log (
   last_result jsonb,
   CONSTRAINT cron_health_log_pkey PRIMARY KEY (cron_name)
 );
+CREATE TABLE public.fatigue_assessment_comments (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  submission_id uuid NOT NULL,
+  business_id text NOT NULL,
+  site_id text NOT NULL,
+  medic_user_id text NOT NULL,
+  medic_name text NOT NULL CHECK (btrim(medic_name) <> ''::text),
+  note text NOT NULL CHECK (btrim(note) <> ''::text),
+  outcome text,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  edited_at timestamp with time zone,
+  CONSTRAINT fatigue_assessment_comments_pkey PRIMARY KEY (id),
+  CONSTRAINT fatigue_assessment_comments_submission_id_fkey FOREIGN KEY (submission_id) REFERENCES public.module_submissions(id),
+  CONSTRAINT fatigue_assessment_comments_business_id_fkey FOREIGN KEY (business_id) REFERENCES public.businesses(id),
+  CONSTRAINT fatigue_assessment_comments_site_id_fkey FOREIGN KEY (site_id) REFERENCES public.sites(id)
+);
 CREATE TABLE public.feedback (
   id text NOT NULL DEFAULT (gen_random_uuid())::text,
   submitted_at timestamp with time zone NOT NULL DEFAULT now(),
@@ -82,6 +98,22 @@ CREATE TABLE public.invite_codes (
   code text NOT NULL UNIQUE,
   created_at timestamp with time zone NOT NULL DEFAULT now(),
   CONSTRAINT invite_codes_pkey PRIMARY KEY (business_id)
+);
+CREATE TABLE public.medication_declaration_comments (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  declaration_id text NOT NULL,
+  business_id text NOT NULL,
+  site_id text NOT NULL,
+  medic_user_id text NOT NULL,
+  medic_name text NOT NULL CHECK (btrim(medic_name) <> ''::text),
+  note text NOT NULL CHECK (btrim(note) <> ''::text),
+  outcome text,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  edited_at timestamp with time zone,
+  CONSTRAINT medication_declaration_comments_pkey PRIMARY KEY (id),
+  CONSTRAINT medication_declaration_comments_declaration_id_fkey FOREIGN KEY (declaration_id) REFERENCES public.medication_declarations(id),
+  CONSTRAINT medication_declaration_comments_business_id_fkey FOREIGN KEY (business_id) REFERENCES public.businesses(id),
+  CONSTRAINT medication_declaration_comments_site_id_fkey FOREIGN KEY (site_id) REFERENCES public.sites(id)
 );
 CREATE TABLE public.medication_declarations (
   id text NOT NULL DEFAULT (gen_random_uuid())::text,
@@ -108,6 +140,12 @@ CREATE TABLE public.medication_declarations (
   exported_by_name text,
   site_name text,
   is_test boolean NOT NULL DEFAULT false,
+  export_confirmed_at timestamp with time zone,
+  export_confirmed_by uuid,
+  export_confirmed_by_name text,
+  medical_officer_review_required boolean NOT NULL DEFAULT false,
+  medical_officer_name text,
+  medical_officer_practice text,
   CONSTRAINT medication_declarations_pkey PRIMARY KEY (id),
   CONSTRAINT medication_declarations_business_id_fkey FOREIGN KEY (business_id) REFERENCES public.businesses(id),
   CONSTRAINT medication_declarations_site_id_fkey FOREIGN KEY (site_id) REFERENCES public.sites(id),
@@ -148,6 +186,9 @@ CREATE TABLE public.module_submissions (
   is_test boolean NOT NULL DEFAULT false,
   created_at timestamp with time zone NOT NULL DEFAULT now(),
   updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  export_confirmed_at timestamp with time zone,
+  export_confirmed_by uuid,
+  export_confirmed_by_name text,
   CONSTRAINT module_submissions_pkey PRIMARY KEY (id),
   CONSTRAINT module_submissions_business_id_fkey FOREIGN KEY (business_id) REFERENCES public.businesses(id),
   CONSTRAINT module_submissions_site_id_fkey FOREIGN KEY (site_id) REFERENCES public.sites(id),
@@ -177,7 +218,7 @@ CREATE TABLE public.purge_audit_log (
   site_id text,
   site_name text,
   business_id text NOT NULL,
-  medic_user_id uuid,
+  medic_user_id uuid NOT NULL,
   medic_name text,
   purged_at timestamp with time zone NOT NULL DEFAULT now(),
   form_type text,
@@ -185,6 +226,10 @@ CREATE TABLE public.purge_audit_log (
   exported_by_name text,
   approved_by_name text,
   approved_at timestamp with time zone,
+  export_confirmed_at timestamp with time zone,
+  export_confirmed_by_name text,
+  medical_officer_name text,
+  medical_officer_practice text,
   CONSTRAINT purge_audit_log_pkey PRIMARY KEY (id)
 );
 CREATE TABLE public.sites (
@@ -241,6 +286,9 @@ CREATE TABLE public.submissions (
   site_name text,
   version integer NOT NULL DEFAULT 1,
   is_test boolean NOT NULL DEFAULT false,
+  export_confirmed_at timestamp with time zone,
+  export_confirmed_by uuid,
+  export_confirmed_by_name text,
   CONSTRAINT submissions_pkey PRIMARY KEY (id),
   CONSTRAINT submissions_business_id_fkey FOREIGN KEY (business_id) REFERENCES public.businesses(id),
   CONSTRAINT submissions_site_id_fkey FOREIGN KEY (site_id) REFERENCES public.sites(id),

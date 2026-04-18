@@ -24,7 +24,7 @@ export default async function MedicExportsPage({ searchParams }: { searchParams:
   const siteIds: string[] = account.site_ids || []
   const siteSelect = 'id,name,is_office'
   const submissionSelect = 'id,business_id,site_id,worker_snapshot,visit_date,shift_type,status,submitted_at,exported_at,export_confirmed_at,phi_purged_at,is_test'
-  const medDecSelect = 'id,business_id,site_id,worker_name,submitted_at,medic_review_status,exported_at,export_confirmed_at,phi_purged_at,medications,is_test'
+  const medDecSelect = 'id,business_id,site_id,worker_name,submitted_at,medic_review_status,exported_at,export_confirmed_at,phi_purged_at,medications,is_test,medical_officer_review_required,medical_officer_name,medical_officer_practice'
   const fatigueSelect = 'id,business_id,site_id,worker_id,module_key,module_version,status,payload,review_payload,submitted_at,reviewed_at,reviewed_by,exported_at,exported_by_name,export_confirmed_at,phi_purged_at,is_test'
   const psychosocialSelect = 'id,business_id,site_id,worker_id,module_key,module_version,status,payload,review_payload,submitted_at,reviewed_at,reviewed_by,exported_at,exported_by_name,export_confirmed_at,phi_purged_at,is_test'
 

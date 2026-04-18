@@ -4,6 +4,7 @@ import type { MedDecMedication, MedDecReviewStatus, ScriptUpload } from '@/lib/t
 import { parseQueue } from '@/lib/queue-params'
 import { hasMedicScopeAccess } from '@/lib/medic-scope'
 import { getRequestClient, getRequestUser, getRequestUserAccount } from '@/lib/supabase/request-cache'
+import { parseSubmissionComments } from '@/lib/submission-comments'
 
 function parseMedications(raw: unknown): MedDecMedication[] {
   if (!raw) return []
@@ -54,6 +55,8 @@ export default async function MedDecPage({ params, searchParams }: { params: Pro
       p_medic_comments: raw.medic_comments ?? '',
       p_review_required: raw.review_required ?? false,
       p_expected_status: raw.medic_review_status ?? 'Pending',
+      p_medical_officer_name: raw.medical_officer_name ?? null,
+      p_medical_officer_practice: raw.medical_officer_practice ?? null,
     })
     raw.medic_review_status = 'In Review'
   }
@@ -62,6 +65,12 @@ export default async function MedDecPage({ params, searchParams }: { params: Pro
     supabase.from('sites').select('name').eq('id', raw.site_id).single(),
     supabase.from('businesses').select('name').eq('id', raw.business_id).single(),
   ])
+
+  const { data: rawComments } = await supabase
+    .from('medication_declaration_comments')
+    .select('id, medic_user_id, medic_name, note, outcome, created_at, edited_at')
+    .eq('declaration_id', raw.id)
+    .order('created_at', { ascending: true })
 
   const rawUploads = parseScriptUploads(raw.script_uploads)
   const scriptUploads: ScriptUpload[] = await Promise.all(
@@ -91,11 +100,16 @@ export default async function MedDecPage({ params, searchParams }: { params: Pro
     medic_name: String(raw.medic_name ?? ''),
     medic_comments: String(raw.medic_comments ?? ''),
     review_required: Boolean(raw.review_required),
+    medical_officer_review_required: Boolean(raw.medical_officer_review_required ?? raw.review_required),
+    medical_officer_name: raw.medical_officer_name ? String(raw.medical_officer_name) : null,
+    medical_officer_practice: raw.medical_officer_practice ? String(raw.medical_officer_practice) : null,
     medic_reviewed_at: raw.medic_reviewed_at ? String(raw.medic_reviewed_at) : null,
     script_uploads: rawUploads,
     scriptUploads,
     exported_at: raw.exported_at ? String(raw.exported_at) : null,
+    export_confirmed_at: raw.export_confirmed_at ? String(raw.export_confirmed_at) : null,
     phi_purged_at: raw.phi_purged_at ? String(raw.phi_purged_at) : null,
+    comments: parseSubmissionComments(rawComments ?? []),
   }
 
   const queueContext = parseQueue(resolvedSearchParams)
@@ -108,6 +122,7 @@ export default async function MedDecPage({ params, searchParams }: { params: Pro
       medDec={medDec}
       siteName={site?.name || raw.site_id}
       businessName={business?.name || raw.business_id}
+      currentUserId={user.id}
       queueContext={queueContext}
       backHref={backHref}
     />

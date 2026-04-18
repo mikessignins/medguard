@@ -236,9 +236,9 @@ export default function LoginPage() {
                 Forgot your password?
               </button>
               <div className="mt-5 border-t border-slate-700/60 pt-4 text-center">
-                <p className="text-sm text-slate-500">Medic without an account?</p>
-                <Link href="/medic-signup" className="mt-1 inline-block text-sm font-medium text-cyan-400 hover:text-cyan-300">
-                  Request medic access
+                <p className="text-sm text-slate-500">Need staff access?</p>
+                <Link href="/staff-signup" className="mt-1 inline-block text-sm font-medium text-cyan-400 hover:text-cyan-300">
+                  Request staff access
                 </Link>
               </div>
             </>

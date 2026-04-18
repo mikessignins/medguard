@@ -42,6 +42,8 @@ export default async function Home({
 
   if (is_inactive) redirect('/login')
   if (role === 'pending_medic') redirect('/pending')
+  if (role === 'pending_occ_health') redirect('/pending')
+  if (role === 'occ_health') redirect('/surveillance')
   if (role === 'medic') redirect('/medic/emergency')
   if (role === 'admin') redirect('/admin')
   if (role === 'superuser') redirect('/superuser')

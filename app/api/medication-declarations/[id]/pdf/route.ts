@@ -8,6 +8,7 @@ import { markExportedIfNeeded } from '@/lib/export-stamp'
 import { enforceActionRateLimit } from '@/lib/rate-limit'
 import { safeLogServerEvent } from '@/lib/app-event-log'
 import { logAndReturnInternalError, NO_STORE_HEADERS } from '@/lib/api-security'
+import { parseSubmissionComments } from '@/lib/submission-comments'
 import {
   streamToBuffer, sanitize, fmtDate, fmtDateTime, parseArray,
   pageHeader, pageFooter, sectionHeader, twoColTable, renderAuditEntries, renderExportAuditSummary,
@@ -71,9 +72,15 @@ async function generateMedDecPdf(id: string) {
     supabase.from('sites').select('name').eq('id', raw.site_id).single(),
     supabase.from('businesses').select('name, logo_url, logo_url_light, logo_url_dark').eq('id', raw.business_id).single(),
   ])
+  const { data: rawComments } = await supabase
+    .from('medication_declaration_comments')
+    .select('id, medic_user_id, medic_name, note, outcome, created_at, edited_at')
+    .eq('declaration_id', raw.id)
+    .order('created_at', { ascending: true })
 
   const siteName     = site?.name     || raw.site_id     || ''
   const businessName = business?.name || raw.business_id || ''
+  const comments = parseSubmissionComments(rawComments ?? [])
 
   // Fetch business logo for PDF header
   let logoBuffer: Buffer | null = null
@@ -104,6 +111,17 @@ async function generateMedDecPdf(id: string) {
   if (PENDING_STATUSES.includes(raw.medic_review_status)) {
     return new NextResponse(
       `Medication declarations must be reviewed before they can be exported. Current status: ${raw.medic_review_status}.`,
+      { status: 422 }
+    )
+  }
+
+  const requiresMedicalOfficerReview = Boolean(raw.medical_officer_review_required ?? raw.review_required)
+  const medicalOfficerName = typeof raw.medical_officer_name === 'string' ? raw.medical_officer_name.trim() : ''
+  const medicalOfficerPractice = typeof raw.medical_officer_practice === 'string' ? raw.medical_officer_practice.trim() : ''
+
+  if (requiresMedicalOfficerReview && (!medicalOfficerName || !medicalOfficerPractice)) {
+    return new NextResponse(
+      'Medical Officer Review details must be completed before this medication declaration can be exported.',
       { status: 422 }
     )
   }
@@ -287,19 +305,20 @@ async function generateMedDecPdf(id: string) {
   const reviewStatus  = raw.medic_review_status || 'Pending'
   const reviewedAt    = raw.medic_reviewed_at
   const medicName     = raw.medic_name || '—'
-  const furtherReview = raw.review_required ? 'Yes' : 'No'
+  const furtherReview = requiresMedicalOfficerReview ? 'Medical Officer Review' : 'No'
 
   twoColTable(doc, [
     ['OUTCOME',      reviewStatus,                    'MEDIC',         medicName],
-    ['REVIEWED AT',  reviewedAt ? fmtDateTime(reviewedAt) : '—', 'FURTHER REVIEW', furtherReview],
+    ['REVIEWED AT',  reviewedAt ? fmtDateTime(reviewedAt) : '—', 'REVIEW PATH', furtherReview],
+    ['MEDICAL OFFICER', medicalOfficerName || '—', 'PRACTICE', medicalOfficerPractice || '—'],
   ])
 
-  renderAuditEntries(doc, 'MEDIC COMMENTS', raw.medic_comments ? [{
-    authorName: medicName,
-    createdAt: reviewedAt,
-    note: raw.medic_comments,
-    actionLabel: reviewStatus,
-  }] : [])
+  renderAuditEntries(doc, 'MEDIC COMMENTS', comments.map((comment) => ({
+    authorName: comment.medic_name,
+    createdAt: comment.created_at,
+    note: comment.note,
+    actionLabel: comment.outcome ?? null,
+  })))
 
   // Outcome colour band
   const STATUS_COLORS: Record<string, string> = {

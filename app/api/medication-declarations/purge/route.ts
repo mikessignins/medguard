@@ -66,7 +66,7 @@ export async function POST(request: NextRequest) {
   // Fetch med decs before wiping. Production records must be exported and confirmed; reviewed test records can be purged without export.
   const { data: medDecs } = await authClient
     .from('medication_declarations')
-    .select('id, business_id, site_id, site_name, worker_name, worker_dob, medic_review_status, exported_at, export_confirmed_at, export_confirmed_by_name, exported_by_name, medic_name, medic_reviewed_at, is_test')
+    .select('id, business_id, site_id, site_name, worker_name, worker_dob, medic_review_status, exported_at, export_confirmed_at, export_confirmed_by_name, exported_by_name, medic_name, medic_reviewed_at, medical_officer_name, medical_officer_practice, is_test')
     .in('id', ids)
 
   const purgeError = validatePurgeSelection(
@@ -110,6 +110,8 @@ export async function POST(request: NextRequest) {
     export_confirmed_by_name: m.export_confirmed_by_name ?? null,
     approved_by_name: m.medic_name ?? null,
     approved_at:      m.medic_reviewed_at ?? null,
+    medical_officer_name: m.medical_officer_name ?? null,
+    medical_officer_practice: m.medical_officer_practice ?? null,
   }))
 
   // Wipe PHI first so the audit log never claims a purge that failed.

@@ -101,6 +101,8 @@ export const medicationReviewRequestSchema = z.object({
   medic_review_status: z.enum(MEDICATION_REVIEW_STATUSES),
   medic_comments: nullableTrimmedString().optional(),
   review_required: z.boolean().optional().default(false),
+  medical_officer_name: nullableTrimmedString().optional(),
+  medical_officer_practice: nullableTrimmedString().optional(),
 })
 
 export const fatigueReviewRequestSchema = z.object({

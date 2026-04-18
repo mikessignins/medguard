@@ -1,9 +1,9 @@
 'use client'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { getExportErrorMessage } from '@/lib/export-feedback'
-import type { MedicationDeclaration, MedDecReviewStatus, ScriptUpload } from '@/lib/types'
+import type { MedicationDeclaration, MedDecReviewStatus, MedicComment, ScriptUpload } from '@/lib/types'
 import { encodeQueue } from '@/lib/queue-params'
 import { isFinalMedicationReviewStatus } from '@/lib/medication-review-guards'
 
@@ -37,27 +37,80 @@ function fmtDateTime(value: string | null | undefined): string {
 }
 
 interface Props {
-  medDec: MedicationDeclaration & { scriptUploads: ScriptUpload[] }
+  medDec: MedicationDeclaration & { scriptUploads: ScriptUpload[]; comments: MedicComment[] }
   siteName: string
   businessName: string
+  currentUserId: string
   queueContext: { ids: string[]; pos: number } | null
   backHref?: string
 }
 
-export default function MedDecDetail({ medDec, siteName, businessName, queueContext, backHref }: Props) {
+async function getResponseErrorMessage(res: Response, fallback: string): Promise<string> {
+  const contentType = res.headers.get('content-type') ?? ''
+
+  if (contentType.includes('application/json')) {
+    const data = await res.json().catch(() => null)
+    if (data && typeof data === 'object' && 'error' in data && typeof data.error === 'string') {
+      return data.error
+    }
+  }
+
+  const text = await res.text().catch(() => '')
+  return text || fallback
+}
+
+export default function MedDecDetail({ medDec, siteName, businessName, currentUserId, queueContext, backHref }: Props) {
   const router = useRouter()
   const [reviewStatus, setReviewStatus] = useState<MedDecReviewStatus>(medDec.medic_review_status || 'Pending')
-  const [comments, setComments] = useState(medDec.medic_comments || '')
-  const [reviewRequired, setReviewRequired] = useState(medDec.review_required || false)
+  const [reviewRequired, setReviewRequired] = useState(medDec.medical_officer_review_required || medDec.review_required || false)
+  const [medicalOfficerName, setMedicalOfficerName] = useState(medDec.medical_officer_name || '')
+  const [medicalOfficerPractice, setMedicalOfficerPractice] = useState(medDec.medical_officer_practice || '')
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState('')
   const [saveSuccess, setSaveSuccess] = useState(false)
   const [exporting, setExporting] = useState(false)
   const [exportError, setExportError] = useState('')
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
+  const [exportConfirming, setExportConfirming] = useState(false)
+  const [exportedAt, setExportedAt] = useState<string | null>(medDec.exported_at)
+  const [exportConfirmedAt, setExportConfirmedAt] = useState<string | null>(medDec.export_confirmed_at ?? null)
+  const [lastSavedReviewStatus, setLastSavedReviewStatus] = useState<MedDecReviewStatus>(medDec.medic_review_status || 'Pending')
+  const [lastSavedReviewRequired, setLastSavedReviewRequired] = useState(medDec.medical_officer_review_required || medDec.review_required || false)
+  const [lastSavedMedicalOfficerName, setLastSavedMedicalOfficerName] = useState(medDec.medical_officer_name || '')
+  const [lastSavedMedicalOfficerPractice, setLastSavedMedicalOfficerPractice] = useState(medDec.medical_officer_practice || '')
+  const [comments, setComments] = useState<MedicComment[]>(medDec.comments)
+  const [commentDraft, setCommentDraft] = useState('')
+  const [commentSaving, setCommentSaving] = useState(false)
+  const [commentError, setCommentError] = useState('')
 
   const isPurged = !!medDec.phi_purged_at
-  const isDecisionLocked = isFinalMedicationReviewStatus(medDec.medic_review_status)
+  const isDecisionLocked = isFinalMedicationReviewStatus(reviewStatus)
+  const hasFlaggedMedication = (medDec.medications ?? []).some((med) => med.flaggedForSideEffects)
+  const requiresMedicalOfficerOutcome = reviewRequired
+  const hasMedicalOfficerDetails = medicalOfficerName.trim().length > 0 && medicalOfficerPractice.trim().length > 0
+  const canChooseFinalOutcome = !requiresMedicalOfficerOutcome || hasMedicalOfficerDetails
+  const exportLockedReason = reviewStatus === 'Pending' || reviewStatus === 'In Review'
+    ? 'Select a final outcome before exporting this medication declaration.'
+    : requiresMedicalOfficerOutcome && !hasMedicalOfficerDetails
+      ? 'Medical Officer Review details must be completed before exporting this medication declaration.'
+      : ''
+  const canExport = !isPurged && !exportLockedReason
+  const requiresExportConfirmation = !!exportedAt && !exportConfirmedAt && !isPurged
+  const areMedicalOfficerDetailsLocked = isPurged || !!exportedAt
+  const hasUnsavedReviewChanges =
+    reviewStatus !== lastSavedReviewStatus ||
+    reviewRequired !== lastSavedReviewRequired ||
+    medicalOfficerName !== lastSavedMedicalOfficerName ||
+    medicalOfficerPractice !== lastSavedMedicalOfficerPractice
+  const areCommentsLocked = isPurged || isDecisionLocked || !!exportedAt
+  const commentLockMessage = isPurged
+    ? 'Medical information has been archived; new comments cannot be added.'
+    : isDecisionLocked
+      ? 'The PDF is locked to new comments once a final medication outcome has been recorded.'
+      : exportedAt
+        ? 'The PDF is locked to new comments after export.'
+        : ''
+  const commentsCardTitle = useMemo(() => `Medic Comments${comments.length > 0 ? ` (${comments.length})` : ''}`, [comments.length])
 
   function queueLink(targetId: string, targetPos: number): string {
     if (!queueContext) return `/medic/med-declarations/${targetId}`
@@ -67,36 +120,62 @@ export default function MedDecDetail({ medDec, siteName, businessName, queueCont
   const prevId = queueContext && queueContext.pos > 0 ? queueContext.ids[queueContext.pos - 1] : null
   const nextId = queueContext && queueContext.pos < queueContext.ids.length - 1 ? queueContext.ids[queueContext.pos + 1] : null
 
-  async function handleSaveReview() {
+  async function persistReview(showSuccess = true): Promise<boolean> {
     setSaving(true)
     setSaveError('')
-    setSaveSuccess(false)
+    if (showSuccess) setSaveSuccess(false)
     try {
       const res = await fetch(`/api/medication-declarations/${medDec.id}/review`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           medic_review_status: reviewStatus,
-          medic_comments: comments,
+          medic_comments: '',
           review_required: reviewRequired,
+          medical_officer_name: reviewRequired ? medicalOfficerName : null,
+          medical_officer_practice: reviewRequired ? medicalOfficerPractice : null,
         }),
       })
       if (!res.ok) {
         const data = await res.json().catch(() => ({}))
         setSaveError(data.error || 'Failed to save review')
+        return false
       } else {
-        setSaveSuccess(true)
-        setTimeout(() => setSaveSuccess(false), 3000)
+        setLastSavedReviewStatus(reviewStatus)
+        setLastSavedReviewRequired(reviewRequired)
+        setLastSavedMedicalOfficerName(reviewRequired ? medicalOfficerName : '')
+        setLastSavedMedicalOfficerPractice(reviewRequired ? medicalOfficerPractice : '')
+        if (showSuccess) {
+          setSaveSuccess(true)
+          setTimeout(() => setSaveSuccess(false), 3000)
+        }
         router.refresh()
+        return true
       }
     } catch {
       setSaveError('Network error')
+      return false
     } finally {
       setSaving(false)
     }
   }
 
+  async function handleSaveReview() {
+    void persistReview(true)
+  }
+
   async function handleExportPdf() {
+    if (!canExport) {
+      setExportError(exportLockedReason || 'This declaration cannot be exported yet.')
+      return
+    }
+    if (hasUnsavedReviewChanges) {
+      const saved = await persistReview(false)
+      if (!saved) {
+        setExportError('Please resolve the review save issue before exporting this declaration.')
+        return
+      }
+    }
     setExporting(true)
     setExportError('')
     try {
@@ -117,11 +196,78 @@ export default function MedDecDetail({ medDec, siteName, businessName, queueCont
       a.download = match?.[1] || `MedDec-${medDec.id}.pdf`
       a.click()
       URL.revokeObjectURL(url)
+      if (!exportedAt) setExportedAt(new Date().toISOString())
       router.refresh()
     } catch {
       setExportError('Network error. Please try again.')
     } finally {
       setExporting(false)
+    }
+  }
+
+  async function handleAddComment() {
+    const note = commentDraft.trim()
+    if (!note) return
+    setCommentSaving(true)
+    setCommentError('')
+    try {
+      const res = await fetch(`/api/medication-declarations/${medDec.id}/comments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ note }),
+      })
+      if (!res.ok) {
+        setCommentError(await getResponseErrorMessage(res, 'Comment could not be posted. Please try again.'))
+        return
+      }
+      const newComment: MedicComment = await res.json()
+      setComments(prev => [...prev, newComment])
+      setCommentDraft('')
+      router.refresh()
+    } catch {
+      setCommentError('Network error. Please try again.')
+    } finally {
+      setCommentSaving(false)
+    }
+  }
+
+  async function confirmExportAndReturn() {
+    if (!requiresExportConfirmation) {
+      router.push(backHref || `/medic/medications?site=${medDec.site_id}`)
+      return
+    }
+
+    const confirmed = window.confirm(
+      'Confirm this PDF has been successfully downloaded or saved outside MedGuard. Continuing will permanently remove the stored health information for this form and return you to the list.',
+    )
+    if (!confirmed) return
+
+    setExportConfirming(true)
+    setExportError('')
+    try {
+      const res = await fetch('/api/exports/confirm-and-purge', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          formType: 'medication_declaration',
+          id: medDec.id,
+          confirmed: true,
+        }),
+      })
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        setExportError((data && typeof data.error === 'string' && data.error) || 'Export confirmation failed. Please try again.')
+        return
+      }
+
+      setExportConfirmedAt(new Date().toISOString())
+      router.push(backHref || `/medic/medications?site=${medDec.site_id}`)
+      router.refresh()
+    } catch {
+      setExportError('Network error. Please try again.')
+    } finally {
+      setExportConfirming(false)
     }
   }
 
@@ -138,15 +284,28 @@ export default function MedDecDetail({ medDec, siteName, businessName, queueCont
     <div>
       {/* Queue nav bar */}
       <div className="flex items-center justify-between mb-4 pb-4 border-b border-slate-700/50 gap-4 flex-wrap">
-        <Link
-          href={backHref || `/medic/medications?site=${medDec.site_id}`}
-          className="flex items-center gap-1.5 text-sm text-slate-400 hover:text-slate-200 transition-colors"
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-          </svg>
-          Back to Declarations
-        </Link>
+        {requiresExportConfirmation ? (
+          <button
+            onClick={confirmExportAndReturn}
+            disabled={exportConfirming}
+            className="flex items-center gap-1.5 text-sm text-amber-300 hover:text-amber-200 transition-colors disabled:opacity-50"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+            {exportConfirming ? 'Removing PHI…' : 'Back to Declarations and remove PHI'}
+          </button>
+        ) : (
+          <Link
+            href={backHref || `/medic/medications?site=${medDec.site_id}`}
+            className="flex items-center gap-1.5 text-sm text-slate-400 hover:text-slate-200 transition-colors"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+            Back to Declarations
+          </Link>
+        )}
         {queueContext && (
           <div className="flex items-center gap-3">
             <span className="text-xs text-slate-500">
@@ -208,12 +367,14 @@ export default function MedDecDetail({ medDec, siteName, businessName, queueCont
           )}
 
           {/* Health flags — prominent at top */}
-          {!isPurged && (medDec.has_recent_injury_or_illness || medDec.has_side_effects) && (
+          {!isPurged && (medDec.has_recent_injury_or_illness || medDec.has_side_effects || hasFlaggedMedication || reviewRequired) && (
             <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl px-5 py-4">
-              <p className="text-sm font-semibold text-amber-300 mb-1">⚠ Health Flags</p>
+              <p className="text-sm font-semibold text-amber-300 mb-1">Health Flags</p>
               <ul className="text-sm text-amber-200 space-y-1 list-disc list-inside">
                 {medDec.has_recent_injury_or_illness && <li>Worker has a recent injury or illness</li>}
                 {medDec.has_side_effects && <li>Medication may produce side effects that affect safety</li>}
+                {hasFlaggedMedication && <li>One or more medications are flagged for review</li>}
+                {reviewRequired && <li>Medical Officer Review is active for this declaration</li>}
               </ul>
             </div>
           )}
@@ -313,11 +474,14 @@ export default function MedDecDetail({ medDec, siteName, businessName, queueCont
 
             {/* Status selector */}
             <div className="flex flex-wrap gap-2 mb-4">
-              {REVIEW_STATUSES.map(s => (
+              {REVIEW_STATUSES.map((s) => {
+                const isFinalOutcome = s === 'Normal Duties' || s === 'Restricted Duties' || s === 'Unfit for Work'
+                const isDisabled = isDecisionLocked || (isFinalOutcome && !canChooseFinalOutcome)
+                return (
                 <button
                   key={s}
                   onClick={() => setReviewStatus(s)}
-                  disabled={isDecisionLocked}
+                  disabled={isDisabled}
                   className={`px-3 py-2 rounded-lg text-sm font-medium border transition-colors ${
                     reviewStatus === s
                       ? STATUS_COLORS[s]
@@ -326,42 +490,70 @@ export default function MedDecDetail({ medDec, siteName, businessName, queueCont
                 >
                   {s}
                 </button>
-              ))}
+                )
+              })}
             </div>
 
-            {/* Further review toggle */}
-            <div className="flex items-center justify-between py-3 border-t border-slate-800 mb-4">
-              <div>
-                <p className="text-sm font-medium text-slate-300">Further Review</p>
-                <p className="text-xs text-slate-500 mt-0.5">Flag for follow-up</p>
+            {!canChooseFinalOutcome && (
+              <div className="mb-4 rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-sm text-amber-200">
+                Complete the Medical Officer name and practice before selecting a final outcome.
+              </div>
+            )}
+
+            {/* MRO review toggle */}
+            <div className="flex items-start justify-between gap-4 py-3 border-t border-slate-800 mb-4">
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium text-slate-300">Medical Officer Review</p>
+                <p className="text-xs text-slate-500 mt-0.5">Turn this on when an MRO doctor must decide the final duties outcome.</p>
               </div>
               <button
-                onClick={() => setReviewRequired(v => !v)}
+                onClick={() => {
+                  const next = !reviewRequired
+                  setReviewRequired(next)
+                  if (!next) {
+                    setMedicalOfficerName('')
+                    setMedicalOfficerPractice('')
+                  }
+                }}
                 disabled={isDecisionLocked}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 ${reviewRequired ? 'bg-cyan-500' : 'bg-slate-600'} disabled:cursor-not-allowed disabled:opacity-60`}
+                className={`relative mt-0.5 inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors duration-200 ${reviewRequired ? 'bg-cyan-500' : 'bg-slate-600'} disabled:cursor-not-allowed disabled:opacity-60`}
                 aria-pressed={reviewRequired}
               >
                 <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform duration-200 ${reviewRequired ? 'translate-x-6' : 'translate-x-1'}`} />
               </button>
             </div>
 
-            {isDecisionLocked && (
-              <div className="mb-4 rounded-lg border border-slate-700 bg-slate-900/40 px-3 py-2 text-sm text-slate-400">
-                Outcome locked. After exporting, confirm from the Exports page once the PDF is saved so MedGuard can remove stored health information.
+            {reviewRequired && (
+              <div className="mb-4 rounded-xl border border-cyan-500/20 bg-cyan-500/5 p-4 space-y-3">
+                <p className="text-xs font-semibold uppercase tracking-widest text-cyan-300">Medical Officer Review details</p>
+                <div>
+                  <label className="block text-xs font-medium text-slate-400 mb-2">Doctor Name</label>
+                  <input
+                    value={medicalOfficerName}
+                    onChange={(e) => setMedicalOfficerName(e.target.value)}
+                    disabled={areMedicalOfficerDetailsLocked}
+                    placeholder="Enter reviewing doctor name"
+                    className="w-full px-3 py-2.5 bg-slate-900/60 border border-slate-700 rounded-lg text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-cyan-500 transition-colors disabled:opacity-60"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-400 mb-2">Practice</label>
+                  <input
+                    value={medicalOfficerPractice}
+                    onChange={(e) => setMedicalOfficerPractice(e.target.value)}
+                    disabled={areMedicalOfficerDetailsLocked}
+                    placeholder="Enter medical practice"
+                    className="w-full px-3 py-2.5 bg-slate-900/60 border border-slate-700 rounded-lg text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-cyan-500 transition-colors disabled:opacity-60"
+                  />
+                </div>
               </div>
             )}
 
-            {/* Comments */}
-            <div className="mb-4 border-t border-slate-800 pt-4">
-              <label className="block text-xs font-medium text-slate-400 mb-2">Comments</label>
-              <textarea
-                value={comments}
-                onChange={e => setComments(e.target.value)}
-                placeholder="Add medic comments…"
-                rows={4}
-                className="w-full px-3 py-2.5 bg-slate-900/60 border border-slate-700 rounded-lg text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-cyan-500 transition-colors resize-none"
-              />
-            </div>
+            {isDecisionLocked && (
+              <div className="mb-4 rounded-lg border border-slate-700 bg-slate-900/40 px-3 py-2 text-sm text-slate-400">
+                Outcome locked. You can still correct the Medical Officer name and practice before export. After exporting, confirm from the Exports page once the PDF is saved so MedGuard can remove stored health information.
+              </div>
+            )}
 
             {saveError && <p className="text-sm text-red-400 mb-3">{saveError}</p>}
 
@@ -374,7 +566,7 @@ export default function MedDecDetail({ medDec, siteName, businessName, queueCont
                 disabled={saving}
                 className="ml-auto px-5 py-2.5 bg-cyan-600 hover:bg-cyan-500 text-white text-sm font-semibold rounded-lg transition-colors disabled:opacity-50"
               >
-                {saving ? 'Saving…' : isDecisionLocked ? 'Save Comments' : 'Save Review'}
+                {saving ? 'Saving…' : isDecisionLocked ? 'Update MRO Details' : 'Save Review'}
               </button>
             </div>
           </div>
@@ -384,23 +576,40 @@ export default function MedDecDetail({ medDec, siteName, businessName, queueCont
             <div className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-5">
               <h2 className="text-xs font-semibold text-slate-500 uppercase tracking-widest mb-3">Export &amp; Audit</h2>
               <div className="text-sm text-slate-400 space-y-1 mb-4">
-                {medDec.exported_at ? (
-                  <p>Exported: <span className="text-slate-300">{fmtDateTime(medDec.exported_at)}</span></p>
+                {exportedAt ? (
+                  <p>Exported: <span className="text-slate-300">{fmtDateTime(exportedAt)}</span></p>
                 ) : (
                   <p className="text-slate-500 italic">Not yet exported</p>
                 )}
               </div>
               {exportError && <p className="text-sm text-red-400 mb-3">{exportError}</p>}
+              {exportLockedReason && (
+                <div className="mb-3 rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-sm text-amber-200">
+                  {exportLockedReason}
+                </div>
+              )}
               <button
                 onClick={handleExportPdf}
-                disabled={exporting}
+                disabled={exporting || !canExport}
+                title={exportLockedReason || undefined}
                 className="flex items-center gap-2 w-full justify-center px-4 py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-200 text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                 </svg>
-                {exporting ? 'Generating…' : medDec.exported_at ? 'Download PDF Again' : 'Export PDF'}
+                {exporting ? 'Generating…' : exportedAt ? 'Download PDF Again' : 'Export PDF'}
               </button>
+              {requiresExportConfirmation && !exportError && (
+                <div className="mt-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-3">
+                  <p className="text-xs font-semibold uppercase tracking-widest text-amber-300">Export confirmation required</p>
+                  <p className="mt-2 text-sm text-amber-100" suppressHydrationWarning>
+                    Exported {fmtDateTime(exportedAt)}. Make sure the PDF has been successfully downloaded or saved outside MedGuard.
+                  </p>
+                  <p className="mt-2 text-xs text-amber-200/90">
+                    When you click back to the list, MedGuard will remove the stored health information for this declaration. If the file did not save correctly, download it again before leaving this page.
+                  </p>
+                </div>
+              )}
             </div>
           )}
 
@@ -414,13 +623,86 @@ export default function MedDecDetail({ medDec, siteName, businessName, queueCont
             </Link>
           )}
           {queueContext && !nextId && (
-            <Link
-              href={backHref || `/medic/medications?site=${medDec.site_id}`}
-              className="flex items-center justify-center gap-2 w-full px-4 py-2.5 bg-slate-700/50 border border-slate-700 text-slate-300 hover:bg-slate-700 rounded-lg text-sm font-medium transition-colors"
-            >
-              ← Back to list
-            </Link>
+            requiresExportConfirmation ? (
+              <button
+                onClick={confirmExportAndReturn}
+                disabled={exportConfirming}
+                className="flex items-center justify-center gap-2 w-full px-4 py-2.5 bg-amber-500/10 border border-amber-500/30 text-amber-200 hover:bg-amber-500/15 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+              >
+                {exportConfirming ? 'Removing PHI…' : '← Back to list and remove PHI'}
+              </button>
+            ) : (
+              <Link
+                href={backHref || `/medic/medications?site=${medDec.site_id}`}
+                className="flex items-center justify-center gap-2 w-full px-4 py-2.5 bg-slate-700/50 border border-slate-700 text-slate-300 hover:bg-slate-700 rounded-lg text-sm font-medium transition-colors"
+              >
+                ← Back to list
+              </Link>
+            )
           )}
+
+          <div className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-5">
+            <h2 className="text-xs font-semibold text-slate-500 uppercase tracking-widest mb-4">{commentsCardTitle}</h2>
+
+            {comments.length === 0 && (
+              <p className="text-sm text-slate-500 mb-5">No comments yet.</p>
+            )}
+
+            {comments.length > 0 && (
+              <div className="space-y-4 mb-6">
+                {comments.map((comment) => {
+                  const isOwn = comment.medic_user_id === currentUserId
+                  return (
+                    <div key={comment.id} className="border border-slate-700/50 rounded-lg p-4">
+                      <div className="flex items-center justify-between mb-1">
+                        <div className="flex items-center gap-2">
+                          <span className={`text-sm font-semibold ${isOwn ? 'text-cyan-400' : 'text-slate-300'}`}>
+                            {comment.medic_name}
+                          </span>
+                          {isOwn && <span className="text-xs text-slate-600">(you)</span>}
+                        </div>
+                        <div className="text-xs text-slate-500" suppressHydrationWarning>
+                          {fmtDateTime(comment.created_at)}
+                        </div>
+                      </div>
+                      <p className="text-sm text-slate-200 whitespace-pre-wrap">{comment.note}</p>
+                      {isOwn && (
+                        <p className="mt-2 text-xs text-slate-500">Saved as part of the clinical audit trail.</p>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+
+            {areCommentsLocked ? (
+              <div className="rounded-lg border border-slate-700/50 bg-slate-900/40 px-4 py-3">
+                <p className="text-sm font-medium text-slate-300">Comments locked</p>
+                <p className="mt-1 text-xs text-slate-500">{commentLockMessage}</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <p className="text-xs text-slate-500">
+                  Notes are append-only once posted so the review history stays intact.
+                </p>
+                <textarea
+                  value={commentDraft}
+                  onChange={e => setCommentDraft(e.target.value)}
+                  placeholder="Add a comment…"
+                  rows={3}
+                  className="w-full px-4 py-2.5 bg-slate-900/60 border border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500 text-slate-100 placeholder-slate-500 text-sm resize-none"
+                />
+                {commentError && <p className="text-xs text-red-400">{commentError}</p>}
+                <button
+                  onClick={handleAddComment}
+                  disabled={commentSaving || !commentDraft.trim()}
+                  className="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white text-sm font-medium rounded-lg disabled:opacity-50 transition-colors"
+                >
+                  {commentSaving ? 'Posting…' : 'Post Comment'}
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 

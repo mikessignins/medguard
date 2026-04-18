@@ -98,8 +98,12 @@ export async function updateSession(request: NextRequest) {
     (url.searchParams.has('code') || url.searchParams.get('setup') === 'password')
   const isPublicPath =
     url.pathname === '/login' ||
+    url.pathname === '/staff-signup' ||
     url.pathname === '/medic-signup' ||
+    url.pathname === '/occ-health-signup' ||
+    url.pathname === '/api/staff-signup' ||
     url.pathname === '/api/medic-signup' ||
+    url.pathname === '/api/occ-health-signup' ||
     isAccountSetupLink ||
     url.pathname === '/'
 

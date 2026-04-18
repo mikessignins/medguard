@@ -17,6 +17,8 @@ interface PurgeLogEntry {
   export_confirmed_by_name: string | null
   approved_by_name: string | null
   approved_at: string | null
+  medical_officer_name?: string | null
+  medical_officer_practice?: string | null
 }
 
 interface Props {
@@ -202,6 +204,15 @@ export default function PurgeLog({
                                       · {(() => { try { return format(new Date(entry.export_confirmed_at), 'dd MMM yy, HH:mm') } catch { return '' } })()}
                                     </span>
                                   )}
+                                </span>
+                              </div>
+                            )}
+                            {(entry.medical_officer_name || entry.medical_officer_practice) && (
+                              <div className="flex items-start gap-1.5">
+                                <span className="text-slate-600 w-16 shrink-0">MRO</span>
+                                <span className="text-slate-400">
+                                  {entry.medical_officer_name ?? '—'}
+                                  {entry.medical_officer_practice ? ` · ${entry.medical_officer_practice}` : ''}
                                 </span>
                               </div>
                             )}

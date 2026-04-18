@@ -3,11 +3,13 @@ export type ModuleKey =
   | 'confidential_medication'
   | 'fatigue_assessment'
   | 'psychosocial_health'
+  | 'health_surveillance'
   | 'fit_for_work_plus'
 
 export type ModuleSurface =
   | 'worker_home'
   | 'medic_queue'
+  | 'surveillance_dashboard'
   | 'medic_exports'
   | 'admin_reporting'
   | 'superuser_config'
@@ -55,6 +57,7 @@ export const EMERGENCY_DECLARATION_MODULE_KEY: ModuleKey = 'emergency_declaratio
 export const CONFIDENTIAL_MEDICATION_MODULE_KEY: ModuleKey = 'confidential_medication'
 export const FATIGUE_ASSESSMENT_MODULE_KEY: ModuleKey = 'fatigue_assessment'
 export const PSYCHOSOCIAL_HEALTH_MODULE_KEY: ModuleKey = 'psychosocial_health'
+export const HEALTH_SURVEILLANCE_MODULE_KEY: ModuleKey = 'health_surveillance'
 export const FIT_FOR_WORK_PLUS_MODULE_KEY: ModuleKey = 'fit_for_work_plus'
 
 export const MODULE_REGISTRY: Record<ModuleKey, ModuleRegistryEntry> = {
@@ -121,6 +124,21 @@ export const MODULE_REGISTRY: Record<ModuleKey, ModuleRegistryEntry> = {
     readiness: 'live',
     canActivate: true,
     statusNote: 'Worker pulse and support flows, medic review, web export/purge, and de-identified superuser reporting are ready for pilot activation.',
+  },
+  health_surveillance: {
+    key: 'health_surveillance',
+    title: 'Health Surveillance',
+    description: 'Operational management of worker surveillance programs, enrolments, due dates, and appointments without storing clinical findings.',
+    category: 'custom',
+    icon: 'calendar-heart',
+    surfaces: ['worker_home', 'surveillance_dashboard', 'admin_reporting', 'superuser_config'],
+    submissionBackend: 'module_engine',
+    supportsExport: true,
+    supportsPurge: false,
+    isBillable: true,
+    readiness: 'foundation_ready',
+    canActivate: true,
+    statusNote: 'Privacy-minimal scheduling, enrolment, compliance dashboard, reminders, provider operations, and aggregate CSV reporting are ready. Native worker appointment UI still needs iOS implementation.',
   },
   fit_for_work_plus: {
     key: 'fit_for_work_plus',
@@ -191,6 +209,8 @@ export function getModuleSurfaceLabel(surface: ModuleSurface) {
       return 'Worker dashboard'
     case 'medic_queue':
       return 'Medic queue'
+    case 'surveillance_dashboard':
+      return 'Surveillance dashboard'
     case 'medic_exports':
       return 'Medic exports'
     case 'admin_reporting':

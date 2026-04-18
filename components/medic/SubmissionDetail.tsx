@@ -59,6 +59,7 @@ interface SafeSubmission {
   submitted_at: string | null
   site_specific_answers: Record<string, string>
   exported_at: string | null
+  export_confirmed_at?: string | null
   phi_purged_at: string | null
   worker_snapshot: WorkerSnapshot | null
   decision: Decision | null
@@ -147,6 +148,8 @@ export default function SubmissionDetail({ submission, siteName, businessName, c
   const [exportedAt, setExportedAt] = useState<string | null>(submission.exported_at)
   const [pdfLoading, setPdfLoading] = useState(false)
   const [pdfError, setPdfError] = useState('')
+  const [exportConfirming, setExportConfirming] = useState(false)
+  const [exportConfirmedAt, setExportConfirmedAt] = useState<string | null>(submission.export_confirmed_at ?? null)
 
   // Comments
   const [comments, setComments] = useState<MedicComment[]>(submission.comments)
@@ -233,6 +236,7 @@ export default function SubmissionDetail({ submission, siteName, businessName, c
 
   const ws = submission.worker_snapshot
   const isPurged = !!submission.phi_purged_at
+  const requiresExportConfirmation = !!exportedAt && !exportConfirmedAt && !isPurged
   const hasSnapshot = !!ws && typeof ws === 'object'
   const isDecisionLocked = status === 'Approved' || status === 'Requires Follow-up'
   const areCommentsLocked = isPurged || status === 'Approved' || !!exportedAt
@@ -332,20 +336,72 @@ export default function SubmissionDetail({ submission, siteName, businessName, c
     }
   }
 
+  async function confirmExportAndReturn() {
+    if (!requiresExportConfirmation) {
+      router.push(backHref || `/medic/emergency?site=${submission.site_id}`)
+      return
+    }
+
+    const confirmed = window.confirm(
+      'Confirm this PDF has been successfully downloaded or saved outside MedGuard. Continuing will permanently remove the stored health information for this form and return you to the list.',
+    )
+    if (!confirmed) return
+
+    setExportConfirming(true)
+    setPdfError('')
+    try {
+      const res = await fetch('/api/exports/confirm-and-purge', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          formType: 'emergency_declaration',
+          id: submission.id,
+          confirmed: true,
+        }),
+      })
+
+      if (!res.ok) {
+        setPdfError(await getResponseErrorMessage(res, 'Export confirmation failed. Please try again.'))
+        return
+      }
+
+      setExportConfirmedAt(new Date().toISOString())
+      router.push(backHref || `/medic/emergency?site=${submission.site_id}`)
+      router.refresh()
+    } catch {
+      setPdfError('Network error — please try again.')
+    } finally {
+      setExportConfirming(false)
+    }
+  }
+
   return (
     <>
     <div className="max-w-4xl no-print">
       {/* Queue nav bar */}
       <div className="no-print flex items-center justify-between mb-4 pb-4 border-b border-slate-700/50 gap-4 flex-wrap">
-        <Link
-          href={backHref || `/medic/emergency?site=${submission.site_id}`}
-          className="flex items-center gap-1.5 text-sm text-slate-400 hover:text-slate-200 transition-colors"
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-          </svg>
-          Back to Submissions
-        </Link>
+        {requiresExportConfirmation ? (
+          <button
+            onClick={confirmExportAndReturn}
+            disabled={exportConfirming}
+            className="flex items-center gap-1.5 text-sm text-amber-300 hover:text-amber-200 transition-colors disabled:opacity-50"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+            {exportConfirming ? 'Removing PHI…' : 'Back to Submissions and remove PHI'}
+          </button>
+        ) : (
+          <Link
+            href={backHref || `/medic/emergency?site=${submission.site_id}`}
+            className="flex items-center gap-1.5 text-sm text-slate-400 hover:text-slate-200 transition-colors"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+            Back to Submissions
+          </Link>
+        )}
         {queueContext && (
           <div className="flex items-center gap-3">
             <span className="text-sm text-slate-500">
@@ -788,12 +844,15 @@ export default function SubmissionDetail({ submission, siteName, businessName, c
                 </button>
                 {pdfError && <p className="text-xs text-red-400">{pdfError}</p>}
                 {exportedAt && !pdfError && (
-                  <p className="text-xs text-emerald-400 flex items-center gap-1" suppressHydrationWarning>
-                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    </svg>
-                    Exported {fmtDateTime(exportedAt)}. Confirm the saved PDF from the Exports page to remove stored health information.
-                  </p>
+                  <div className="mt-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-3">
+                    <p className="text-xs font-semibold uppercase tracking-widest text-amber-300">Export confirmation required</p>
+                    <p className="mt-2 text-sm text-amber-100" suppressHydrationWarning>
+                      Exported {fmtDateTime(exportedAt)}. Make sure the PDF has been successfully downloaded or saved outside MedGuard.
+                    </p>
+                    <p className="mt-2 text-xs text-amber-200/90">
+                      When you click back to the list, MedGuard will remove the stored health information for this form. If the file did not save correctly, download it again before leaving this page.
+                    </p>
+                  </div>
                 )}
               </div>
             </div>
@@ -809,12 +868,22 @@ export default function SubmissionDetail({ submission, siteName, businessName, c
                     Next Submission →
                   </Link>
                 ) : (
-                  <Link
-                    href={backHref || `/medic/emergency?site=${submission.site_id}`}
-                    className="flex items-center justify-center gap-2 w-full px-4 py-2.5 bg-slate-700/50 border border-slate-700 text-slate-300 hover:bg-slate-700 rounded-lg text-sm font-medium transition-colors"
-                  >
-                    ← Back to list
-                  </Link>
+                  requiresExportConfirmation ? (
+                    <button
+                      onClick={confirmExportAndReturn}
+                      disabled={exportConfirming}
+                      className="flex items-center justify-center gap-2 w-full px-4 py-2.5 bg-amber-500/10 border border-amber-500/30 text-amber-200 hover:bg-amber-500/15 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+                    >
+                      {exportConfirming ? 'Removing PHI…' : '← Back to list and remove PHI'}
+                    </button>
+                  ) : (
+                    <Link
+                      href={backHref || `/medic/emergency?site=${submission.site_id}`}
+                      className="flex items-center justify-center gap-2 w-full px-4 py-2.5 bg-slate-700/50 border border-slate-700 text-slate-300 hover:bg-slate-700 rounded-lg text-sm font-medium transition-colors"
+                    >
+                      ← Back to list
+                    </Link>
+                  )
                 )}
               </div>
             )}

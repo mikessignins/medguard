@@ -10,11 +10,12 @@ import { z } from 'zod'
 
 export const runtime = 'nodejs'
 
-const contractorMedicSchema = z.object({
+const contractorStaffSchema = z.object({
   display_name: z.string().trim().min(1, 'Full name is required').max(120, 'Full name is too long'),
   email: z.string().trim().email('A valid email address is required'),
   temporary_password: z.string().min(8, 'Temporary password must be at least 8 characters').max(120, 'Temporary password is too long'),
   site_ids: z.array(z.string().trim().min(1)).default([]),
+  role: z.enum(['medic', 'occ_health']).optional().default('medic'),
   contract_end_date: z.union([
     z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Contract end date must be in YYYY-MM-DD format'),
     z.null(),
@@ -63,9 +64,15 @@ export async function POST(req: Request) {
   const roleError = requireRole(account, 'admin')
   if (roleError) return NextResponse.json({ error: roleError.error }, { status: roleError.status })
 
+  const parsed = await parseJsonBody(req, contractorStaffSchema)
+  if (!parsed.success) return parsed.response
+  const body = parsed.data
+  const targetRole = body.role
+  const roleLabel = targetRole === 'occ_health' ? 'occ health' : 'medic'
+
   const rateLimited = await enforceActionRateLimit({
     authClient: supabase,
-    action: 'admin_contractor_medic_created',
+    action: `admin_contractor_${targetRole}_created`,
     actorUserId: userId!,
     actorRole: account!.role,
     actorName: account!.display_name,
@@ -73,13 +80,9 @@ export async function POST(req: Request) {
     route: '/api/admin/contractor-medics',
     limit: 10,
     windowMs: 10 * 60_000,
-    errorMessage: 'Too many contractor medic accounts were requested. Please wait and try again.',
+    errorMessage: `Too many contractor ${roleLabel} accounts were requested. Please wait and try again.`,
   })
   if (rateLimited) return rateLimited
-
-  const parsed = await parseJsonBody(req, contractorMedicSchema)
-  if (!parsed.success) return parsed.response
-  const body = parsed.data
 
   const normalizedSiteIds = Array.from(new Set(body.site_ids))
   if (normalizedSiteIds.length > 0) {
@@ -118,7 +121,7 @@ export async function POST(req: Request) {
     )
   }
 
-  let medicUserId: string | null = null
+  let staffUserId: string | null = null
   let createdAuthUser = false
 
   const { data: createdUser, error: createUserError } = await service.auth.admin.createUser({
@@ -127,7 +130,7 @@ export async function POST(req: Request) {
     email_confirm: true,
     user_metadata: {
       display_name: body.display_name,
-      role: 'medic',
+      role: targetRole,
       business_id: account!.business_id,
     },
   })
@@ -143,18 +146,18 @@ export async function POST(req: Request) {
             user_metadata: {
               ...existingAuthUser.user_metadata,
               display_name: body.display_name,
-              role: 'medic',
+              role: targetRole,
               business_id: account!.business_id,
             },
           })
 
           if (updateUserError) throw updateUserError
-          medicUserId = existingAuthUser.id
+          staffUserId = existingAuthUser.id
         }
       } catch (reuseError) {
         await safeLogServerEvent({
           source: 'web_api',
-          action: 'admin_contractor_medic_created',
+          action: `admin_contractor_${targetRole}_created`,
           result: 'failure',
           actorUserId: userId,
           actorRole: account!.role,
@@ -162,19 +165,19 @@ export async function POST(req: Request) {
           businessId: account!.business_id,
           route: '/api/admin/contractor-medics',
           errorMessage: reuseError instanceof Error ? reuseError.message : 'Failed to reuse existing auth user',
-          context: { target_email: normalizedEmail, site_count: normalizedSiteIds.length },
+          context: { target_email: normalizedEmail, site_count: normalizedSiteIds.length, role: targetRole },
         })
         return NextResponse.json(
-          { error: 'Failed to repair existing medic sign-in account.' },
+          { error: `Failed to repair existing ${roleLabel} sign-in account.` },
           { status: 400 },
         )
       }
     }
 
-    if (!medicUserId) {
+    if (!staffUserId) {
       await safeLogServerEvent({
         source: 'web_api',
-        action: 'admin_contractor_medic_created',
+        action: `admin_contractor_${targetRole}_created`,
         result: 'failure',
         actorUserId: userId,
         actorRole: account!.role,
@@ -182,33 +185,33 @@ export async function POST(req: Request) {
         businessId: account!.business_id,
         route: '/api/admin/contractor-medics',
         errorMessage: createUserError?.message ?? 'Missing created user',
-        context: { target_email: normalizedEmail, site_count: normalizedSiteIds.length },
+        context: { target_email: normalizedEmail, site_count: normalizedSiteIds.length, role: targetRole },
       })
       return NextResponse.json(
-        { error: 'Failed to create medic sign-in account.' },
+        { error: `Failed to create ${roleLabel} sign-in account.` },
         { status: 400 },
       )
     }
   } else {
-    medicUserId = createdUser.user.id
+    staffUserId = createdUser.user.id
     createdAuthUser = true
   }
 
-  if (!medicUserId) {
+  if (!staffUserId) {
     await safeLogServerEvent({
       source: 'web_api',
-      action: 'admin_contractor_medic_created',
+      action: `admin_contractor_${targetRole}_created`,
       result: 'failure',
       actorUserId: userId,
       actorRole: account!.role,
       actorName: account!.display_name,
       businessId: account!.business_id,
       route: '/api/admin/contractor-medics',
-      errorMessage: 'Missing medic user id',
-      context: { target_email: normalizedEmail, site_count: normalizedSiteIds.length },
+      errorMessage: 'Missing staff user id',
+      context: { target_email: normalizedEmail, site_count: normalizedSiteIds.length, role: targetRole },
     })
     return NextResponse.json(
-      { error: 'Failed to create medic sign-in account.' },
+      { error: `Failed to create ${roleLabel} sign-in account.` },
       { status: 400 },
     )
   }
@@ -216,22 +219,22 @@ export async function POST(req: Request) {
   const { error: userIndexError } = await service
     .from('user_index')
     .upsert({
-      user_id: medicUserId,
+      user_id: staffUserId,
       business_id: account!.business_id,
     }, { onConflict: 'user_id' })
 
   if (userIndexError) {
-    if (createdAuthUser) await service.auth.admin.deleteUser(medicUserId).catch(() => undefined)
+    if (createdAuthUser) await service.auth.admin.deleteUser(staffUserId).catch(() => undefined)
     await safeLogServerEvent({
       source: 'web_api',
-      action: 'admin_contractor_medic_created',
+      action: `admin_contractor_${targetRole}_created`,
       result: 'failure',
       actorUserId: userId,
       actorRole: account!.role,
       actorName: account!.display_name,
       businessId: account!.business_id,
       route: '/api/admin/contractor-medics',
-      targetId: medicUserId,
+      targetId: staffUserId,
       errorMessage: userIndexError.message,
     })
     return logAndReturnInternalError('/api/admin/contractor-medics', userIndexError)
@@ -240,30 +243,30 @@ export async function POST(req: Request) {
   const { error: accountInsertError } = await service
     .from('user_accounts')
     .insert({
-      id: medicUserId,
+      id: staffUserId,
       business_id: account!.business_id,
       display_name: body.display_name,
       email: normalizedEmail,
-      role: 'medic',
+      role: targetRole,
       site_ids: normalizedSiteIds,
       contract_end_date: body.contract_end_date,
     })
 
   if (accountInsertError) {
-    if (createdAuthUser) await service.auth.admin.deleteUser(medicUserId).catch(() => undefined)
+    if (createdAuthUser) await service.auth.admin.deleteUser(staffUserId).catch(() => undefined)
     try {
-      await service.from('user_index').delete().eq('user_id', medicUserId)
+      await service.from('user_index').delete().eq('user_id', staffUserId)
     } catch {}
     await safeLogServerEvent({
       source: 'web_api',
-      action: 'admin_contractor_medic_created',
+      action: `admin_contractor_${targetRole}_created`,
       result: 'failure',
       actorUserId: userId,
       actorRole: account!.role,
       actorName: account!.display_name,
       businessId: account!.business_id,
       route: '/api/admin/contractor-medics',
-      targetId: medicUserId,
+      targetId: staffUserId,
       errorMessage: accountInsertError.message,
     })
     return logAndReturnInternalError('/api/admin/contractor-medics', accountInsertError)
@@ -271,33 +274,34 @@ export async function POST(req: Request) {
 
   await safeLogServerEvent({
     source: 'web_api',
-    action: 'admin_contractor_medic_created',
+    action: `admin_contractor_${targetRole}_created`,
     result: 'success',
     actorUserId: userId,
     actorRole: account!.role,
     actorName: account!.display_name,
     businessId: account!.business_id,
     route: '/api/admin/contractor-medics',
-    targetId: medicUserId,
+    targetId: staffUserId,
     context: {
       target_email: normalizedEmail,
       site_count: normalizedSiteIds.length,
       contract_end_date: body.contract_end_date,
       reused_auth_user: !createdAuthUser,
+      role: targetRole,
     },
   })
 
   return NextResponse.json({
     ok: true,
     user: {
-      id: medicUserId,
+      id: staffUserId,
       display_name: body.display_name,
       email: normalizedEmail,
-      role: 'medic',
+      role: targetRole,
       site_ids: normalizedSiteIds,
       contract_end_date: body.contract_end_date,
     },
     temporary_password: temporaryPassword,
-    message: 'Medic account created. Share the temporary password directly with them.',
+    message: `${targetRole === 'occ_health' ? 'Occ health' : 'Medic'} account created. Share the temporary password directly with them.`,
   })
 }

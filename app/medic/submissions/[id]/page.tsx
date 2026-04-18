@@ -5,6 +5,7 @@ import type { WorkerSnapshot, Decision, SubmissionStatus, ScriptUpload } from '@
 import { hasMedicScopeAccess } from '@/lib/medic-scope'
 import { parseSubmissionComments } from '@/lib/submission-comments'
 import { getRequestClient, getRequestUser, getRequestUserAccount } from '@/lib/supabase/request-cache'
+import { createServiceClient } from '@/lib/supabase/service'
 
 function parseSnapshot(raw: unknown): WorkerSnapshot | null {
   if (!raw) return null
@@ -90,13 +91,45 @@ export default async function SubmissionPage({
 
   // Auto-tag as In Review when a medic opens a New submission
   if (raw.status === 'New') {
-    await supabase.rpc('review_emergency_submission', {
-      p_submission_id: raw.id,
-      p_status: 'In Review',
-      p_note: null,
-      p_expected_version: raw.version ?? null,
-    })
-    raw.status = 'In Review'
+    let autoClaimed = false
+
+    try {
+      const service = createServiceClient()
+      const { error } = await service.rpc('review_emergency_submission_authorized', {
+        p_actor_user_id: user.id,
+        p_submission_id: raw.id,
+        p_status: 'In Review',
+        p_note: null,
+        p_expected_version: raw.version ?? null,
+      })
+
+      if (!error) {
+        autoClaimed = true
+      } else {
+        console.warn('[medic/submissions/[id]] authorized auto-claim failed; falling back to authenticated RPC:', error)
+      }
+    } catch (error) {
+      console.warn('[medic/submissions/[id]] authorized auto-claim path threw; falling back to authenticated RPC:', error)
+    }
+
+    if (!autoClaimed) {
+      const { error } = await supabase.rpc('review_emergency_submission', {
+        p_submission_id: raw.id,
+        p_status: 'In Review',
+        p_note: null,
+        p_expected_version: raw.version ?? null,
+      })
+
+      if (!error) {
+        autoClaimed = true
+      } else {
+        console.error('[medic/submissions/[id]] failed to auto-claim submission:', error)
+      }
+    }
+
+    if (autoClaimed) {
+      raw.status = 'In Review'
+    }
   }
 
   const [{ data: site }, { data: business }, { data: commentRows, error: commentError }] = await Promise.all([
@@ -143,6 +176,7 @@ export default async function SubmissionPage({
     submitted_at: raw.submitted_at ? String(raw.submitted_at) : null,
     site_specific_answers: parseSiteSpecificAnswers(raw.site_specific_answers),
     exported_at: raw.exported_at ? String(raw.exported_at) : null,
+    export_confirmed_at: raw.export_confirmed_at ? String(raw.export_confirmed_at) : null,
     phi_purged_at: raw.phi_purged_at ? String(raw.phi_purged_at) : null,
     worker_snapshot: parseSnapshot(raw.worker_snapshot),
     decision: parseDecision(raw.decision),

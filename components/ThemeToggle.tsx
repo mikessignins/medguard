@@ -3,9 +3,15 @@ import { useEffect, useState } from 'react'
 
 interface Props {
   compact?: boolean
+  className?: string
+  compactClassName?: string
 }
 
-export default function ThemeToggle({ compact = false }: Props) {
+export default function ThemeToggle({
+  compact = false,
+  className = 'dashboard-nav-link w-full',
+  compactClassName = 'dashboard-nav-link p-2 shrink-0',
+}: Props) {
   const [theme, setTheme] = useState<'dark' | 'light'>('dark')
 
   useEffect(() => {
@@ -43,7 +49,7 @@ export default function ThemeToggle({ compact = false }: Props) {
     return (
       <button
         onClick={toggle}
-        className="dashboard-nav-link p-2 shrink-0"
+        className={compactClassName}
         aria-label="Toggle colour theme"
         title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
       >
@@ -63,7 +69,7 @@ export default function ThemeToggle({ compact = false }: Props) {
   return (
     <button
       onClick={toggle}
-      className="dashboard-nav-link w-full"
+      className={className}
       aria-label="Toggle colour theme"
     >
       {theme === 'dark' ? (
